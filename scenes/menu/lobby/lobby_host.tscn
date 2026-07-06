@@ -1,0 +1,70 @@
+[gd_scene format=3 uid="uid://c3atw3xubrvt2"]
+
+[ext_resource type="Script" uid="uid://bju0kau4n7507" path="res://scenes/menu/lobby/lobby_host.gd" id="1_33qdm"]
+
+[node name="LobbyHost" type="Control" unique_id=1278657101]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_33qdm")
+
+[node name="ColorRect" type="ColorRect" parent="." unique_id=936623126]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(2.2621452e-06, 0.44375616, 0.44375622, 1)
+
+[node name="MembersList" type="VBoxContainer" parent="." unique_id=1439134148]
+layout_mode = 1
+anchors_preset = 14
+anchor_top = 0.5
+anchor_right = 1.0
+anchor_bottom = 0.5
+offset_left = 326.0
+offset_top = -25.0
+offset_right = -326.0
+offset_bottom = 189.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 10
+
+[node name="Label" type="Label" parent="MembersList" unique_id=1009131890]
+layout_mode = 2
+
+[node name="LobbyTitleLabel" type="Label" parent="." unique_id=650912928]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_left = -2.0
+offset_top = 119.0
+offset_right = -2.0
+offset_bottom = 207.0
+grow_horizontal = 2
+theme_override_font_sizes/font_size = 64
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="VBoxContainer" type="VBoxContainer" parent="." unique_id=1027376864]
+layout_mode = 0
+offset_left = 326.0
+offset_top = 550.0
+offset_right = 954.0
+offset_bottom = 626.0
+theme_override_constants/separation = 10
+
+[node name="StartGameButton" type="Button" parent="VBoxContainer" unique_id=2023920905]
+layout_mode = 2
+text = "Start Game"
+
+[node name="BackButton" type="Button" parent="VBoxContainer" unique_id=782000121]
+layout_mode = 2
+text = "Back"
+
+[connection signal="pressed" from="VBoxContainer/StartGameButton" to="." method="_on_start_game_button_pressed"]
+[connection signal="pressed" from="VBoxContainer/BackButton" to="." method="_on_back_button_pressed"]

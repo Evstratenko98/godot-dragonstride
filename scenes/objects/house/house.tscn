@@ -1,0 +1,21 @@
+[gd_scene format=3 uid="uid://ctajcg33susc6"]
+
+[ext_resource type="Script" uid="uid://d27amkd3jbcow" path="res://scenes/objects/house/house.gd" id="1_i08jb"]
+[ext_resource type="Texture2D" uid="uid://cekcnpoyn2u28" path="res://art/Tiny Swords (Update 010)/Factions/Goblins/Buildings/Wood_House/Goblin_House.png" id="1_yrebm"]
+[ext_resource type="Texture2D" uid="uid://ct2cbj2x50fqf" path="res://art/Tiny Swords (Update 010)/Factions/Goblins/Buildings/Wood_House/Goblin_House_Destroyed.png" id="3_n2f0m"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_i08jb"]
+radius = 39.0
+
+[node name="House" type="StaticBody2D" unique_id=438279484 groups=["game_blocker"]]
+script = ExtResource("1_i08jb")
+normal_texture = ExtResource("1_yrebm")
+destroyed_texture = ExtResource("3_n2f0m")
+
+[node name="Sprite2D" type="Sprite2D" parent="." unique_id=558635439]
+position = Vector2(30, 10)
+texture = ExtResource("1_yrebm")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=1022708362]
+position = Vector2(29, 36)
+shape = SubResource("CircleShape2D_i08jb")

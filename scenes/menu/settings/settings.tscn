@@ -1,0 +1,66 @@
+[gd_scene format=3 uid="uid://cpabl6emdkkbc"]
+
+[ext_resource type="Script" uid="uid://dsjt1jhciq43f" path="res://scenes/menu/settings/settings.gd" id="1_26ncd"]
+
+[node name="Settings" type="Control" unique_id=1080469510]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_26ncd")
+
+[node name="ColorRect" type="ColorRect" parent="." unique_id=1990540052]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(2.2621452e-06, 0.44375616, 0.44375622, 1)
+
+[node name="VBoxContainer" type="VBoxContainer" parent="." unique_id=1774887942]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -248.0
+offset_top = -37.0
+offset_right = 252.0
+offset_bottom = 57.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 10
+alignment = 1
+
+[node name="Label" type="Label" parent="VBoxContainer" unique_id=154649807]
+layout_mode = 2
+size_flags_horizontal = 4
+text = "Разрешение"
+
+[node name="ResolutionOptionButton" type="OptionButton" parent="VBoxContainer" unique_id=136677994]
+layout_mode = 2
+size_flags_horizontal = 4
+
+[node name="BackButton" type="Button" parent="VBoxContainer" unique_id=352723414]
+layout_mode = 2
+text = "Back"
+
+[node name="Label" type="Label" parent="." unique_id=892144372]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_left = -2.0
+offset_top = 119.0
+offset_right = -2.0
+offset_bottom = 207.0
+grow_horizontal = 2
+theme_override_font_sizes/font_size = 64
+text = "Settings"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[connection signal="pressed" from="VBoxContainer/BackButton" to="." method="_on_back_button_pressed"]

@@ -1,0 +1,13 @@
+[gd_scene format=3 uid="uid://3sy27o0yl7p"]
+
+[ext_resource type="Script" uid="uid://uy07nb7ji2t3" path="res://scenes/hud/hud.gd" id="1_64ctp"]
+
+[node name="HUD" type="CanvasLayer" unique_id=207140631]
+script = ExtResource("1_64ctp")
+
+[node name="EndGameButton" type="Button" parent="." unique_id=284578119]
+offset_right = 8.0
+offset_bottom = 8.0
+text = "End game"
+
+[connection signal="pressed" from="EndGameButton" to="." method="_on_end_game_button_pressed"]
