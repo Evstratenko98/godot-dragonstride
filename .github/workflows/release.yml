@@ -53,9 +53,27 @@ jobs:
           & $env:GODOT_BIN --headless --import
           & $env:GODOT_BIN --headless --export-release "$env:EXPORT_PRESET" "$env:EXPORT_DIR\$env:APP_NAME.exe"
 
-      - name: Verify console wrapper
+      - name: Ensure console wrapper
         run: |
           $ConsoleExe = Join-Path $env:EXPORT_DIR "$env:APP_NAME.console.exe"
+          if (-not (Test-Path $ConsoleExe)) {
+            $TemplateDir = Join-Path $env:APPDATA "Godot\export_templates\$env:GODOT_VERSION.stable"
+            $WrapperNames = @(
+              "windows_release_x86_64.console.exe",
+              "windows_release_x86_64_console.exe",
+              "windows_release_x86_64 console.exe",
+              "windows_release_x86_64console.exe"
+            )
+
+            foreach ($WrapperName in $WrapperNames) {
+              $WrapperPath = Join-Path $TemplateDir $WrapperName
+              if (Test-Path $WrapperPath) {
+                Copy-Item -Path $WrapperPath -Destination $ConsoleExe -Force
+                break
+              }
+            }
+          }
+
           if (-not (Test-Path $ConsoleExe)) {
             throw "Expected console wrapper was not exported: $ConsoleExe"
           }
