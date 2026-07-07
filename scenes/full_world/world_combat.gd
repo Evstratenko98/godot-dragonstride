@@ -18,13 +18,13 @@ func apply_attack_to_cell(attacker: Node, cell: Vector2i, should_broadcast := tr
 
 	var target_object: Node = world.get_object_at_cell(cell)
 	if target_object != null:
-		world.print_console("%s deals damage to %s" % [get_entity_display_name(attacker), target_object.name])
+		print_non_entity_attack_result(attacker, cell)
 		if target_object.has_method("take_damage"):
 			target_object.take_damage()
 			world.broadcast_object_state(target_object)
 		return
 
-	world.print_console("%s hit %s" % [get_entity_display_name(attacker), world.get_cell_display_name(cell)])
+	print_non_entity_attack_result(attacker, cell)
 
 
 func get_entity_id(entity: Node) -> String:
@@ -130,6 +130,19 @@ func _broadcast_entity_damage_result(target_entity: Node, was_lethal: bool) -> v
 		return
 
 	NetworkManager.broadcast_entity_health(target_id, target_health)
+
+
+func print_non_entity_attack_result(attacker: Node, cell: Vector2i) -> void:
+	var target_entity: Node = world.get_entity_at_cell(cell)
+	if target_entity != null and target_entity != attacker:
+		return
+
+	var target_object: Node = world.get_object_at_cell(cell)
+	if target_object != null:
+		world.print_console("%s deals damage to %s" % [get_entity_display_name(attacker), target_object.name])
+		return
+
+	world.print_console("%s hit %s" % [get_entity_display_name(attacker), world.get_cell_display_name(cell)])
 
 
 func _get_entity_display_name_by_id(entity_id: String) -> String:

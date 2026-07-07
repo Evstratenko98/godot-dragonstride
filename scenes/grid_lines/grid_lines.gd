@@ -42,12 +42,12 @@ func _draw() -> void:
 func show_lines() -> void:
 	visible = true
 	queue_redraw()
-	_print_console("Game grid lines: shown")
+	ConsoleOutput.print_console("Game grid lines: shown")
 
 
 func hide_lines() -> void:
 	visible = false
-	_print_console("Game grid lines: hidden")
+	ConsoleOutput.print_console("Game grid lines: hidden")
 
 
 func _find_world() -> Node:
@@ -101,9 +101,3 @@ func _register_console_commands() -> void:
 
 	console.add_command("game_grid_lines_show", show_lines, 0, 0, "Show game grid lines.")
 	console.add_command("game_grid_lines_hide", hide_lines, 0, 0, "Hide game grid lines.")
-
-
-func _print_console(text: String) -> void:
-	var console := get_node_or_null("/root/Console")
-	if console != null and console.has_method("print_line"):
-		console.print_line(text)

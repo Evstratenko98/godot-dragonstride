@@ -222,6 +222,9 @@ func _on_entity_attack_received(entity_id: String, target_cell: Vector2i) -> voi
 	if GameSession.is_host() and world.has_method("notify_entity_attacked_in_turn"):
 		world.notify_entity_attacked_in_turn(attacker, target_cell)
 
+	if world.has_method("print_non_entity_attack_result"):
+		world.print_non_entity_attack_result(attacker, target_cell)
+
 
 func _on_entity_attack_result_received(
 	attacker_entity_id: String,

@@ -41,11 +41,11 @@ func _process(delta: float) -> void:
 
 func set_camera_mode(new_mode: String) -> void:
 	if new_mode != MODE_FOLLOW and new_mode != MODE_FREE:
-		_print_console("Unknown camera mode: %s" % new_mode)
+		ConsoleOutput.print_console("Unknown camera mode: %s" % new_mode)
 		return
 
 	camera_mode = new_mode
-	_print_console("Camera mode: %s" % camera_mode)
+	ConsoleOutput.print_console("Camera mode: %s" % camera_mode)
 
 
 func console_follow() -> void:
@@ -82,9 +82,3 @@ func _register_console_commands() -> void:
 
 	console.add_command("game_camera_mode_follow", console_follow, 0, 0, "Follow the game character.")
 	console.add_command("game_camera_mode_free", console_free, 0, 0, "Move the camera freely near screen edges.")
-
-
-func _print_console(text: String) -> void:
-	var console := get_node_or_null("/root/Console")
-	if console != null and console.has_method("print_line"):
-		console.print_line(text)

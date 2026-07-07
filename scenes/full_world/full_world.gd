@@ -219,6 +219,10 @@ func print_entity_attack_result(
 	)
 
 
+func print_non_entity_attack_result(attacker: Node, target_cell: Vector2i) -> void:
+	combat.print_non_entity_attack_result(attacker, target_cell)
+
+
 func get_player_by_steam_id(steam_id: int) -> Node:
 	return players_service.get_player_by_steam_id(steam_id)
 
@@ -272,9 +276,7 @@ func get_adjacent_cell_center(world_position: Vector2, direction: Vector2i) -> V
 
 
 func print_console(text: String) -> void:
-	var console: Node = get_node_or_null("/root/Console")
-	if console != null and console.has_method("print_line"):
-		console.print_line(text)
+	ConsoleOutput.print_line(text)
 
 
 func _configure_services() -> void:

@@ -4,6 +4,17 @@ const STATE_DISABLED := "disabled"
 const STATE_PLAYER_TURN := "player_turn"
 const STATE_WORLD_TURN := "world_turn"
 
+const EVENT_NONE := ""
+const EVENT_TURN_MODE_ENABLED := "turn_mode_enabled"
+const EVENT_TURN_MODE_DISABLED := "turn_mode_disabled"
+const EVENT_STEPS_CHANGED := "steps_changed"
+const EVENT_ROUND_STARTED := "round_started"
+const EVENT_PLAYER_TURN_STARTED := "player_turn_started"
+const EVENT_WORLD_TURN_STARTED := "world_turn_started"
+const EVENT_WORLD_TURN_ENDED := "world_turn_ended"
+const EVENT_PLAYER_TURN_ENDED := "player_turn_ended"
+const EVENT_PLAYER_TURN_SKIPPED := "player_turn_skipped"
+
 const MAX_STEPS_PER_TURN := 10
 const MAX_ATTACKS_PER_TURN := 1
 
@@ -33,31 +44,31 @@ func _exit_tree() -> void:
 
 func enable_turn_mode() -> void:
 	if not _can_control_turn_mode():
-		_print_console("Only host can change turn mode")
+		ConsoleOutput.print_console("Only host can change turn mode", world)
 		return
 
 	_reset_turn_state()
 	state = STATE_PLAYER_TURN
 	round_number = 1
 	_build_player_turn_order()
-	_print_console("Turn mode enabled")
-	_broadcast_snapshot(["Turn mode enabled"])
+	ConsoleOutput.print_console("Turn mode enabled", world)
+	_broadcast_snapshot(EVENT_TURN_MODE_ENABLED)
 	_start_round()
 
 
 func disable_turn_mode() -> void:
 	if not _can_control_turn_mode():
-		_print_console("Only host can change turn mode")
+		ConsoleOutput.print_console("Only host can change turn mode", world)
 		return
 
 	_reset_turn_state()
-	_print_console("Turn mode disabled")
-	_broadcast_snapshot(["Turn mode disabled"])
+	ConsoleOutput.print_console("Turn mode disabled", world)
+	_broadcast_snapshot(EVENT_TURN_MODE_DISABLED)
 
 
 func print_turn_status() -> void:
 	if state == STATE_DISABLED:
-		_print_console("Turn mode: disabled")
+		ConsoleOutput.print_console("Turn mode: disabled", world)
 		return
 
 	var active_name := "none"
@@ -65,13 +76,13 @@ func print_turn_status() -> void:
 	if active_entity != null:
 		active_name = _get_entity_display_name(active_entity)
 
-	_print_console("Turn mode: enabled; state: %s; round: %d; active: %s; steps: %d; attack: %d" % [
+	ConsoleOutput.print_console("Turn mode: enabled; state: %s; round: %d; active: %s; steps: %d; attack: %d" % [
 		state,
 		round_number,
 		active_name,
 		steps_left,
 		attacks_left,
-	])
+	], world)
 
 
 func is_turn_mode_enabled() -> bool:
@@ -111,8 +122,8 @@ func notify_entity_moved(entity: Node, _from_cell: Vector2i, _target_cell: Vecto
 
 	steps_left = maxi(steps_left - 1, 0)
 	var log_line := "Steps left for %s: %d" % [_get_entity_display_name(entity), steps_left]
-	_print_console(log_line)
-	_broadcast_snapshot([log_line])
+	ConsoleOutput.print_console(log_line, world)
+	_broadcast_snapshot(EVENT_STEPS_CHANGED)
 	_finish_pending_turn_if_ready()
 
 
@@ -157,9 +168,12 @@ func apply_remote_snapshot(snapshot: Dictionary) -> void:
 	for id in snapshot.get("turn_order", []):
 		turn_order.append(str(id))
 
-	var logs: Array = snapshot.get("logs", [])
-	for log_line in logs:
-		_print_console(str(log_line))
+	var event_payload: Dictionary = {}
+	var snapshot_payload: Variant = snapshot.get("event_payload", {})
+	if snapshot_payload is Dictionary:
+		event_payload = snapshot_payload
+
+	_print_remote_turn_event(str(snapshot.get("event", EVENT_NONE)), event_payload)
 
 
 func _start_round() -> void:
@@ -169,8 +183,8 @@ func _start_round() -> void:
 
 	current_turn_index = -1
 	var log_line := "Round %d started" % round_number
-	_print_console(log_line)
-	_broadcast_snapshot([log_line])
+	ConsoleOutput.print_console(log_line, world)
+	_broadcast_snapshot(EVENT_ROUND_STARTED)
 	_start_next_player_turn()
 
 
@@ -204,9 +218,9 @@ func _start_player_turn(player: Node) -> void:
 
 	var start_log := "Player turn started: %s" % _get_entity_display_name(player)
 	var resources_log := "Available: steps %d, attack %d" % [steps_left, attacks_left]
-	_print_console(start_log)
-	_print_console(resources_log)
-	_broadcast_snapshot([start_log, resources_log])
+	ConsoleOutput.print_console(start_log, world)
+	ConsoleOutput.print_console(resources_log, world)
+	_broadcast_snapshot(EVENT_PLAYER_TURN_STARTED)
 
 
 func _start_world_turn() -> void:
@@ -217,15 +231,15 @@ func _start_world_turn() -> void:
 	pending_end_turn = false
 
 	var start_log := "World turn started"
-	_print_console(start_log)
-	_broadcast_snapshot([start_log])
+	ConsoleOutput.print_console(start_log, world)
+	_broadcast_snapshot(EVENT_WORLD_TURN_STARTED)
 	_finish_world_turn()
 
 
 func _finish_world_turn() -> void:
 	var finish_log := "World turn ended"
-	_print_console(finish_log)
-	_broadcast_snapshot([finish_log])
+	ConsoleOutput.print_console(finish_log, world)
+	_broadcast_snapshot(EVENT_WORLD_TURN_ENDED)
 	round_number += 1
 	state = STATE_PLAYER_TURN
 	_start_round()
@@ -259,12 +273,13 @@ func _finish_player_turn() -> void:
 		player_name = _get_entity_display_name(player)
 
 	var log_line := "Player turn ended: %s" % player_name
-	_print_console(log_line)
+	ConsoleOutput.print_console(log_line, world)
+	var finished_entity_id := active_entity_id
 	active_entity_id = ""
 	steps_left = 0
 	attacks_left = 0
 	pending_end_turn = false
-	_broadcast_snapshot([log_line])
+	_broadcast_snapshot(EVENT_PLAYER_TURN_ENDED, {"entity_id": finished_entity_id})
 	_start_next_player_turn()
 
 
@@ -284,8 +299,11 @@ func _log_player_skipped(entity_id: String, player: Node, reason: String) -> voi
 		player_name = _get_entity_display_name(player)
 
 	var log_line := "Player turn skipped: %s (%s)" % [player_name, reason]
-	_print_console(log_line)
-	_broadcast_snapshot([log_line])
+	ConsoleOutput.print_console(log_line, world)
+	_broadcast_snapshot(EVENT_PLAYER_TURN_SKIPPED, {
+		"entity_id": entity_id,
+		"reason": reason,
+	})
 
 
 func _build_player_turn_order() -> void:
@@ -391,7 +409,52 @@ func _get_entity_display_name(entity: Node) -> String:
 	return "player"
 
 
-func _make_snapshot(logs: Array = []) -> Dictionary:
+func _get_entity_display_name_by_id(entity_id: String) -> String:
+	var entity: Node = world.get_entity_by_id(entity_id)
+	if entity != null:
+		return _get_entity_display_name(entity)
+
+	if not entity_id.is_empty():
+		return entity_id
+
+	return "player"
+
+
+func _print_remote_turn_event(event: String, event_payload: Dictionary) -> void:
+	match event:
+		EVENT_TURN_MODE_ENABLED:
+			ConsoleOutput.print_console("Turn mode enabled", world)
+		EVENT_TURN_MODE_DISABLED:
+			ConsoleOutput.print_console("Turn mode disabled", world)
+		EVENT_STEPS_CHANGED:
+			var steps_entity: Node = _get_active_entity()
+			ConsoleOutput.print_console("Steps left for %s: %d" % [
+				_get_entity_display_name(steps_entity),
+				steps_left,
+			], world)
+		EVENT_ROUND_STARTED:
+			ConsoleOutput.print_console("Round %d started" % round_number, world)
+		EVENT_PLAYER_TURN_STARTED:
+			var turn_entity: Node = _get_active_entity()
+			ConsoleOutput.print_console("Player turn started: %s" % _get_entity_display_name(turn_entity), world)
+			ConsoleOutput.print_console("Available: steps %d, attack %d" % [steps_left, attacks_left], world)
+		EVENT_WORLD_TURN_STARTED:
+			ConsoleOutput.print_console("World turn started", world)
+		EVENT_WORLD_TURN_ENDED:
+			ConsoleOutput.print_console("World turn ended", world)
+		EVENT_PLAYER_TURN_ENDED:
+			var ended_entity_id := str(event_payload.get("entity_id", ""))
+			ConsoleOutput.print_console("Player turn ended: %s" % _get_entity_display_name_by_id(ended_entity_id), world)
+		EVENT_PLAYER_TURN_SKIPPED:
+			var skipped_entity_id := str(event_payload.get("entity_id", ""))
+			var reason := str(event_payload.get("reason", "unknown"))
+			ConsoleOutput.print_console("Player turn skipped: %s (%s)" % [
+				_get_entity_display_name_by_id(skipped_entity_id),
+				reason,
+			], world)
+
+
+func _make_snapshot(event: String = EVENT_NONE, event_payload: Dictionary = {}) -> Dictionary:
 	return {
 		"state": state,
 		"round_number": round_number,
@@ -401,13 +464,14 @@ func _make_snapshot(logs: Array = []) -> Dictionary:
 		"current_turn_index": current_turn_index,
 		"pending_end_turn": pending_end_turn,
 		"turn_order": turn_order.duplicate(),
-		"logs": logs,
+		"event": event,
+		"event_payload": event_payload,
 	}
 
 
-func _broadcast_snapshot(logs: Array = []) -> void:
+func _broadcast_snapshot(event: String = EVENT_NONE, event_payload: Dictionary = {}) -> void:
 	if GameSession.is_multiplayer() and GameSession.is_host():
-		NetworkManager.broadcast_turn_state(_make_snapshot(logs))
+		NetworkManager.broadcast_turn_state(_make_snapshot(event, event_payload))
 
 
 func _reset_turn_state() -> void:
@@ -499,13 +563,3 @@ func _unregister_console_commands() -> void:
 	console.remove_command("game_turns_enable")
 	console.remove_command("game_turns_disable")
 	console.remove_command("game_turns_status")
-
-
-func _print_console(text: String) -> void:
-	if world != null and world.has_method("print_console"):
-		world.print_console(text)
-		return
-
-	var console: Node = get_node_or_null("/root/Console")
-	if console != null and console.has_method("print_line"):
-		console.print_line(text)
