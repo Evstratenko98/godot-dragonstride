@@ -29,6 +29,8 @@ var active_entity_id := ""
 var steps_left := 0
 var attacks_left := 0
 var pending_end_turn := false
+var pending_world_entity_ids: Dictionary = {}
+var is_starting_world_behaviors := false
 
 
 func _ready() -> void:
@@ -93,12 +95,18 @@ func can_entity_move(entity: Node) -> bool:
 	if state == STATE_DISABLED:
 		return true
 
+	if state == STATE_WORLD_TURN:
+		return _is_world_turn_entity(entity)
+
 	return state == STATE_PLAYER_TURN and _is_active_entity(entity) and steps_left > 0
 
 
 func can_entity_attack(entity: Node, target_cell: Vector2i) -> bool:
 	if state == STATE_DISABLED:
 		return true
+
+	if state == STATE_WORLD_TURN:
+		return _is_world_turn_entity(entity)
 
 	if state != STATE_PLAYER_TURN or not _is_active_entity(entity):
 		return false
@@ -137,6 +145,10 @@ func notify_entity_attacked(entity: Node, target_cell: Vector2i) -> void:
 
 
 func notify_entity_action_finished(entity: Node) -> void:
+	if _is_authority() and state == STATE_WORLD_TURN and _is_world_turn_entity(entity):
+		_mark_world_entity_action_finished(entity)
+		return
+
 	if not _is_authority() or not _is_active_entity(entity):
 		return
 
@@ -229,20 +241,70 @@ func _start_world_turn() -> void:
 	steps_left = 0
 	attacks_left = 0
 	pending_end_turn = false
+	pending_world_entity_ids.clear()
 
 	var start_log := "World turn started"
 	ConsoleOutput.print_console(start_log, world)
 	_broadcast_snapshot(EVENT_WORLD_TURN_STARTED)
-	_finish_world_turn()
+	_start_world_behaviors()
+
+
+func _start_world_behaviors() -> void:
+	if not _is_authority():
+		return
+
+	var world_entities := _get_world_turn_entities()
+	var ready_entities: Array[Node] = []
+	for entity in world_entities:
+		var entity_id: String = world.get_entity_id(entity)
+		if entity_id.is_empty():
+			continue
+
+		ready_entities.append(entity)
+		pending_world_entity_ids[entity_id] = true
+
+	if pending_world_entity_ids.is_empty():
+		_finish_world_turn()
+		return
+
+	is_starting_world_behaviors = true
+	for entity in ready_entities:
+		if _is_world_turn_entity_available(entity) and entity.has_method("behavior"):
+			entity.behavior()
+		else:
+			_mark_world_entity_action_finished(entity)
+
+	is_starting_world_behaviors = false
+	_finish_world_turn_if_ready()
 
 
 func _finish_world_turn() -> void:
+	pending_world_entity_ids.clear()
+	is_starting_world_behaviors = false
 	var finish_log := "World turn ended"
 	ConsoleOutput.print_console(finish_log, world)
 	_broadcast_snapshot(EVENT_WORLD_TURN_ENDED)
 	round_number += 1
 	state = STATE_PLAYER_TURN
 	_start_round()
+
+
+func _mark_world_entity_action_finished(entity: Node) -> void:
+	if entity == null:
+		return
+
+	var entity_id: String = world.get_entity_id(entity)
+	if entity_id.is_empty():
+		return
+
+	pending_world_entity_ids.erase(entity_id)
+	if not is_starting_world_behaviors:
+		_finish_world_turn_if_ready()
+
+
+func _finish_world_turn_if_ready() -> void:
+	if state == STATE_WORLD_TURN and pending_world_entity_ids.is_empty():
+		_finish_world_turn()
 
 
 func _request_end_turn_for_entity(entity: Node) -> void:
@@ -485,6 +547,8 @@ func _reset_turn_state() -> void:
 	steps_left = 0
 	attacks_left = 0
 	pending_end_turn = false
+	pending_world_entity_ids.clear()
+	is_starting_world_behaviors = false
 
 
 func _can_control_turn_mode() -> bool:
@@ -493,6 +557,37 @@ func _can_control_turn_mode() -> bool:
 
 func _is_authority() -> bool:
 	return not GameSession.is_multiplayer() or GameSession.is_host()
+
+
+func _get_world_turn_entities() -> Array[Node]:
+	var entities: Array[Node] = []
+	_collect_world_turn_entities(world, entities)
+	return entities
+
+
+func _collect_world_turn_entities(node: Node, entities: Array[Node]) -> void:
+	for child in node.get_children():
+		if _is_world_turn_entity_available(child):
+			entities.append(child)
+
+		_collect_world_turn_entities(child, entities)
+
+
+func _is_world_turn_entity(entity: Node) -> bool:
+	if entity == null or entity.get("entity_type") == null:
+		return false
+
+	return int(entity.get("entity_type")) != Entity.EntityType.CHARACTER and entity.has_method("behavior")
+
+
+func _is_world_turn_entity_available(entity: Node) -> bool:
+	if not _is_world_turn_entity(entity):
+		return false
+
+	if entity.get("health") != null and int(entity.get("health")) <= 0:
+		return false
+
+	return true
 
 
 func _connect_network_signals() -> void:

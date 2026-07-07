@@ -196,6 +196,10 @@ func _on_entity_move_received(entity_id: String, from_cell: Vector2i, target_cel
 	if GameSession.is_host() and world.has_method("can_entity_move_in_turn") and not world.can_entity_move_in_turn(entity):
 		return
 
+	if entity.has_method("play_remote_move"):
+		entity.play_remote_move(from_cell, target_cell)
+		return
+
 	if not world.reserve_entity_cell(entity, from_cell, target_cell):
 		return
 
@@ -222,7 +226,9 @@ func _on_entity_attack_received(entity_id: String, target_cell: Vector2i) -> voi
 	if GameSession.is_host() and world.has_method("notify_entity_attacked_in_turn"):
 		world.notify_entity_attacked_in_turn(attacker, target_cell)
 
-	if world.has_method("print_non_entity_attack_result"):
+	if GameSession.is_host():
+		world.apply_attack_to_cell(attacker, target_cell, true, false)
+	elif world.has_method("print_non_entity_attack_result"):
 		world.print_non_entity_attack_result(attacker, target_cell)
 
 

@@ -1,20 +1,21 @@
 [gd_scene format=4 uid="uid://dbpsjckioxl17"]
 
 [ext_resource type="Script" uid="uid://bxugl700mfh13" path="res://scenes/full_world/full_world.gd" id="1"]
-[ext_resource type="Script" uid="uid://cgrid0s9w4k1" path="res://scenes/full_world/world_grid.gd" id="2"]
-[ext_resource type="Script" uid="uid://cregistry7p2ma" path="res://scenes/full_world/world_registry.gd" id="3"]
+[ext_resource type="Script" uid="uid://cgrid0taw4k1" path="res://scenes/full_world/world_grid.gd" id="2"]
+[ext_resource type="Script" uid="uid://dhdtlkgsasxg" path="res://scenes/full_world/world_registry.gd" id="3"]
 [ext_resource type="Script" uid="uid://cplayers5n8qd" path="res://scenes/full_world/world_players.gd" id="4"]
-[ext_resource type="Script" uid="uid://ccombat3y6lt" path="res://scenes/full_world/world_combat.gd" id="5_jhq0s"]
-[ext_resource type="Script" uid="uid://cnetwork4v1rx" path="res://scenes/full_world/world_network.gd" id="6_x7drp"]
-[ext_resource type="Script" path="res://scenes/full_world/world_turns.gd" id="7_turns"]
 [ext_resource type="Texture2D" uid="uid://2l2pctwopuf1" path="res://art/Tiny Swords (Free Pack)/Terrain/Tileset/Tilemap_color3.png" id="4_fh5r6"]
 [ext_resource type="Texture2D" uid="uid://b0sr73cw4wvfi" path="res://art/Tiny Swords (Free Pack)/Terrain/Decorations/Clouds/Clouds_01.png" id="4_i73x7"]
 [ext_resource type="PackedScene" uid="uid://dxxhv77xcn8hc" path="res://scenes/objects/tree/tree.tscn" id="5"]
+[ext_resource type="Script" uid="uid://ccombat3y6lt" path="res://scenes/full_world/world_combat.gd" id="5_jhq0s"]
 [ext_resource type="Texture2D" uid="uid://38ifj4m00mc3" path="res://art/Tiny Swords (Free Pack)/Terrain/Tileset/Water Background color.png" id="6_dsd14"]
+[ext_resource type="Script" uid="uid://cnetwork4v1rx" path="res://scenes/full_world/world_network.gd" id="6_x7drp"]
 [ext_resource type="PackedScene" path="res://scenes/grid_lines/grid_lines.tscn" id="7"]
 [ext_resource type="PackedScene" uid="uid://ctajcg33susc6" path="res://scenes/objects/house/house.tscn" id="7_80wl1"]
+[ext_resource type="Script" uid="uid://dg80u4r2ay4gu" path="res://scenes/full_world/world_turns.gd" id="7_turns"]
 [ext_resource type="PackedScene" path="res://scenes/cell_hover/cell_hover.tscn" id="8"]
 [ext_resource type="PackedScene" uid="uid://3sy27o0yl7p" path="res://scenes/hud/hud.tscn" id="9"]
+[ext_resource type="PackedScene" path="res://scenes/entities/sheep/sheep.tscn" id="10_sheep"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_dsd14"]
 texture = ExtResource("6_dsd14")
@@ -184,6 +185,24 @@ object_id = "tree_2"
 position = Vector2(92, 214)
 scale = Vector2(1.2, 1.2)
 object_id = "house_1"
+
+[node name="WorldEntities" type="Node2D" parent="." unique_id=2014890136]
+
+[node name="Sheep1" parent="WorldEntities" unique_id=233094130 instance=ExtResource("10_sheep")]
+position = Vector2(672, 160)
+entity_id = "sheep_1"
+entity_name = "Sheep 1"
+
+[node name="Sheep2" parent="WorldEntities" unique_id=2077348288 instance=ExtResource("10_sheep")]
+position = Vector2(672, 672)
+entity_id = "sheep_2"
+entity_name = "Sheep 2"
+
+[node name="Sheep" parent="WorldEntities" unique_id=2016796742 instance=ExtResource("10_sheep")]
+position = Vector2(478, 351)
+
+[node name="Sheep3" parent="WorldEntities" unique_id=1727834103 instance=ExtResource("10_sheep")]
+position = Vector2(287, 350)
 
 [node name="Players" type="Node2D" parent="." unique_id=1884100331]
 

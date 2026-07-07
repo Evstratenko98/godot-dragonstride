@@ -7,8 +7,13 @@ func _ready() -> void:
 	world = get_parent()
 
 
-func apply_attack_to_cell(attacker: Node, cell: Vector2i, should_broadcast := true) -> void:
-	if should_broadcast and GameSession.is_multiplayer() and attacker.get("entity_id") != null:
+func apply_attack_to_cell(
+	attacker: Node,
+	cell: Vector2i,
+	should_broadcast := true,
+	should_broadcast_action := true
+) -> void:
+	if should_broadcast_action and should_broadcast and GameSession.is_multiplayer() and attacker.get("entity_id") != null:
 		NetworkManager.broadcast_entity_attack(str(attacker.get("entity_id")), cell)
 
 	var target_entity: Node = world.get_entity_at_cell(cell)

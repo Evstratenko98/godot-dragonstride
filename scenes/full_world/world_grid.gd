@@ -39,13 +39,13 @@ func get_cell_size() -> int:
 
 
 func world_to_cell(world_position: Vector2) -> Vector2i:
-	var local_position: Vector2 = world.to_local(world_position)
+	var local_position: Vector2 = _get_world().to_local(world_position)
 	return Vector2i(floori(local_position.x / CELL_SIZE), floori(local_position.y / CELL_SIZE))
 
 
 func cell_to_world(cell: Vector2i) -> Vector2:
 	var local_position: Vector2 = Vector2(cell) * CELL_SIZE + Vector2(CELL_SIZE, CELL_SIZE) * 0.5
-	return world.to_global(local_position)
+	return _get_world().to_global(local_position)
 
 
 func get_cell_center(world_position: Vector2) -> Vector2:
@@ -54,3 +54,10 @@ func get_cell_center(world_position: Vector2) -> Vector2:
 
 func get_adjacent_cell_center(world_position: Vector2, direction: Vector2i) -> Vector2:
 	return cell_to_world(world_to_cell(world_position) + direction)
+
+
+func _get_world() -> Node2D:
+	if world != null:
+		return world
+
+	return get_parent() as Node2D

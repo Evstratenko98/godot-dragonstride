@@ -50,6 +50,8 @@ func new_game() -> void:
 		push_warning("Unknown game session mode: " + str(GameSession.mode))
 		players_service.start_singleplayer()
 
+	_register_world_entities()
+
 	if music.stream != null:
 		music.play()
 
@@ -111,6 +113,33 @@ func clear_registered_entities() -> void:
 	registry.clear_entities()
 
 
+func _register_world_entities() -> void:
+	var world_entities_root: Node = get_node_or_null("WorldEntities")
+	if world_entities_root == null:
+		return
+
+	_register_world_entity_children(world_entities_root)
+
+
+func _register_world_entity_children(parent: Node) -> void:
+	for child in parent.get_children():
+		if child.get("entity_type") != null and int(child.get("entity_type")) != Entity.EntityType.CHARACTER:
+			_ensure_world_entity_id(child)
+			register_entity(child)
+
+		_register_world_entity_children(child)
+
+
+func _ensure_world_entity_id(entity: Node) -> void:
+	if entity.get("entity_id") == null:
+		return
+
+	if not str(entity.get("entity_id")).is_empty():
+		return
+
+	entity.set("entity_id", entity.name)
+
+
 func get_entity_by_id(entity_id: String) -> Node:
 	return registry.get_entity_by_id(entity_id)
 
@@ -143,8 +172,13 @@ func get_cell_display_name(cell: Vector2i) -> String:
 	return registry.get_cell_display_name(cell)
 
 
-func apply_attack_to_cell(attacker: Node, cell: Vector2i, should_broadcast := true) -> void:
-	combat.apply_attack_to_cell(attacker, cell, should_broadcast)
+func apply_attack_to_cell(
+	attacker: Node,
+	cell: Vector2i,
+	should_broadcast := true,
+	should_broadcast_action := true
+) -> void:
+	combat.apply_attack_to_cell(attacker, cell, should_broadcast, should_broadcast_action)
 
 
 func can_entity_move_in_turn(entity: Node) -> bool:
@@ -252,27 +286,27 @@ func is_cell_inside(cell: Vector2i) -> bool:
 
 
 func get_grid_size() -> Vector2i:
-	return grid.get_grid_size()
+	return _get_grid_service().get_grid_size()
 
 
 func get_cell_size() -> int:
-	return grid.get_cell_size()
+	return _get_grid_service().get_cell_size()
 
 
 func world_to_cell(world_position: Vector2) -> Vector2i:
-	return grid.world_to_cell(world_position)
+	return _get_grid_service().world_to_cell(world_position)
 
 
 func cell_to_world(cell: Vector2i) -> Vector2:
-	return grid.cell_to_world(cell)
+	return _get_grid_service().cell_to_world(cell)
 
 
 func get_cell_center(world_position: Vector2) -> Vector2:
-	return grid.get_cell_center(world_position)
+	return _get_grid_service().get_cell_center(world_position)
 
 
 func get_adjacent_cell_center(world_position: Vector2, direction: Vector2i) -> Vector2:
-	return grid.get_adjacent_cell_center(world_position, direction)
+	return _get_grid_service().get_adjacent_cell_center(world_position, direction)
 
 
 func print_console(text: String) -> void:
@@ -282,6 +316,13 @@ func print_console(text: String) -> void:
 func _configure_services() -> void:
 	grid.configure(grid_size, walkable_layer_names)
 	players_service.configure(spawn_cells)
+
+
+func _get_grid_service() -> Node:
+	if grid != null:
+		return grid
+
+	return get_node("Grid")
 
 
 func _leave_active_multiplayer_session() -> void:

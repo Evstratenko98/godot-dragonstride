@@ -5,6 +5,7 @@ enum EntityType {
 	CHARACTER,
 	NPC,
 	ENEMY,
+	NEUTRAL,
 }
 
 @export var entity_id := ""
@@ -151,7 +152,7 @@ func get_display_name() -> String:
 	return name
 
 
-func _move_to_cell(target_cell: Vector2i) -> void:
+func _move_to_cell(target_cell: Vector2i, should_broadcast := true) -> void:
 	is_moving = true
 	var from_cell := current_cell
 	var target_position: Vector2 = world.cell_to_world(target_cell)
@@ -161,7 +162,7 @@ func _move_to_cell(target_cell: Vector2i) -> void:
 	tween.tween_property(self, "global_position", target_position, move_time)
 	_on_move_started(target_cell)
 	if world != null and world.has_method("handle_entity_move_started"):
-		world.handle_entity_move_started(self, from_cell, target_cell, true)
+		world.handle_entity_move_started(self, from_cell, target_cell, should_broadcast)
 	tween.finished.connect(func() -> void:
 		global_position = target_position
 		current_cell = target_cell
