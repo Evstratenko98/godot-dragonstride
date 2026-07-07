@@ -1,0 +1,75 @@
+name: Manual Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, for example v0.1.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    name: Build and release Windows
+    runs-on: ubuntu-latest
+
+    env:
+      GODOT_VERSION: "4.6"
+      GODOT_RELEASE: "4.6-stable"
+      EXPORT_PRESET: "Windows Desktop"
+      EXPORT_DIR: "build"
+      APP_NAME: "dragonstride"
+      ARCHIVE_NAME: "dragonstride-windows.zip"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install archive tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip zip
+
+      - name: Download Godot
+        run: |
+          curl -L -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_RELEASE}/Godot_v${GODOT_RELEASE}_linux.x86_64.zip"
+          unzip -q godot.zip -d godot
+          GODOT_BIN="$(find godot -type f -name 'Godot_v*_linux.x86_64' | head -n 1)"
+          chmod +x "${GODOT_BIN}"
+          echo "GODOT_BIN=${GODOT_BIN}" >> "${GITHUB_ENV}"
+
+      - name: Install Godot export templates
+        run: |
+          curl -L -o export_templates.tpz "https://github.com/godotengine/godot/releases/download/${GODOT_RELEASE}/Godot_v${GODOT_RELEASE}_export_templates.tpz"
+          mkdir -p "${HOME}/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
+          unzip -q export_templates.tpz -d export_templates
+          cp -R export_templates/templates/* "${HOME}/.local/share/godot/export_templates/${GODOT_VERSION}.stable/"
+
+      - name: Export Windows build
+        run: |
+          mkdir -p "${EXPORT_DIR}"
+          "${GODOT_BIN}" --headless --import
+          "${GODOT_BIN}" --headless --export-release "${EXPORT_PRESET}" "${EXPORT_DIR}/${APP_NAME}.exe"
+
+      - name: Add Steam runtime files
+        run: |
+          cp -n addons/godotsteam/win64/steam_api64.dll "${EXPORT_DIR}/"
+          cp -n addons/godotsteam/win64/libgodotsteam.windows.template_release.x86_64.dll "${EXPORT_DIR}/"
+          if [ -f steam_appid.txt ]; then
+            cp -n steam_appid.txt "${EXPORT_DIR}/"
+          fi
+
+      - name: Create release archive
+        run: |
+          cd "${EXPORT_DIR}"
+          zip -r "../${ARCHIVE_NAME}" .
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          name: ${{ inputs.tag }}
+          files: ${{ env.ARCHIVE_NAME }}

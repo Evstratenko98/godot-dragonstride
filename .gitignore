@@ -9,6 +9,7 @@
 /exports/
 
 # Local packaged builds
+/build/
 *.rar
 *.zip
 
