@@ -31,7 +31,7 @@ jobs:
       - name: Download Godot
         run: |
           Invoke-WebRequest `
-            -Uri "https://github.com/godotengine/godot/releases/download/$env:GODOT_RELEASE/Godot_v$env:GODOT_RELEASE_win64.exe.zip" `
+            -Uri "https://github.com/godotengine/godot-builds/releases/download/$env:GODOT_RELEASE/Godot_v$env:GODOT_RELEASE_win64.exe.zip" `
             -OutFile godot.zip
           Expand-Archive -Path godot.zip -DestinationPath godot
           $GodotBin = Get-ChildItem -Path godot -Recurse -Filter "Godot_v*_win64.exe" | Select-Object -First 1 -ExpandProperty FullName
@@ -40,7 +40,7 @@ jobs:
       - name: Install Godot export templates
         run: |
           Invoke-WebRequest `
-            -Uri "https://github.com/godotengine/godot/releases/download/$env:GODOT_RELEASE/Godot_v$env:GODOT_RELEASE_export_templates.tpz" `
+            -Uri "https://github.com/godotengine/godot-builds/releases/download/$env:GODOT_RELEASE/Godot_v$env:GODOT_RELEASE_export_templates.tpz" `
             -OutFile export_templates.zip
           Expand-Archive -Path export_templates.zip -DestinationPath export_templates
           $TemplateDir = Join-Path $env:APPDATA "Godot\export_templates\$env:GODOT_VERSION.stable"
