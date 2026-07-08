@@ -14,7 +14,7 @@ permissions:
 jobs:
   build-release:
     name: Build and release Windows
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
 
     env:
       GODOT_VERSION: "4.6"
@@ -28,67 +28,44 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install archive tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip zip
+
       - name: Download Godot
         run: |
-          Invoke-WebRequest `
-            -Uri "https://github.com/godotengine/godot-builds/releases/download/${env:GODOT_RELEASE}/Godot_v${env:GODOT_RELEASE}_win64.exe.zip" `
-            -OutFile godot.zip
-          Expand-Archive -Path godot.zip -DestinationPath godot
-          $GodotBin = Get-ChildItem -Path godot -Recurse -Filter "Godot_v*_win64.exe" | Select-Object -First 1 -ExpandProperty FullName
-          "GODOT_BIN=$GodotBin" | Out-File -FilePath $env:GITHUB_ENV -Append
+          curl -L -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_RELEASE}/Godot_v${GODOT_RELEASE}_linux.x86_64.zip"
+          unzip -q godot.zip -d godot
+          GODOT_BIN="$(find godot -type f -name 'Godot_v*_linux.x86_64' | head -n 1)"
+          chmod +x "${GODOT_BIN}"
+          echo "GODOT_BIN=${GODOT_BIN}" >> "${GITHUB_ENV}"
 
       - name: Install Godot export templates
         run: |
-          Invoke-WebRequest `
-            -Uri "https://github.com/godotengine/godot-builds/releases/download/${env:GODOT_RELEASE}/Godot_v${env:GODOT_RELEASE}_export_templates.tpz" `
-            -OutFile export_templates.zip
-          Expand-Archive -Path export_templates.zip -DestinationPath export_templates
-          $TemplateDir = Join-Path $env:APPDATA "Godot\export_templates\$env:GODOT_VERSION.stable"
-          New-Item -ItemType Directory -Force -Path $TemplateDir
-          Copy-Item -Path "export_templates\templates\*" -Destination $TemplateDir -Recurse -Force
+          curl -L -o export_templates.tpz "https://github.com/godotengine/godot/releases/download/${GODOT_RELEASE}/Godot_v${GODOT_RELEASE}_export_templates.tpz"
+          mkdir -p "${HOME}/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
+          unzip -q export_templates.tpz -d export_templates
+          cp -R export_templates/templates/* "${HOME}/.local/share/godot/export_templates/${GODOT_VERSION}.stable/"
 
       - name: Export Windows build
         run: |
-          New-Item -ItemType Directory -Force -Path $env:EXPORT_DIR
-          & $env:GODOT_BIN --headless --import
-          & $env:GODOT_BIN --headless --export-release "$env:EXPORT_PRESET" "$env:EXPORT_DIR\$env:APP_NAME.exe"
-
-      - name: Ensure console wrapper
-        run: |
-          $ConsoleExe = Join-Path $env:EXPORT_DIR "$env:APP_NAME.console.exe"
-          if (-not (Test-Path $ConsoleExe)) {
-            $TemplateDir = Join-Path $env:APPDATA "Godot\export_templates\$env:GODOT_VERSION.stable"
-            $WrapperNames = @(
-              "windows_release_x86_64.console.exe",
-              "windows_release_x86_64_console.exe",
-              "windows_release_x86_64 console.exe",
-              "windows_release_x86_64console.exe"
-            )
-
-            foreach ($WrapperName in $WrapperNames) {
-              $WrapperPath = Join-Path $TemplateDir $WrapperName
-              if (Test-Path $WrapperPath) {
-                Copy-Item -Path $WrapperPath -Destination $ConsoleExe -Force
-                break
-              }
-            }
-          }
-
-          if (-not (Test-Path $ConsoleExe)) {
-            throw "Expected console wrapper was not exported: $ConsoleExe"
-          }
+          mkdir -p "${EXPORT_DIR}"
+          "${GODOT_BIN}" --headless --import
+          "${GODOT_BIN}" --headless --export-release "${EXPORT_PRESET}" "${EXPORT_DIR}/${APP_NAME}.exe"
 
       - name: Add Steam runtime files
         run: |
-          Copy-Item -Path "addons\godotsteam\win64\steam_api64.dll" -Destination $env:EXPORT_DIR -Force
-          Copy-Item -Path "addons\godotsteam\win64\libgodotsteam.windows.template_release.x86_64.dll" -Destination $env:EXPORT_DIR -Force
-          if (Test-Path steam_appid.txt) {
-            Copy-Item -Path steam_appid.txt -Destination $env:EXPORT_DIR -Force
-          }
+          cp -n addons/godotsteam/win64/steam_api64.dll "${EXPORT_DIR}/"
+          cp -n addons/godotsteam/win64/libgodotsteam.windows.template_release.x86_64.dll "${EXPORT_DIR}/"
+          if [ -f steam_appid.txt ]; then
+            cp -n steam_appid.txt "${EXPORT_DIR}/"
+          fi
 
       - name: Create release archive
         run: |
-          Compress-Archive -Path "$env:EXPORT_DIR\*" -DestinationPath $env:ARCHIVE_NAME -Force
+          cd "${EXPORT_DIR}"
+          zip -r "../${ARCHIVE_NAME}" .
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
