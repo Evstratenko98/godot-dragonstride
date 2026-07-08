@@ -181,16 +181,16 @@ tile_set = SubResource("TileSet_80wl1")
 
 [node name="CellHover" parent="." unique_id=1589585315 instance=ExtResource("8")]
 
-[node name="Tree2" parent="." unique_id=1583712113 instance=ExtResource("5")]
-position = Vector2(353, 225)
-object_id = "tree_2"
+[node name="WorldEntities" type="Node2D" parent="." unique_id=2014890136]
 
-[node name="House" parent="." unique_id=438279484 instance=ExtResource("7_80wl1")]
+[node name="House" parent="WorldEntities" unique_id=438279484 instance=ExtResource("7_80wl1")]
 position = Vector2(92, 214)
 scale = Vector2(1.2, 1.2)
 object_id = "house_1"
 
-[node name="WorldEntities" type="Node2D" parent="." unique_id=2014890136]
+[node name="Tree2" parent="WorldEntities" unique_id=1583712113 instance=ExtResource("5")]
+position = Vector2(353, 225)
+object_id = "tree_2"
 
 [node name="Sheep3" parent="WorldEntities" unique_id=1727834103 instance=ExtResource("10_sheep")]
 position = Vector2(287, 350)
