@@ -1,0 +1,48 @@
+[gd_scene format=3 uid="uid://bnvhbkuixn6dk"]
+
+[ext_resource type="Texture2D" uid="uid://cihmw2sg1npu5" path="res://art/Tiny Swords (Free Pack)/UI Elements/UI Elements/Bars/SmallBar_Base.png" id="1_cjoeg"]
+[ext_resource type="Texture2D" uid="uid://c540im5a8wstb" path="res://art/Tiny Swords (Free Pack)/UI Elements/UI Elements/Bars/SmallBar_Fill.png" id="2_8u1yf"]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_left"]
+atlas = ExtResource("1_cjoeg")
+region = Rect2(49, 22, 15, 19)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_center"]
+atlas = ExtResource("1_cjoeg")
+region = Rect2(128, 22, 64, 19)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_right"]
+atlas = ExtResource("1_cjoeg")
+region = Rect2(256, 22, 15, 19)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_fill"]
+atlas = ExtResource("2_8u1yf")
+region = Rect2(0, 30, 64, 3)
+
+[node name="HealthBar" type="Node2D" unique_id=1718353329]
+z_index = 100
+scale = Vector2(0.5, 0.5)
+
+[node name="BaseLeft" type="Sprite2D" parent="." unique_id=1661947766]
+position = Vector2(-47, 0)
+texture = SubResource("AtlasTexture_left")
+centered = false
+
+[node name="BaseCenter" type="Sprite2D" parent="." unique_id=1220900786]
+position = Vector2(-32, 0)
+texture = SubResource("AtlasTexture_center")
+centered = false
+
+[node name="BaseRight" type="Sprite2D" parent="." unique_id=1983164318]
+position = Vector2(32, 0)
+texture = SubResource("AtlasTexture_right")
+centered = false
+
+[node name="Progress" type="TextureProgressBar" parent="." unique_id=2081460547]
+offset_left = -32.0
+offset_top = 8.0
+offset_right = 32.0
+offset_bottom = 11.0
+mouse_filter = 2
+value = 100.0
+texture_progress = SubResource("AtlasTexture_fill")

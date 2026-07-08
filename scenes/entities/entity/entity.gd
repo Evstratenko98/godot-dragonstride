@@ -8,6 +8,8 @@ enum EntityType {
 	NEUTRAL,
 }
 
+const HEALTH_BAR_SCENE := preload("res://scenes/entities/health_bar/health_bar.tscn")
+
 @export var entity_id := ""
 @export var entity_name := ""
 @export var entity_type: EntityType = EntityType.NPC
@@ -16,6 +18,7 @@ enum EntityType {
 @export var damage := 25
 @export var move_time := 0.18
 @export var occupied_offsets: Array[Vector2i] = [Vector2i.ZERO]
+@export var health_bar_offset := Vector2(0, -42)
 
 var world: Node = null
 var current_cell := Vector2i.ZERO
@@ -23,6 +26,7 @@ var spawn_cell := Vector2i.ZERO
 var is_moving := false
 var is_attacking := false
 var attack_target_cell: Vector2i = Vector2i.ZERO
+var health_bar: Node2D = null
 
 
 func _ready() -> void:
@@ -31,6 +35,8 @@ func _ready() -> void:
 		current_cell = world.world_to_cell(global_position)
 		spawn_cell = current_cell
 		global_position = world.cell_to_world(current_cell)
+	_ensure_health_bar()
+	_update_health_bar()
 
 
 func start_entity(
@@ -51,6 +57,8 @@ func start_entity(
 
 	health = max_health
 	show()
+	_ensure_health_bar()
+	_update_health_bar()
 
 
 func can_act() -> bool:
@@ -150,6 +158,7 @@ func respawn() -> void:
 		world.respawn_entity(self, spawn_cell)
 
 	show()
+	_update_health_bar()
 	_on_respawned()
 
 
@@ -262,7 +271,7 @@ func _try_continue_moving() -> bool:
 
 
 func _on_health_changed(_previous_health: int, _new_health: int) -> void:
-	pass
+	_update_health_bar()
 
 
 func _on_died() -> void:
@@ -271,6 +280,32 @@ func _on_died() -> void:
 
 func _on_respawned() -> void:
 	pass
+
+
+func _ensure_health_bar() -> void:
+	if health_bar != null and is_instance_valid(health_bar):
+		health_bar.position = health_bar_offset
+		return
+
+	health_bar = HEALTH_BAR_SCENE.instantiate() as Node2D
+	if health_bar == null:
+		return
+
+	health_bar.position = health_bar_offset
+	add_child(health_bar)
+
+
+func _update_health_bar() -> void:
+	if health_bar == null or not is_instance_valid(health_bar):
+		return
+
+	var progress := health_bar.get_node_or_null("Progress") as TextureProgressBar
+	if progress == null:
+		return
+
+	var safe_max_health := maxi(max_health, 1)
+	progress.max_value = safe_max_health
+	progress.value = clampi(health, 0, safe_max_health)
 
 
 func _find_world() -> Node:
