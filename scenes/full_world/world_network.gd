@@ -136,6 +136,7 @@ func _on_peer_map_updated() -> void:
 
 func _on_peer_connected(_peer_id: int) -> void:
 	if GameSession.is_host():
+		NetworkManager.send_world_spawns_to_peer(_peer_id)
 		broadcast_all_object_states()
 
 
@@ -165,6 +166,9 @@ func _on_attack_requested(steam_id: int, target_cell: Vector2i) -> void:
 
 	var player: Node = world.get_player_by_steam_id(steam_id)
 	if player == null:
+		return
+
+	if player.has_method("can_attack_cell") and not player.can_attack_cell(target_cell):
 		return
 
 	if world.has_method("can_entity_attack_in_turn") and not world.can_entity_attack_in_turn(player, target_cell):
@@ -213,6 +217,9 @@ func _on_entity_attack_received(entity_id: String, target_cell: Vector2i) -> voi
 		return
 
 	if attacker == world.get_local_player():
+		return
+
+	if GameSession.is_host() and attacker.has_method("can_attack_cell") and not attacker.can_attack_cell(target_cell):
 		return
 
 	if GameSession.is_host() and world.has_method("can_entity_attack_in_turn") and not world.can_entity_attack_in_turn(attacker, target_cell):

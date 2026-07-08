@@ -18,13 +18,14 @@ func collect_blockers() -> void:
 
 	for blocker in get_tree().get_nodes_in_group("game_blocker"):
 		if blocker is Node2D and world.is_ancestor_of(blocker):
-			_register_object(blocker)
 			var anchor_cell: Vector2i = world.world_to_cell(blocker.global_position)
-			if blocker.has_method("get_occupied_cells"):
-				for occupied_cell in blocker.get_occupied_cells(anchor_cell):
-					occupied_cells[occupied_cell] = blocker
-			else:
-				occupied_cells[anchor_cell] = blocker
+			register_object(blocker, anchor_cell)
+
+
+func register_object(blocker: Node, anchor_cell: Vector2i) -> void:
+	_register_object(blocker)
+	for occupied_cell in _get_node_occupied_cells(blocker, anchor_cell):
+		occupied_cells[occupied_cell] = blocker
 
 
 func clear_entities() -> void:
@@ -40,7 +41,7 @@ func register_entity(entity: Node) -> void:
 
 	entities_by_id[id] = entity
 	if entity.get("current_cell") != null:
-		entity_cells[entity.get("current_cell")] = entity
+		_add_entity_cells(entity, entity.get("current_cell"))
 
 
 func unregister_entity(entity: Node) -> void:
@@ -56,33 +57,29 @@ func reserve_entity_cell(entity: Node, _from_cell: Vector2i, target_cell: Vector
 		return false
 
 	_remove_entity_reservations(entity)
-	reserved_entity_cells[target_cell] = entity
+	for cell in _get_node_occupied_cells(entity, target_cell):
+		reserved_entity_cells[cell] = entity
 
 	return true
 
 
-func complete_entity_move(entity: Node, from_cell: Vector2i, target_cell: Vector2i) -> void:
-	if entity_cells.get(from_cell, null) == entity:
-		entity_cells.erase(from_cell)
-
-	if reserved_entity_cells.get(target_cell, null) == entity:
-		reserved_entity_cells.erase(target_cell)
-
-	entity_cells[target_cell] = entity
+func complete_entity_move(entity: Node, _from_cell: Vector2i, target_cell: Vector2i) -> void:
+	_remove_entity_cell_refs(entity)
+	_add_entity_cells(entity, target_cell)
 
 
 func respawn_entity(entity: Node, cell: Vector2i) -> void:
 	_remove_entity_cell_refs(entity)
 	if entity.get("current_cell") != null:
 		entity.set("current_cell", cell)
-	entity_cells[cell] = entity
+	_add_entity_cells(entity, cell)
 
 
 func sync_entity_cell(entity: Node, cell: Vector2i) -> void:
 	_remove_entity_cell_refs(entity)
 	if entity.get("current_cell") != null:
 		entity.set("current_cell", cell)
-	entity_cells[cell] = entity
+	_add_entity_cells(entity, cell)
 
 
 func get_entity_by_id(entity_id: String) -> Node:
@@ -105,17 +102,41 @@ func get_registered_objects() -> Array:
 	return objects_by_id.values()
 
 
+func get_placement_error(spawn_node: Node, anchor_cell: Vector2i) -> String:
+	for occupied_cell in _get_node_occupied_cells(spawn_node, anchor_cell):
+		if not world.is_cell_inside(occupied_cell):
+			return "Cell %s is outside the grid." % str(occupied_cell)
+
+		if not world.is_cell_walkable(occupied_cell):
+			return "Cell %s is not walkable." % str(occupied_cell)
+
+		var target_object: Node = occupied_cells.get(occupied_cell, null) as Node
+		if target_object != null:
+			return "Cell %s is occupied by %s." % [str(occupied_cell), target_object.name]
+
+		var target_entity: Node = entity_cells.get(occupied_cell, null) as Node
+		if target_entity != null:
+			return "Cell %s is occupied by %s." % [str(occupied_cell), world.get_entity_display_name(target_entity)]
+
+		var reserved_entity: Node = reserved_entity_cells.get(occupied_cell, null) as Node
+		if reserved_entity != null:
+			return "Cell %s is reserved by %s." % [str(occupied_cell), world.get_entity_display_name(reserved_entity)]
+
+	return ""
+
+
 func can_enter_cell(cell: Vector2i, moving_entity: Node = null) -> bool:
-	if not world.is_cell_inside(cell) or not world.is_cell_walkable(cell) or occupied_cells.has(cell):
-		return false
+	for occupied_cell in _get_node_occupied_cells(moving_entity, cell):
+		if not world.is_cell_inside(occupied_cell) or not world.is_cell_walkable(occupied_cell) or occupied_cells.has(occupied_cell):
+			return false
 
-	var entity_at_cell: Node = entity_cells.get(cell, null) as Node
-	if entity_at_cell != null and entity_at_cell != moving_entity:
-		return false
+		var entity_at_cell: Node = entity_cells.get(occupied_cell, null) as Node
+		if entity_at_cell != null and entity_at_cell != moving_entity:
+			return false
 
-	var reserved_entity: Node = reserved_entity_cells.get(cell, null) as Node
-	if reserved_entity != null and reserved_entity != moving_entity:
-		return false
+		var reserved_entity: Node = reserved_entity_cells.get(occupied_cell, null) as Node
+		if reserved_entity != null and reserved_entity != moving_entity:
+			return false
 
 	return true
 
@@ -162,3 +183,16 @@ func _remove_entity_reservations(entity: Node) -> void:
 	for cell in reserved_entity_cells.keys():
 		if reserved_entity_cells[cell] == entity:
 			reserved_entity_cells.erase(cell)
+
+
+func _add_entity_cells(entity: Node, anchor_cell: Vector2i) -> void:
+	for cell in _get_node_occupied_cells(entity, anchor_cell):
+		entity_cells[cell] = entity
+
+
+func _get_node_occupied_cells(node: Node, anchor_cell: Vector2i) -> Array[Vector2i]:
+	if node != null and node.has_method("get_occupied_cells"):
+		return node.get_occupied_cells(anchor_cell)
+
+	var cells: Array[Vector2i] = [anchor_cell]
+	return cells

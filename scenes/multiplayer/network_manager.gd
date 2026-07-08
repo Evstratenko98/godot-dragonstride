@@ -34,6 +34,9 @@ signal end_game_requested()
 signal turn_state_received(snapshot: Dictionary)
 signal turn_end_requested(steam_id: int)
 signal steam_peer_disconnected(steam_id: int)
+signal world_spawn_requested(type_key: String, cell: Vector2i, requester_peer_id: int)
+signal world_spawn_received(record: Dictionary)
+signal world_spawn_failed_received(message: String)
 
 var peer: MultiplayerPeer = null
 var is_network_active := false
@@ -45,6 +48,7 @@ var last_error := ""
 var steam_id_by_peer_id: Dictionary = {}
 var peer_id_by_steam_id: Dictionary = {}
 var object_states: Dictionary = {}
+var world_spawn_records: Array = []
 var has_reported_ready := false
 var has_registered_with_host := false
 
@@ -166,6 +170,7 @@ func stop_network() -> void:
 	steam_id_by_peer_id.clear()
 	peer_id_by_steam_id.clear()
 	object_states.clear()
+	world_spawn_records.clear()
 	has_reported_ready = false
 	has_registered_with_host = false
 
@@ -374,6 +379,52 @@ func broadcast_object_state(object_id: String, object_state: int) -> void:
 
 func get_object_states() -> Dictionary:
 	return object_states.duplicate()
+
+
+func request_world_spawn(type_key: String, cell: Vector2i) -> void:
+	if not GameSession.is_multiplayer():
+		return
+
+	if not is_ready():
+		world_spawn_failed_received.emit("Cannot create spawn: network is not ready.")
+		return
+
+	if is_host:
+		world_spawn_requested.emit(type_key, cell, 0)
+		return
+
+	rpc_id(1, "_submit_world_spawn", type_key, cell)
+
+
+func broadcast_world_spawn(record: Dictionary) -> void:
+	if not GameSession.is_multiplayer() or not is_host or not is_ready():
+		return
+
+	_cache_world_spawn_record(record)
+	rpc("_receive_world_spawn", record)
+
+
+func send_world_spawn_failed(peer_id: int, message: String) -> void:
+	if peer_id == 0 or peer_id == multiplayer.get_unique_id():
+		world_spawn_failed_received.emit(message)
+		return
+
+	if not is_ready():
+		return
+
+	rpc_id(peer_id, "_receive_world_spawn_failed", message)
+
+
+func send_world_spawns_to_peer(peer_id: int) -> void:
+	if not GameSession.is_multiplayer() or not is_host or not is_ready():
+		return
+
+	for record in world_spawn_records:
+		rpc_id(peer_id, "_receive_world_spawn", record)
+
+
+func get_world_spawn_records() -> Array:
+	return world_spawn_records.duplicate(true)
 
 
 func request_end_game() -> void:
@@ -813,6 +864,25 @@ func _receive_object_state(object_id: String, object_state: int) -> void:
 	object_state_received.emit(object_id, object_state)
 
 
+@rpc("any_peer", "reliable")
+func _submit_world_spawn(type_key: String, cell: Vector2i) -> void:
+	if not is_host:
+		return
+
+	world_spawn_requested.emit(type_key, cell, multiplayer.get_remote_sender_id())
+
+
+@rpc("authority", "reliable")
+func _receive_world_spawn(record: Dictionary) -> void:
+	_cache_world_spawn_record(record)
+	world_spawn_received.emit(record)
+
+
+@rpc("authority", "reliable")
+func _receive_world_spawn_failed(message: String) -> void:
+	world_spawn_failed_received.emit(message)
+
+
 func _broadcast_end_game() -> void:
 	_receive_end_game()
 	rpc("_receive_end_game")
@@ -878,3 +948,15 @@ func _on_server_disconnected() -> void:
 	is_network_active = false
 	print("Server disconnected")
 	server_disconnected.emit()
+
+
+func _cache_world_spawn_record(record: Dictionary) -> void:
+	var spawn_id := str(record.get("spawn_id", ""))
+	if spawn_id.is_empty():
+		return
+
+	for existing_record in world_spawn_records:
+		if str(existing_record.get("spawn_id", "")) == spawn_id:
+			return
+
+	world_spawn_records.append(record.duplicate(true))

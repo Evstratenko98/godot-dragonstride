@@ -93,6 +93,14 @@ func unregister_entity(entity: Node) -> void:
 	registry.unregister_entity(entity)
 
 
+func register_object(target_object: Node, anchor_cell: Vector2i) -> void:
+	registry.register_object(target_object, anchor_cell)
+
+
+func get_placement_error(spawn_node: Node, anchor_cell: Vector2i) -> String:
+	return registry.get_placement_error(spawn_node, anchor_cell)
+
+
 func reserve_entity_cell(entity: Node, from_cell: Vector2i, target_cell: Vector2i) -> bool:
 	return registry.reserve_entity_cell(entity, from_cell, target_cell)
 

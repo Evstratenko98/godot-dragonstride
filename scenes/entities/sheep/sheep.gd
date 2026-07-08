@@ -4,6 +4,7 @@ var move_direction := Vector2i.RIGHT
 
 
 func _ready() -> void:
+	health = 25
 	super._ready()
 	entity_type = EntityType.NEUTRAL
 	if entity_name.is_empty():

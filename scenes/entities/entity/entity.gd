@@ -15,6 +15,7 @@ enum EntityType {
 @export var health := 100
 @export var damage := 25
 @export var move_time := 0.18
+@export var occupied_offsets: Array[Vector2i] = [Vector2i.ZERO]
 
 var world: Node = null
 var current_cell := Vector2i.ZERO
@@ -56,6 +57,13 @@ func can_act() -> bool:
 	return health > 0 and not is_moving and not is_attacking
 
 
+func can_attack_cell(target_cell: Vector2i) -> bool:
+	if get_occupied_cells(current_cell).has(target_cell):
+		return false
+
+	return _get_attack_direction_to_cell(target_cell) != Vector2i.ZERO
+
+
 func request_move(direction: Vector2i) -> bool:
 	if direction == Vector2i.ZERO or world == null or not world.has_method("can_enter_cell"):
 		return false
@@ -90,10 +98,10 @@ func request_attack_cell(target_cell: Vector2i, should_apply := true, should_bro
 		return false
 
 	current_cell = world.world_to_cell(global_position)
-	var direction: Vector2i = target_cell - current_cell
-	if not _is_adjacent_attack_direction(direction):
+	if not can_attack_cell(target_cell):
 		return false
 
+	var direction := _get_attack_direction_to_cell(target_cell)
 	if world.has_method("can_entity_attack_in_turn") and not world.can_entity_attack_in_turn(self, target_cell):
 		return false
 
@@ -152,6 +160,20 @@ func get_display_name() -> String:
 	return name
 
 
+func get_occupied_cells(anchor_cell: Vector2i) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	if occupied_offsets.is_empty():
+		cells.append(anchor_cell)
+		return cells
+
+	for offset in occupied_offsets:
+		var occupied_cell := anchor_cell + offset
+		if not cells.has(occupied_cell):
+			cells.append(occupied_cell)
+
+	return cells
+
+
 func _move_to_cell(target_cell: Vector2i, should_broadcast := true) -> void:
 	is_moving = true
 	var from_cell := current_cell
@@ -204,6 +226,15 @@ func _apply_attack_to_world(should_broadcast := true) -> void:
 
 func _is_adjacent_attack_direction(direction: Vector2i) -> bool:
 	return direction == Vector2i.RIGHT or direction == Vector2i.LEFT or direction == Vector2i.DOWN or direction == Vector2i.UP
+
+
+func _get_attack_direction_to_cell(target_cell: Vector2i) -> Vector2i:
+	for occupied_cell in get_occupied_cells(current_cell):
+		var direction := target_cell - occupied_cell
+		if _is_adjacent_attack_direction(direction):
+			return direction
+
+	return Vector2i.ZERO
 
 
 func _on_move_direction_selected(_direction: Vector2i) -> void:
