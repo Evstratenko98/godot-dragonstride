@@ -38,6 +38,9 @@ func connect_signals() -> void:
 	if not NetworkManager.entity_health_received.is_connected(_on_entity_health_received):
 		NetworkManager.entity_health_received.connect(_on_entity_health_received)
 
+	if not NetworkManager.entity_ai_state_received.is_connected(_on_entity_ai_state_received):
+		NetworkManager.entity_ai_state_received.connect(_on_entity_ai_state_received)
+
 	if not NetworkManager.entity_respawn_received.is_connected(_on_entity_respawn_received):
 		NetworkManager.entity_respawn_received.connect(_on_entity_respawn_received)
 
@@ -79,6 +82,9 @@ func disconnect_signals() -> void:
 	if NetworkManager.entity_health_received.is_connected(_on_entity_health_received):
 		NetworkManager.entity_health_received.disconnect(_on_entity_health_received)
 
+	if NetworkManager.entity_ai_state_received.is_connected(_on_entity_ai_state_received):
+		NetworkManager.entity_ai_state_received.disconnect(_on_entity_ai_state_received)
+
 	if NetworkManager.entity_respawn_received.is_connected(_on_entity_respawn_received):
 		NetworkManager.entity_respawn_received.disconnect(_on_entity_respawn_received)
 
@@ -95,6 +101,18 @@ func apply_cached_object_states() -> void:
 		_on_object_state_received(
 			str(object_id),
 			int(cached_states[object_id])
+		)
+
+
+func apply_cached_entity_ai_states() -> void:
+	var cached_states: Dictionary = NetworkManager.get_entity_ai_states()
+	for entity_id in cached_states.keys():
+		var state: Dictionary = cached_states[entity_id]
+		_on_entity_ai_state_received(
+			str(entity_id),
+			str(state.get("state", "")),
+			str(state.get("target_entity_id", "")),
+			str(state.get("reason", ""))
 		)
 
 
@@ -137,6 +155,7 @@ func _on_peer_map_updated() -> void:
 func _on_peer_connected(_peer_id: int) -> void:
 	if GameSession.is_host():
 		NetworkManager.send_world_spawns_to_peer(_peer_id)
+		NetworkManager.send_entity_ai_states_to_peer(_peer_id)
 		broadcast_all_object_states()
 
 
@@ -265,6 +284,15 @@ func _on_entity_health_received(entity_id: String, new_health: int) -> void:
 
 	if entity.has_method("set_health"):
 		entity.set_health(new_health)
+
+
+func _on_entity_ai_state_received(entity_id: String, state: String, target_entity_id: String, reason: String) -> void:
+	var entity: Node = world.get_entity_by_id(entity_id)
+	if entity == null:
+		return
+
+	if entity.has_method("apply_remote_ai_state"):
+		entity.apply_remote_ai_state(state, target_entity_id, reason)
 
 
 func _on_entity_respawn_received(entity_id: String, cell: Vector2i, new_health: int) -> void:

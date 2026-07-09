@@ -102,6 +102,10 @@ func get_registered_objects() -> Array:
 	return objects_by_id.values()
 
 
+func get_registered_entities() -> Array:
+	return entities_by_id.values()
+
+
 func get_placement_error(spawn_node: Node, anchor_cell: Vector2i) -> String:
 	for occupied_cell in _get_node_occupied_cells(spawn_node, anchor_cell):
 		if not world.is_cell_inside(occupied_cell):

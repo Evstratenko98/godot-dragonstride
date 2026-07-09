@@ -5,6 +5,7 @@ const SPAWN_KIND_ENTITY := "entity"
 const SPAWN_KIND_OBJECT := "object"
 
 const SHEEP_SCENE := preload("res://scenes/entities/sheep/sheep.tscn")
+const WARRIOR_SCENE := preload("res://scenes/entities/enemies/warrior/warrior.tscn")
 const TREE_SCENE := preload("res://scenes/objects/tree/tree.tscn")
 const HOUSE_SCENE := preload("res://scenes/objects/house/house.tscn")
 
@@ -13,6 +14,11 @@ const CATALOG := {
 		"kind": SPAWN_KIND_ENTITY,
 		"scene": SHEEP_SCENE,
 		"display_name": "Sheep",
+	},
+	"warrior": {
+		"kind": SPAWN_KIND_ENTITY,
+		"scene": WARRIOR_SCENE,
+		"display_name": "Warrior",
 	},
 	"tree": {
 		"kind": SPAWN_KIND_OBJECT,
@@ -136,6 +142,7 @@ func _spawn_instance(instance: Node, definition: Dictionary, type_key: String, s
 		elif instance is Node2D:
 			instance.global_position = world_position
 		world.register_entity(instance)
+		_apply_cached_entity_ai_state(instance, spawn_id)
 		return
 
 	if kind == SPAWN_KIND_OBJECT:
@@ -168,6 +175,22 @@ func _apply_cached_object_state(instance: Node, spawn_id: String) -> void:
 		return
 
 	instance.apply_network_state(int(cached_states[spawn_id]))
+
+
+func _apply_cached_entity_ai_state(instance: Node, spawn_id: String) -> void:
+	if not instance.has_method("apply_remote_ai_state"):
+		return
+
+	var cached_states: Dictionary = NetworkManager.get_entity_ai_states()
+	if not cached_states.has(spawn_id):
+		return
+
+	var state: Dictionary = cached_states[spawn_id]
+	instance.apply_remote_ai_state(
+		str(state.get("state", "")),
+		str(state.get("target_entity_id", "")),
+		str(state.get("reason", ""))
+	)
 
 
 func _apply_cached_world_spawns() -> void:

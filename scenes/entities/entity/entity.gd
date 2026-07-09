@@ -233,6 +233,18 @@ func _apply_attack_to_world(should_broadcast := true) -> void:
 		world.apply_attack_to_cell(self, attack_target_cell)
 
 
+func _play_target_incoming_attack_guard(target_cell: Vector2i, duration: float) -> void:
+	if duration <= 0.0 or world == null or not world.has_method("get_entity_at_cell"):
+		return
+
+	var target_entity: Node = world.get_entity_at_cell(target_cell)
+	if target_entity == null or target_entity == self:
+		return
+
+	if target_entity.has_method("play_incoming_attack_guard"):
+		target_entity.play_incoming_attack_guard(duration)
+
+
 func _is_adjacent_attack_direction(direction: Vector2i) -> bool:
 	return direction == Vector2i.RIGHT or direction == Vector2i.LEFT or direction == Vector2i.DOWN or direction == Vector2i.UP
 

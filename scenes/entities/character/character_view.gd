@@ -70,5 +70,13 @@ func get_current_animation() -> StringName:
 	return StringName(animation_player.current_animation)
 
 
+func get_animation_length(animation_name: StringName) -> float:
+	var animation := animation_player.get_animation(animation_name)
+	if animation == null:
+		return 0.0
+
+	return animation.length
+
+
 func get_facing_left() -> bool:
 	return facing_left

@@ -28,6 +28,7 @@ signal entity_attack_result_received(
 	target_max_health: int
 )
 signal entity_health_received(entity_id: String, health: int)
+signal entity_ai_state_received(entity_id: String, state: String, target_entity_id: String, reason: String)
 signal entity_respawn_received(entity_id: String, cell: Vector2i, health: int)
 signal entity_removed_received(entity_id: String)
 signal end_game_requested()
@@ -48,6 +49,7 @@ var last_error := ""
 var steam_id_by_peer_id: Dictionary = {}
 var peer_id_by_steam_id: Dictionary = {}
 var object_states: Dictionary = {}
+var entity_ai_states: Dictionary = {}
 var world_spawn_records: Array = []
 var has_reported_ready := false
 var has_registered_with_host := false
@@ -170,6 +172,7 @@ func stop_network() -> void:
 	steam_id_by_peer_id.clear()
 	peer_id_by_steam_id.clear()
 	object_states.clear()
+	entity_ai_states.clear()
 	world_spawn_records.clear()
 	has_reported_ready = false
 	has_registered_with_host = false
@@ -343,6 +346,18 @@ func broadcast_entity_health(entity_id: String, health: int) -> void:
 	rpc_id(1, "_relay_entity_health", entity_id, health)
 
 
+func broadcast_entity_ai_state(entity_id: String, state: String, target_entity_id: String, reason: String) -> void:
+	if not GameSession.is_multiplayer() or not is_ready():
+		return
+
+	_cache_entity_ai_state(entity_id, state, target_entity_id, reason)
+	if is_host:
+		rpc("_receive_entity_ai_state", entity_id, state, target_entity_id, reason)
+		return
+
+	rpc_id(1, "_relay_entity_ai_state", entity_id, state, target_entity_id, reason)
+
+
 func broadcast_entity_respawn(entity_id: String, cell: Vector2i, health: int) -> void:
 	if not GameSession.is_multiplayer() or not is_ready():
 		return
@@ -379,6 +394,10 @@ func broadcast_object_state(object_id: String, object_state: int) -> void:
 
 func get_object_states() -> Dictionary:
 	return object_states.duplicate()
+
+
+func get_entity_ai_states() -> Dictionary:
+	return entity_ai_states.duplicate(true)
 
 
 func request_world_spawn(type_key: String, cell: Vector2i) -> void:
@@ -421,6 +440,22 @@ func send_world_spawns_to_peer(peer_id: int) -> void:
 
 	for record in world_spawn_records:
 		rpc_id(peer_id, "_receive_world_spawn", record)
+
+
+func send_entity_ai_states_to_peer(peer_id: int) -> void:
+	if not GameSession.is_multiplayer() or not is_host or not is_ready():
+		return
+
+	for entity_id in entity_ai_states.keys():
+		var state: Dictionary = entity_ai_states[entity_id]
+		rpc_id(
+			peer_id,
+			"_receive_entity_ai_state",
+			str(entity_id),
+			str(state.get("state", "")),
+			str(state.get("target_entity_id", "")),
+			str(state.get("reason", ""))
+		)
 
 
 func get_world_spawn_records() -> Array:
@@ -821,6 +856,22 @@ func _receive_entity_health(entity_id: String, health: int) -> void:
 
 
 @rpc("any_peer", "reliable")
+func _relay_entity_ai_state(entity_id: String, state: String, target_entity_id: String, reason: String) -> void:
+	if not is_host:
+		return
+
+	_cache_entity_ai_state(entity_id, state, target_entity_id, reason)
+	entity_ai_state_received.emit(entity_id, state, target_entity_id, reason)
+	rpc("_receive_entity_ai_state", entity_id, state, target_entity_id, reason)
+
+
+@rpc("authority", "reliable")
+func _receive_entity_ai_state(entity_id: String, state: String, target_entity_id: String, reason: String) -> void:
+	_cache_entity_ai_state(entity_id, state, target_entity_id, reason)
+	entity_ai_state_received.emit(entity_id, state, target_entity_id, reason)
+
+
+@rpc("any_peer", "reliable")
 func _relay_entity_respawn(entity_id: String, cell: Vector2i, health: int) -> void:
 	if not is_host:
 		return
@@ -960,3 +1011,14 @@ func _cache_world_spawn_record(record: Dictionary) -> void:
 			return
 
 	world_spawn_records.append(record.duplicate(true))
+
+
+func _cache_entity_ai_state(entity_id: String, state: String, target_entity_id: String, reason: String) -> void:
+	if entity_id.is_empty():
+		return
+
+	entity_ai_states[entity_id] = {
+		"state": state,
+		"target_entity_id": target_entity_id,
+		"reason": reason,
+	}

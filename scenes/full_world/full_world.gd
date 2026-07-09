@@ -51,6 +51,7 @@ func new_game() -> void:
 		players_service.start_singleplayer()
 
 	_register_world_entities()
+	network.apply_cached_entity_ai_states()
 
 	if music.stream != null:
 		music.play()
@@ -87,6 +88,7 @@ func handle_character_attack(attacker: Node, target_cell: Vector2i) -> void:
 
 func register_entity(entity: Node) -> void:
 	registry.register_entity(entity)
+	_notify_warrior_triggers_for_registered_entity(entity)
 
 
 func unregister_entity(entity: Node) -> void:
@@ -107,6 +109,8 @@ func reserve_entity_cell(entity: Node, from_cell: Vector2i, target_cell: Vector2
 
 func complete_entity_move(entity: Node, from_cell: Vector2i, target_cell: Vector2i) -> void:
 	registry.complete_entity_move(entity, from_cell, target_cell)
+	if _is_character_entity(entity):
+		_notify_warriors_of_character_trigger(entity)
 
 
 func respawn_entity(entity: Node, cell: Vector2i) -> void:
@@ -114,7 +118,14 @@ func respawn_entity(entity: Node, cell: Vector2i) -> void:
 
 
 func sync_entity_cell(entity: Node, cell: Vector2i) -> void:
+	var previous_cell := Vector2i.ZERO
+	var had_previous_cell := entity != null and entity.get("current_cell") != null
+	if had_previous_cell:
+		previous_cell = entity.get("current_cell")
+
 	registry.sync_entity_cell(entity, cell)
+	if had_previous_cell and previous_cell != cell and _is_character_entity(entity):
+		_notify_warriors_of_character_trigger(entity)
 
 
 func clear_registered_entities() -> void:
@@ -166,6 +177,10 @@ func get_object_by_id(object_id: String) -> Node:
 
 func get_registered_objects() -> Array:
 	return registry.get_registered_objects()
+
+
+func get_registered_entities() -> Array:
+	return registry.get_registered_entities()
 
 
 func can_enter_cell(cell: Vector2i, moving_entity: Node = null) -> bool:
@@ -319,6 +334,50 @@ func get_adjacent_cell_center(world_position: Vector2, direction: Vector2i) -> V
 
 func print_console(text: String) -> void:
 	ConsoleOutput.print_line(text)
+
+
+func _notify_warrior_triggers_for_registered_entity(entity: Node) -> void:
+	if not _can_update_warrior_ai_state():
+		return
+
+	if _is_character_entity(entity):
+		_notify_warriors_of_character_trigger(entity)
+		return
+
+	if entity != null and entity.has_method("consider_character_triggers"):
+		entity.consider_character_triggers(_get_registered_characters())
+
+
+func _notify_warriors_of_character_trigger(character: Node) -> void:
+	if not _can_update_warrior_ai_state():
+		return
+
+	for entity in get_registered_entities():
+		if entity != character and entity is Node and entity.has_method("consider_character_trigger"):
+			entity.consider_character_trigger(character)
+
+
+func _get_registered_characters() -> Array[Node]:
+	var characters: Array[Node] = []
+	for entity in get_registered_entities():
+		if _is_character_entity(entity):
+			characters.append(entity)
+
+	characters.sort_custom(func(a: Node, b: Node) -> bool:
+		return get_entity_id(a) < get_entity_id(b)
+	)
+	return characters
+
+
+func _is_character_entity(entity: Node) -> bool:
+	return entity != null and entity.get("entity_type") != null and int(entity.get("entity_type")) == Entity.EntityType.CHARACTER
+
+
+func _can_update_warrior_ai_state() -> bool:
+	if not is_turn_mode_enabled():
+		return false
+
+	return not GameSession.is_multiplayer() or GameSession.is_host()
 
 
 func _configure_services() -> void:

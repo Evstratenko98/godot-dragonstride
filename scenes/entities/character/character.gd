@@ -130,6 +130,7 @@ func _attack(
 ) -> void:
 	is_attacking = true
 	attack_target_cell = target_cell
+	_play_target_incoming_attack_guard(target_cell, view.get_animation_length(animation_name))
 	await view.play_attack(animation_name, attack_facing_left, update_horizontal_facing)
 
 	if should_apply:
