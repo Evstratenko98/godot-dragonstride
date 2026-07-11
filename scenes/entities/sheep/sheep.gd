@@ -2,7 +2,7 @@ extends "res://scenes/entities/non_player_entity/non_player_entity.gd"
 
 const SHEEP_MAX_HEALTH := 25
 
-var move_direction := Vector2i.RIGHT
+var move_direction: Vector2i = Vector2i.RIGHT
 
 
 func _ready() -> void:
@@ -16,8 +16,8 @@ func _ready() -> void:
 
 func start(
 	start_position: Vector2,
-	new_entity_id := "",
-	new_entity_name := "Sheep"
+	new_entity_id: String = "",
+	new_entity_name: String = "Sheep"
 ) -> void:
 	max_health = SHEEP_MAX_HEALTH
 	start_non_player_entity(start_position, new_entity_id, new_entity_name, EntityType.NEUTRAL)

@@ -1,3 +1,4 @@
+class_name GridObject
 extends StaticBody2D
 
 enum ObjectState {
@@ -6,7 +7,7 @@ enum ObjectState {
 }
 
 @export var occupied_offsets: Array[Vector2i] = [Vector2i.ZERO]
-@export var object_id := ""
+@export var object_id: String = ""
 @export var normal_texture: Texture2D
 @export var destroyed_texture: Texture2D
 @export var object_state: ObjectState = ObjectState.NORMAL

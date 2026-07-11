@@ -1,3 +1,4 @@
+class_name WorldPlayers
 extends Node
 
 const CHARACTER_SCENE := preload("res://scenes/entities/character/character.tscn")
@@ -14,14 +15,22 @@ const MULTIPLAYER_WARRIOR_COLORS := ["Blue", "Purple", "Red", "Yellow"]
 
 @onready var players_root: Node2D = $"../Players"
 
-var world = null
+var runtime: WorldRuntime = null
+var level: WorldLevel = null
 var players_by_steam_id: Dictionary = {}
-var local_player: Node = null
+var local_player: PlayerCharacter = null
 var local_camera: Camera2D = null
 
 
 func _ready() -> void:
-	world = get_parent()
+	level = get_parent() as WorldLevel
+	if level != null:
+		runtime = level.get_runtime()
+
+
+func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void:
+	runtime = new_runtime
+	level = new_level
 
 
 func configure(new_spawn_cells: Array[Vector2i]) -> void:
@@ -38,7 +47,7 @@ func prepare_players_root() -> void:
 	players_by_steam_id.clear()
 	local_player = null
 	local_camera = null
-	world.clear_registered_entities()
+	runtime.clear_registered_entities()
 
 
 func start_singleplayer() -> void:
@@ -81,11 +90,11 @@ func update_player_authorities() -> void:
 		player.set_multiplayer_authority(peer_id)
 
 
-func get_player_by_steam_id(steam_id: int) -> Node:
-	return players_by_steam_id.get(steam_id, null) as Node
+func get_player_by_steam_id(steam_id: int) -> PlayerCharacter:
+	return players_by_steam_id.get(steam_id, null) as PlayerCharacter
 
 
-func get_local_player() -> Node:
+func get_local_player() -> PlayerCharacter:
 	return local_player
 
 
@@ -96,14 +105,16 @@ func _spawn_player(
 	entity_id: String,
 	entity_name: String
 ) -> Node:
-	var player: Node = CHARACTER_SCENE.instantiate()
+	var player: PlayerCharacter = CHARACTER_SCENE.instantiate() as PlayerCharacter
+	if player == null:
+		return null
+
 	player.name = _get_player_node_name(player_info)
 	players_root.add_child(player)
 	player.setup_multiplayer_player(player_info)
-	player.start(world.cell_to_world(spawn_cell), bool(player_info.get("is_local", false)), entity_id, entity_name)
-	if player.has_method("set_warrior_color"):
-		player.set_warrior_color(warrior_color)
-	world.register_entity(player)
+	player.start(runtime.cell_to_world(spawn_cell), bool(player_info.get("is_local", false)), entity_id, entity_name)
+	player.set_warrior_color(warrior_color)
+	runtime.register_entity(player)
 
 	var steam_id: int = int(player_info.get("steam_id", 0))
 	if steam_id != 0:
@@ -117,23 +128,44 @@ func _spawn_player(
 
 
 func _spawn_camera_for_player(player: Node2D) -> void:
-	local_camera = CAMERA_SCENE.instantiate()
-	world.add_child(local_camera)
-	local_camera.target_path = local_camera.get_path_to(player)
-	local_camera.target = player
-	local_camera.global_position = player.global_position
-	local_camera.make_current()
+	if level == null or player == null:
+		return
+
+	var camera: Camera2D = CAMERA_SCENE.instantiate() as Camera2D
+	if camera == null:
+		return
+
+	local_camera = camera
+	level.add_child.call_deferred(camera)
+	call_deferred("_configure_camera_for_player", camera, player)
+
+
+func _configure_camera_for_player(camera: Camera2D, player: Node2D) -> void:
+	if camera == null or player == null:
+		return
+
+	if not is_instance_valid(camera) or not is_instance_valid(player):
+		return
+
+	if not camera.is_inside_tree() or not player.is_inside_tree():
+		call_deferred("_configure_camera_for_player", camera, player)
+		return
+
+	camera.target_path = camera.get_path_to(player)
+	camera.target = player
+	camera.global_position = player.global_position
+	camera.make_current()
 
 
 func _get_spawn_cell(index: int) -> Vector2i:
 	if index < spawn_cells.size():
 		return spawn_cells[index]
 
-	var grid_size: Vector2i = world.get_grid_size()
+	var grid_size: Vector2i = runtime.get_grid_size()
 	for y in range(grid_size.y):
 		for x in range(grid_size.x):
 			var cell: Vector2i = Vector2i(x, y)
-			if world.is_cell_walkable(cell):
+			if runtime.is_cell_walkable(cell):
 				return cell
 
 	return Vector2i(1, 1)

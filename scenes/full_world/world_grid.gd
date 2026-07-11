@@ -1,3 +1,4 @@
+class_name WorldGrid
 extends Node
 
 const CELL_SIZE := 64
@@ -5,11 +6,15 @@ const CELL_SIZE := 64
 @export var grid_size: Vector2i = Vector2i(18, 18)
 @export var walkable_layer_names: PackedStringArray = ["Ground"]
 
-var world: Node2D = null
+var level: WorldLevel = null
 
 
 func _ready() -> void:
-	world = get_parent() as Node2D
+	level = get_parent() as WorldLevel
+
+
+func configure_context(_runtime: WorldRuntime, new_level: WorldLevel) -> void:
+	level = new_level
 
 
 func configure(new_grid_size: Vector2i, new_walkable_layer_names: PackedStringArray) -> void:
@@ -19,7 +24,7 @@ func configure(new_grid_size: Vector2i, new_walkable_layer_names: PackedStringAr
 
 func is_cell_walkable(cell: Vector2i) -> bool:
 	for layer_name in walkable_layer_names:
-		var layer: Node = world.get_node_or_null(NodePath(layer_name))
+		var layer: Node = _get_level().get_node_or_null(NodePath(layer_name))
 		if layer is TileMapLayer and layer.get_cell_source_id(cell) != -1:
 			return true
 
@@ -39,13 +44,13 @@ func get_cell_size() -> int:
 
 
 func world_to_cell(world_position: Vector2) -> Vector2i:
-	var local_position: Vector2 = _get_world().to_local(world_position)
+	var local_position: Vector2 = _get_level().to_local(world_position)
 	return Vector2i(floori(local_position.x / CELL_SIZE), floori(local_position.y / CELL_SIZE))
 
 
 func cell_to_world(cell: Vector2i) -> Vector2:
 	var local_position: Vector2 = Vector2(cell) * CELL_SIZE + Vector2(CELL_SIZE, CELL_SIZE) * 0.5
-	return _get_world().to_global(local_position)
+	return _get_level().to_global(local_position)
 
 
 func get_cell_center(world_position: Vector2) -> Vector2:
@@ -56,8 +61,8 @@ func get_adjacent_cell_center(world_position: Vector2, direction: Vector2i) -> V
 	return cell_to_world(world_to_cell(world_position) + direction)
 
 
-func _get_world() -> Node2D:
-	if world != null:
-		return world
+func _get_level() -> WorldLevel:
+	if level != null:
+		return level
 
-	return get_parent() as Node2D
+	return get_parent() as WorldLevel

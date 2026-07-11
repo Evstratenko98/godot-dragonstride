@@ -3,23 +3,24 @@ extends Camera2D
 const MODE_FOLLOW := "follow"
 const MODE_FREE := "free"
 
-@export_enum("follow", "free") var camera_mode := MODE_FOLLOW
+@export_enum("follow", "free") var camera_mode: String = MODE_FOLLOW
 @export_node_path("Node2D") var target_path: NodePath
-@export var edge_size := 16.0
-@export var free_speed := 500.0
-@export var follow_smoothing := 8.0
+@export var edge_size: float = 16.0
+@export var free_speed: float = 500.0
+@export var follow_smoothing: float = 8.0
 
 var target: Node2D = null
 
 
 func _ready() -> void:
-	target = get_node_or_null(target_path)
+	if not target_path.is_empty():
+		target = get_node_or_null(target_path) as Node2D
 	make_current()
 	_register_console_commands()
 
 
 func _exit_tree() -> void:
-	var console := get_node_or_null("/root/Console")
+	var console: Node = get_node_or_null("/root/Console")
 	if console == null or not console.has_method("remove_command"):
 		return
 
@@ -33,7 +34,7 @@ func _process(delta: float) -> void:
 			if follow_smoothing <= 0.0:
 				global_position = target.global_position
 			else:
-				var follow_weight := 1.0 - exp(-follow_smoothing * delta)
+				var follow_weight: float = 1.0 - exp(-follow_smoothing * delta)
 				global_position = global_position.lerp(target.global_position, follow_weight)
 	else:
 		_move_free(delta)
@@ -57,9 +58,9 @@ func console_free() -> void:
 
 
 func _move_free(delta: float) -> void:
-	var mouse_position := get_viewport().get_mouse_position()
-	var viewport_size := get_viewport_rect().size
-	var direction := Vector2.ZERO
+	var mouse_position: Vector2 = get_viewport().get_mouse_position()
+	var viewport_size: Vector2 = get_viewport_rect().size
+	var direction: Vector2 = Vector2.ZERO
 
 	if mouse_position.x <= edge_size:
 		direction.x -= 1.0
@@ -76,7 +77,7 @@ func _move_free(delta: float) -> void:
 
 
 func _register_console_commands() -> void:
-	var console := get_node_or_null("/root/Console")
+	var console: Node = get_node_or_null("/root/Console")
 	if console == null or not console.has_method("add_command"):
 		return
 

@@ -1,10 +1,19 @@
+class_name WorldNetwork
 extends Node
 
-var world = null
+var runtime: WorldRuntime = null
+var level: WorldLevel = null
 
 
 func _ready() -> void:
-	world = get_parent()
+	level = get_parent() as WorldLevel
+	if level != null:
+		runtime = level.get_runtime()
+
+
+func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void:
+	runtime = new_runtime
+	level = new_level
 
 
 func connect_signals() -> void:
@@ -116,11 +125,11 @@ func apply_cached_entity_ai_states() -> void:
 		)
 
 
-func broadcast_entity_move_started(entity: Node, from_cell: Vector2i, target_cell: Vector2i, should_broadcast := true) -> void:
+func broadcast_entity_move_started(entity: Node, from_cell: Vector2i, target_cell: Vector2i, should_broadcast: bool = true) -> void:
 	if not should_broadcast or not GameSession.is_multiplayer():
 		return
 
-	var id: String = world.get_entity_id(entity)
+	var id: String = runtime.get_entity_id(entity)
 	if id.is_empty():
 		return
 
@@ -131,12 +140,13 @@ func broadcast_object_state(target_object: Node) -> void:
 	if not GameSession.is_multiplayer():
 		return
 
-	if target_object.get("object_id") == null or target_object.get("object_state") == null:
+	var grid_object: GridObject = target_object as GridObject
+	if grid_object == null or grid_object.object_id.is_empty():
 		return
 
 	NetworkManager.broadcast_object_state(
-		str(target_object.get("object_id")),
-		int(target_object.get("object_state"))
+		grid_object.object_id,
+		int(grid_object.object_state)
 	)
 
 
@@ -144,12 +154,12 @@ func broadcast_all_object_states() -> void:
 	if not GameSession.is_multiplayer() or not GameSession.is_host():
 		return
 
-	for target_object in world.get_registered_objects():
+	for target_object in runtime.get_registered_objects():
 		broadcast_object_state(target_object)
 
 
 func _on_peer_map_updated() -> void:
-	world.update_player_authorities()
+	runtime.update_player_authorities()
 
 
 func _on_peer_connected(_peer_id: int) -> void:
@@ -166,14 +176,14 @@ func _on_character_state_received(
 	is_moving_player: bool,
 	facing_left_player: bool
 ) -> void:
-	var player: Node = world.get_player_by_steam_id(steam_id)
+	var player: PlayerCharacter = runtime.get_player_by_steam_id(steam_id)
 	if player == null:
 		return
 
 	if bool(player.get("is_local_player")):
 		return
 
-	if GameSession.is_host() and world.has_method("can_entity_sync_state_in_turn") and not world.can_entity_sync_state_in_turn(player):
+	if GameSession.is_host() and not runtime.can_entity_sync_state_in_turn(player):
 		return
 
 	player.apply_remote_state(player_position, animation, is_moving_player, facing_left_player)
@@ -183,25 +193,24 @@ func _on_attack_requested(steam_id: int, target_cell: Vector2i) -> void:
 	if not GameSession.is_host():
 		return
 
-	var player: Node = world.get_player_by_steam_id(steam_id)
+	var player: PlayerCharacter = runtime.get_player_by_steam_id(steam_id)
 	if player == null:
 		return
 
-	if player.has_method("can_attack_cell") and not player.can_attack_cell(target_cell):
+	if not player.can_attack_cell(target_cell):
 		return
 
-	if world.has_method("can_entity_attack_in_turn") and not world.can_entity_attack_in_turn(player, target_cell):
+	if not runtime.can_entity_attack_in_turn(player, target_cell):
 		return
 
-	if world.has_method("notify_entity_attacked_in_turn"):
-		world.notify_entity_attacked_in_turn(player, target_cell)
+	runtime.notify_entity_attacked_in_turn(player, target_cell)
 	player.play_remote_attack(target_cell, false)
 	NetworkManager.broadcast_attack(steam_id, target_cell)
-	world.apply_attack_to_cell(player, target_cell, false)
+	runtime.apply_attack_to_cell(player, target_cell, false)
 
 
 func _on_attack_received(steam_id: int, target_cell: Vector2i) -> void:
-	var player: Node = world.get_player_by_steam_id(steam_id)
+	var player: PlayerCharacter = runtime.get_player_by_steam_id(steam_id)
 	if player == null:
 		return
 
@@ -212,50 +221,52 @@ func _on_attack_received(steam_id: int, target_cell: Vector2i) -> void:
 
 
 func _on_entity_move_received(entity_id: String, from_cell: Vector2i, target_cell: Vector2i) -> void:
-	var entity: Node = world.get_entity_by_id(entity_id)
-	if entity == null or entity == world.get_local_player():
+	var entity: Entity = runtime.get_entity_by_id(entity_id) as Entity
+	if entity == null or entity == runtime.get_local_player():
 		return
 
-	if GameSession.is_host() and world.has_method("can_entity_move_in_turn") and not world.can_entity_move_in_turn(entity):
+	if GameSession.is_host() and not runtime.can_entity_move_in_turn(entity):
 		return
 
-	if entity.has_method("play_remote_move"):
-		entity.play_remote_move(from_cell, target_cell)
+	if entity is NonPlayerEntity:
+		(entity as NonPlayerEntity).play_remote_move(from_cell, target_cell)
 		return
 
-	if not world.reserve_entity_cell(entity, from_cell, target_cell):
+	if not runtime.reserve_entity_cell(entity, from_cell, target_cell):
 		return
 
-	if GameSession.is_host() and world.has_method("notify_entity_moved_in_turn"):
-		world.notify_entity_moved_in_turn(entity, from_cell, target_cell)
+	if GameSession.is_host():
+		runtime.notify_entity_moved_in_turn(entity, from_cell, target_cell)
 
 
 func _on_entity_attack_received(entity_id: String, target_cell: Vector2i) -> void:
-	var attacker: Node = world.get_entity_by_id(entity_id)
+	var attacker: Entity = runtime.get_entity_by_id(entity_id) as Entity
 	if attacker == null:
 		return
 
-	if attacker == world.get_local_player():
+	if attacker == runtime.get_local_player():
 		return
 
-	if GameSession.is_host() and attacker.has_method("can_attack_cell") and not attacker.can_attack_cell(target_cell):
+	if GameSession.is_host() and not attacker.can_attack_cell(target_cell):
 		return
 
-	if GameSession.is_host() and world.has_method("can_entity_attack_in_turn") and not world.can_entity_attack_in_turn(attacker, target_cell):
+	if GameSession.is_host() and not runtime.can_entity_attack_in_turn(attacker, target_cell):
 		return
 
-	if attacker.has_method("play_remote_attack"):
-		attacker.play_remote_attack(target_cell, false)
-	elif attacker.has_method("request_attack_cell"):
+	if attacker is PlayerCharacter:
+		(attacker as PlayerCharacter).play_remote_attack(target_cell, false)
+	elif attacker is NonPlayerEntity:
+		(attacker as NonPlayerEntity).play_remote_attack(target_cell, false)
+	else:
 		attacker.request_attack_cell(target_cell, false, false)
 
-	if GameSession.is_host() and world.has_method("notify_entity_attacked_in_turn"):
-		world.notify_entity_attacked_in_turn(attacker, target_cell)
+	if GameSession.is_host():
+		runtime.notify_entity_attacked_in_turn(attacker, target_cell)
 
 	if GameSession.is_host():
-		world.apply_attack_to_cell(attacker, target_cell, true, false)
-	elif world.has_method("print_non_entity_attack_result"):
-		world.print_non_entity_attack_result(attacker, target_cell)
+		runtime.apply_attack_to_cell(attacker, target_cell, true, false)
+	else:
+		runtime.print_non_entity_attack_result(attacker, target_cell)
 
 
 func _on_entity_attack_result_received(
@@ -265,10 +276,10 @@ func _on_entity_attack_result_received(
 	target_health: int,
 	target_max_health: int
 ) -> void:
-	if world.get_entity_by_id(attacker_entity_id) == world.get_local_player():
+	if runtime.get_entity_by_id(attacker_entity_id) == runtime.get_local_player():
 		return
 
-	world.print_entity_attack_result(
+	runtime.print_entity_attack_result(
 		attacker_entity_id,
 		target_entity_id,
 		damage_amount,
@@ -278,25 +289,23 @@ func _on_entity_attack_result_received(
 
 
 func _on_entity_health_received(entity_id: String, new_health: int) -> void:
-	var entity: Node = world.get_entity_by_id(entity_id)
+	var entity: Entity = runtime.get_entity_by_id(entity_id) as Entity
 	if entity == null:
 		return
 
-	if entity.has_method("set_health"):
-		entity.set_health(new_health)
+	entity.set_health(new_health)
 
 
 func _on_entity_ai_state_received(entity_id: String, state: String, target_entity_id: String, reason: String) -> void:
-	var entity: Node = world.get_entity_by_id(entity_id)
+	var entity: NonPlayerEntity = runtime.get_entity_by_id(entity_id) as NonPlayerEntity
 	if entity == null:
 		return
 
-	if entity.has_method("apply_remote_ai_state"):
-		entity.apply_remote_ai_state(state, target_entity_id, reason)
+	entity.apply_remote_ai_state(state, target_entity_id, reason)
 
 
 func _on_entity_respawn_received(entity_id: String, cell: Vector2i, new_health: int) -> void:
-	var entity: Node = world.get_entity_by_id(entity_id)
+	var entity: Entity = runtime.get_entity_by_id(entity_id) as Entity
 	if entity == null:
 		return
 
@@ -304,29 +313,30 @@ func _on_entity_respawn_received(entity_id: String, cell: Vector2i, new_health: 
 	entity.set("current_cell", cell)
 	entity.set("is_moving", false)
 	entity.set("is_attacking", false)
-	if entity.has_method("set_health"):
-		entity.set_health(new_health)
-	world.respawn_entity(entity, cell)
+	entity.set_health(new_health)
+	runtime.respawn_entity(entity, cell)
 	if entity is Node2D:
-		entity.global_position = world.cell_to_world(cell)
+		entity.global_position = runtime.cell_to_world(cell)
 
 
 func _on_entity_removed_received(entity_id: String) -> void:
-	var entity: Node = world.get_entity_by_id(entity_id)
+	var entity: Node = runtime.get_entity_by_id(entity_id)
 	if entity == null:
 		return
 
-	world.unregister_entity(entity)
+	runtime.unregister_entity(entity)
 	entity.queue_free()
 
 
 func _on_object_state_received(object_id: String, object_state: int) -> void:
-	var target_object: Node = world.get_object_by_id(object_id)
-	if target_object == null or not target_object.has_method("apply_network_state"):
+	var target_object: GridObject = runtime.get_object_by_id(object_id) as GridObject
+	if target_object == null:
 		return
 
 	target_object.apply_network_state(object_state)
 
 
 func _on_end_game_requested() -> void:
-	world.game_over(false)
+	var match_controller: MatchController = level.get_match_controller()
+	if match_controller != null:
+		match_controller.game_over(false)

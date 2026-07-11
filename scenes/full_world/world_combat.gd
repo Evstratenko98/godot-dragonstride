@@ -1,32 +1,40 @@
+class_name WorldCombat
 extends Node
 
-var world = null
+var runtime: WorldRuntime = null
+var level: WorldLevel = null
 
 
 func _ready() -> void:
-	world = get_parent()
+	level = get_parent() as WorldLevel
+	if level != null:
+		runtime = level.get_runtime()
+
+
+func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void:
+	runtime = new_runtime
+	level = new_level
 
 
 func apply_attack_to_cell(
 	attacker: Node,
 	cell: Vector2i,
-	should_broadcast := true,
-	should_broadcast_action := true
+	should_broadcast: bool = true,
+	should_broadcast_action: bool = true
 ) -> void:
 	if should_broadcast_action and should_broadcast and GameSession.is_multiplayer() and attacker.get("entity_id") != null:
 		NetworkManager.broadcast_entity_attack(str(attacker.get("entity_id")), cell)
 
-	var target_entity: Node = world.get_entity_at_cell(cell)
+	var target_entity: Node = runtime.get_entity_at_cell(cell)
 	if target_entity != null and target_entity != attacker:
 		_apply_entity_attack(attacker, target_entity, should_broadcast)
 		return
 
-	var target_object: Node = world.get_object_at_cell(cell)
+	var target_object: GridObject = runtime.get_object_at_cell(cell) as GridObject
 	if target_object != null:
 		print_non_entity_attack_result(attacker, cell)
-		if target_object.has_method("take_damage"):
-			target_object.take_damage()
-			world.broadcast_object_state(target_object)
+		target_object.take_damage()
+		runtime.broadcast_object_state(target_object)
 		return
 
 	print_non_entity_attack_result(attacker, cell)
@@ -40,8 +48,8 @@ func get_entity_id(entity: Node) -> String:
 
 
 func get_entity_display_name(entity: Node) -> String:
-	if entity != null and entity.has_method("get_display_name"):
-		return entity.get_display_name()
+	if entity is Entity:
+		return (entity as Entity).get_display_name()
 
 	if entity != null and entity.get("entity_name") != null and not str(entity.get("entity_name")).is_empty():
 		return str(entity.get("entity_name"))
@@ -61,7 +69,7 @@ func print_entity_attack_result(
 ) -> void:
 	var attacker_name: String = _get_entity_display_name_by_id(attacker_entity_id)
 	var target_name: String = _get_entity_display_name_by_id(target_entity_id)
-	world.print_console("%s hit %s for %d damage. %s HP: %d/%d" % [
+	runtime.print_console("%s hit %s for %d damage. %s HP: %d/%d" % [
 		attacker_name,
 		target_name,
 		damage_amount,
@@ -80,8 +88,8 @@ func _apply_entity_attack(attacker: Node, target_entity: Node, should_broadcast:
 	if target_entity.get("health") != null:
 		previous_health = int(target_entity.get("health"))
 
-	if target_entity.has_method("take_damage"):
-		target_entity.take_damage(damage_amount)
+	if target_entity is Entity:
+		(target_entity as Entity).take_damage(damage_amount)
 
 	var target_health: int = 0
 	if target_entity.get("health") != null:
@@ -138,20 +146,20 @@ func _broadcast_entity_damage_result(target_entity: Node, was_lethal: bool) -> v
 
 
 func print_non_entity_attack_result(attacker: Node, cell: Vector2i) -> void:
-	var target_entity: Node = world.get_entity_at_cell(cell)
+	var target_entity: Node = runtime.get_entity_at_cell(cell)
 	if target_entity != null and target_entity != attacker:
 		return
 
-	var target_object: Node = world.get_object_at_cell(cell)
+	var target_object: GridObject = runtime.get_object_at_cell(cell) as GridObject
 	if target_object != null:
-		world.print_console("%s deals damage to %s" % [get_entity_display_name(attacker), target_object.name])
+		runtime.print_console("%s deals damage to %s" % [get_entity_display_name(attacker), target_object.name])
 		return
 
-	world.print_console("%s hit %s" % [get_entity_display_name(attacker), world.get_cell_display_name(cell)])
+	runtime.print_console("%s hit %s" % [get_entity_display_name(attacker), runtime.get_cell_display_name(cell)])
 
 
 func _get_entity_display_name_by_id(entity_id: String) -> String:
-	var entity: Node = world.get_entity_by_id(entity_id)
+	var entity: Node = runtime.get_entity_by_id(entity_id)
 	if entity != null:
 		return get_entity_display_name(entity)
 

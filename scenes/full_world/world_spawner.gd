@@ -1,3 +1,4 @@
+class_name WorldSpawner
 extends Node
 
 const COMMAND_NAME := "game_create"
@@ -32,15 +33,23 @@ const CATALOG := {
 	},
 }
 
-var world: Node = null
-var spawned_counter := 0
+var runtime: WorldRuntime = null
+var level: WorldLevel = null
+var spawned_counter: int = 0
 
 
 func _ready() -> void:
-	world = get_parent()
+	level = get_parent() as WorldLevel
+	if level != null:
+		runtime = level.get_runtime()
 	_register_console_commands()
 	_connect_network_signals()
 	call_deferred("_apply_cached_world_spawns")
+
+
+func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void:
+	runtime = new_runtime
+	level = new_level
 
 
 func _exit_tree() -> void:
@@ -49,7 +58,7 @@ func _exit_tree() -> void:
 
 
 func console_create(type_key: String, x_text: String, y_text: String) -> void:
-	var normalized_type := _normalize_type_key(type_key)
+	var normalized_type: String = _normalize_type_key(type_key)
 	if not CATALOG.has(normalized_type):
 		_print_spawn_error("Unknown create type: %s." % type_key)
 		return
@@ -58,7 +67,7 @@ func console_create(type_key: String, x_text: String, y_text: String) -> void:
 		_print_spawn_error("Usage: %s <type> <x> <y>. Coordinates must be integers." % COMMAND_NAME)
 		return
 
-	var cell := Vector2i(x_text.to_int(), y_text.to_int())
+	var cell: Vector2i = Vector2i(x_text.to_int(), y_text.to_int())
 	if GameSession.is_multiplayer() and not GameSession.is_host():
 		NetworkManager.request_world_spawn(normalized_type, cell)
 		return
@@ -71,14 +80,14 @@ func _try_create_authoritative(type_key: String, cell: Vector2i, should_broadcas
 		_report_spawn_error("Unknown create type: %s." % type_key, requester_peer_id)
 		return false
 
-	var spawn_id := _make_spawn_id(type_key)
-	var record := {
+	var spawn_id: String = _make_spawn_id(type_key)
+	var record: Dictionary = {
 		"type_key": type_key,
 		"spawn_id": spawn_id,
 		"cell": cell,
 	}
 
-	var error := _spawn_from_record(record, true)
+	var error: String = _spawn_from_record(record, true)
 	if not error.is_empty():
 		_report_spawn_error("Cannot create %s at %d %d: %s" % [
 			type_key,
@@ -96,11 +105,11 @@ func _try_create_authoritative(type_key: String, cell: Vector2i, should_broadcas
 
 
 func _spawn_from_record(record: Dictionary, should_validate: bool) -> String:
-	var type_key := _normalize_type_key(str(record.get("type_key", "")))
+	var type_key: String = _normalize_type_key(str(record.get("type_key", "")))
 	if not CATALOG.has(type_key):
 		return "Unknown create type: %s." % type_key
 
-	var spawn_id := str(record.get("spawn_id", ""))
+	var spawn_id: String = str(record.get("spawn_id", ""))
 	if spawn_id.is_empty():
 		return "Spawn id is empty."
 
@@ -113,11 +122,11 @@ func _spawn_from_record(record: Dictionary, should_validate: bool) -> String:
 	if scene == null:
 		return "Scene is missing for type: %s." % type_key
 
-	var instance := scene.instantiate()
+	var instance: Node = scene.instantiate()
 	_assign_spawn_id(instance, str(definition.get("kind", "")), spawn_id)
 
 	if should_validate:
-		var placement_error: String = world.get_placement_error(instance, cell)
+		var placement_error: String = runtime.get_placement_error(instance, cell)
 		if not placement_error.is_empty():
 			instance.free()
 			return placement_error
@@ -127,33 +136,33 @@ func _spawn_from_record(record: Dictionary, should_validate: bool) -> String:
 
 
 func _spawn_instance(instance: Node, definition: Dictionary, type_key: String, spawn_id: String, cell: Vector2i) -> void:
-	var kind := str(definition.get("kind", ""))
-	var display_name := str(definition.get("display_name", type_key.capitalize()))
-	var world_position: Vector2 = world.cell_to_world(cell)
+	var kind: String = str(definition.get("kind", ""))
+	var display_name: String = str(definition.get("display_name", type_key.capitalize()))
+	var world_position: Vector2 = runtime.cell_to_world(cell)
 
 	if kind == SPAWN_KIND_ENTITY:
-		var entities_root := _get_world_entities_root()
+		var entities_root: Node2D = _get_world_entities_root()
 		instance.name = spawn_id
 		entities_root.add_child(instance)
-		if instance.has_method("start"):
-			instance.start(world_position, spawn_id, display_name)
-		elif instance.has_method("start_entity"):
-			instance.start_entity(world_position, spawn_id, display_name)
+		if instance is NonPlayerEntity:
+			(instance as NonPlayerEntity).start(world_position, spawn_id, display_name)
+		elif instance is Entity:
+			(instance as Entity).start_entity(world_position, spawn_id, display_name)
 		elif instance is Node2D:
 			instance.global_position = world_position
-		world.register_entity(instance)
+		runtime.register_entity(instance)
 		_apply_cached_entity_ai_state(instance, spawn_id)
 		return
 
 	if kind == SPAWN_KIND_OBJECT:
-		var objects_root := _get_spawned_objects_root()
+		var objects_root: Node2D = _get_spawned_objects_root()
 		instance.name = spawn_id
 		if not instance.is_in_group("game_blocker"):
 			instance.add_to_group("game_blocker")
 		if instance is Node2D:
 			instance.global_position = world_position
 		objects_root.add_child(instance)
-		world.register_object(instance, cell)
+		runtime.register_object(instance, cell)
 		_apply_cached_object_state(instance, spawn_id)
 
 
@@ -167,18 +176,18 @@ func _assign_spawn_id(instance: Node, kind: String, spawn_id: String) -> void:
 
 
 func _apply_cached_object_state(instance: Node, spawn_id: String) -> void:
-	if not instance.has_method("apply_network_state"):
+	if not (instance is GridObject):
 		return
 
 	var cached_states: Dictionary = NetworkManager.get_object_states()
 	if not cached_states.has(spawn_id):
 		return
 
-	instance.apply_network_state(int(cached_states[spawn_id]))
+	(instance as GridObject).apply_network_state(int(cached_states[spawn_id]))
 
 
 func _apply_cached_entity_ai_state(instance: Node, spawn_id: String) -> void:
-	if not instance.has_method("apply_remote_ai_state"):
+	if not (instance is NonPlayerEntity):
 		return
 
 	var cached_states: Dictionary = NetworkManager.get_entity_ai_states()
@@ -186,7 +195,7 @@ func _apply_cached_entity_ai_state(instance: Node, spawn_id: String) -> void:
 		return
 
 	var state: Dictionary = cached_states[spawn_id]
-	instance.apply_remote_ai_state(
+	(instance as NonPlayerEntity).apply_remote_ai_state(
 		str(state.get("state", "")),
 		str(state.get("target_entity_id", "")),
 		str(state.get("reason", ""))
@@ -203,7 +212,7 @@ func _apply_cached_world_spawns() -> void:
 		if _has_spawn_id(str(record.get("spawn_id", ""))):
 			continue
 
-		var error := _spawn_from_record(record, false)
+		var error: String = _spawn_from_record(record, false)
 		if not error.is_empty():
 			_print_spawn_error("Cannot apply cached spawn: %s" % error)
 
@@ -211,7 +220,7 @@ func _apply_cached_world_spawns() -> void:
 func _make_spawn_id(type_key: String) -> String:
 	while true:
 		spawned_counter += 1
-		var spawn_id := "spawned_%s_%d" % [type_key, spawned_counter]
+		var spawn_id: String = "spawned_%s_%d" % [type_key, spawned_counter]
 		if not _has_spawn_id(spawn_id):
 			return spawn_id
 
@@ -219,28 +228,28 @@ func _make_spawn_id(type_key: String) -> String:
 
 
 func _has_spawn_id(spawn_id: String) -> bool:
-	return world.get_entity_by_id(spawn_id) != null or world.get_object_by_id(spawn_id) != null
+	return runtime.get_entity_by_id(spawn_id) != null or runtime.get_object_by_id(spawn_id) != null
 
 
 func _get_world_entities_root() -> Node2D:
-	var root := world.get_node_or_null("WorldEntities") as Node2D
+	var root: Node2D = level.get_node_or_null("WorldEntities") as Node2D
 	if root != null:
 		return root
 
 	root = Node2D.new()
 	root.name = "WorldEntities"
-	world.add_child(root)
+	level.add_child(root)
 	return root
 
 
 func _get_spawned_objects_root() -> Node2D:
-	var root := world.get_node_or_null("SpawnedObjects") as Node2D
+	var root: Node2D = level.get_node_or_null("SpawnedObjects") as Node2D
 	if root != null:
 		return root
 
 	root = Node2D.new()
 	root.name = "SpawnedObjects"
-	world.add_child(root)
+	level.add_child(root)
 	return root
 
 
@@ -254,11 +263,11 @@ func _print_created(record: Dictionary) -> void:
 		str(record.get("type_key", "")),
 		cell.x,
 		cell.y,
-	], world)
+	], runtime)
 
 
 func _print_spawn_error(message: String) -> void:
-	ConsoleOutput.print_console("ERROR: %s" % message, world)
+	ConsoleOutput.print_console("ERROR: %s" % message, runtime)
 
 
 func _report_spawn_error(message: String, requester_peer_id: int) -> void:
@@ -283,7 +292,7 @@ func _register_console_commands() -> void:
 	)
 
 	if console.has_method("add_command_autocomplete_list"):
-		var type_keys := PackedStringArray()
+		var type_keys: PackedStringArray = PackedStringArray()
 		for type_key in CATALOG.keys():
 			type_keys.append(str(type_key))
 		console.add_command_autocomplete_list(COMMAND_NAME, type_keys)
@@ -333,7 +342,7 @@ func _on_world_spawn_received(record: Dictionary) -> void:
 	if _has_spawn_id(str(record.get("spawn_id", ""))):
 		return
 
-	var error := _spawn_from_record(record, false)
+	var error: String = _spawn_from_record(record, false)
 	if not error.is_empty():
 		_print_spawn_error("Cannot apply network spawn: %s" % error)
 		return

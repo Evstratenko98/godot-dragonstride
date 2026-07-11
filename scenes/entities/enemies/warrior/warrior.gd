@@ -18,16 +18,16 @@ const ORTHOGONAL_DIRECTIONS: Array[Vector2i] = [
 	Vector2i.UP,
 ]
 
-var incoming_guard_token := 0
-var ai_state := STATE_PASSIVE
-var target_entity_id := ""
-var attacks_used_this_turn := 0
-var is_running_behavior_turn := false
-var pending_behavior_attack_target_id := ""
-var pending_behavior_attack_was_lethal := false
+var incoming_guard_token: int = 0
+var ai_state: String = STATE_PASSIVE
+var target_entity_id: String = ""
+var attacks_used_this_turn: int = 0
+var is_running_behavior_turn: bool = false
+var pending_behavior_attack_target_id: String = ""
+var pending_behavior_attack_was_lethal: bool = false
 var remote_action_queue: Array[Dictionary] = []
-var is_processing_remote_actions := false
-var is_replaying_remote_action := false
+var is_processing_remote_actions: bool = false
+var is_replaying_remote_action: bool = false
 
 
 func _ready() -> void:
@@ -40,8 +40,8 @@ func _ready() -> void:
 
 func start(
 	start_position: Vector2,
-	new_entity_id := "",
-	new_entity_name := "Warrior"
+	new_entity_id: String = "",
+	new_entity_name: String = "Warrior"
 ) -> void:
 	_apply_base_stats()
 	start_non_player_entity(start_position, new_entity_id, new_entity_name, EntityType.ENEMY)
@@ -67,7 +67,7 @@ func behavior() -> void:
 		_end_behavior_turn()
 		return
 
-	var target := _get_current_target()
+	var target: Node = _get_current_target()
 	if not _is_valid_hunt_target(target):
 		_set_ai_state(STATE_PASSIVE, "", _get_invalid_target_reason(target))
 		_end_behavior_turn()
@@ -75,24 +75,24 @@ func behavior() -> void:
 
 	if _can_attack_target(target):
 		is_running_behavior_turn = false
-		var did_initial_attack := await _perform_behavior_attack(target)
+		var did_initial_attack: bool = await _perform_behavior_attack(target)
 		if did_initial_attack:
 			return
 		_finish_behavior()
 		return
 
-	var attack_cells := _get_attack_goal_cells(target)
+	var attack_cells: Array[Vector2i] = _get_attack_goal_cells(target)
 	if not _has_terrain_path_to_any(attack_cells):
 		_set_ai_state(STATE_PASSIVE, "", REASON_TARGET_UNREACHABLE)
 		_end_behavior_turn()
 		return
 
-	var path := _find_path_to_any(attack_cells, true)
+	var path: Array[Vector2i] = _find_path_to_any(attack_cells, true)
 	if path.is_empty():
 		_end_behavior_turn()
 		return
 
-	var steps_to_take := mini(MAX_STEPS_PER_TURN, path.size())
+	var steps_to_take: int = mini(MAX_STEPS_PER_TURN, path.size())
 	for i in range(steps_to_take):
 		target = _get_current_target()
 		if not _is_valid_hunt_target(target):
@@ -102,7 +102,7 @@ func behavior() -> void:
 
 		if _can_attack_target(target):
 			is_running_behavior_turn = false
-			var did_pre_move_attack := await _perform_behavior_attack(target)
+			var did_pre_move_attack: bool = await _perform_behavior_attack(target)
 			if did_pre_move_attack:
 				return
 			_finish_behavior()
@@ -125,7 +125,7 @@ func behavior() -> void:
 
 		if _can_attack_target(target):
 			is_running_behavior_turn = false
-			var did_post_move_attack := await _perform_behavior_attack(target)
+			var did_post_move_attack: bool = await _perform_behavior_attack(target)
 			if did_post_move_attack:
 				return
 			_finish_behavior()
@@ -173,7 +173,7 @@ func play_remote_move(from_cell: Vector2i, target_cell: Vector2i) -> void:
 	_process_remote_action_queue()
 
 
-func play_remote_attack(target_cell: Vector2i, should_apply := true) -> void:
+func play_remote_attack(target_cell: Vector2i, should_apply: bool = true) -> void:
 	remote_action_queue.append({
 		"type": "attack",
 		"target_cell": target_cell,
@@ -187,8 +187,8 @@ func play_incoming_attack_guard(duration: float) -> void:
 		return
 
 	incoming_guard_token += 1
-	var guard_token := incoming_guard_token
-	if view != null and view.has_method("play_guard"):
+	var guard_token: int = incoming_guard_token
+	if view != null:
 		view.play_guard()
 
 	await get_tree().create_timer(duration).timeout
@@ -199,7 +199,7 @@ func play_incoming_attack_guard(duration: float) -> void:
 	if health <= 0 or is_moving or is_attacking:
 		return
 
-	if view != null and view.has_method("play_idle"):
+	if view != null:
 		view.play_idle()
 
 
@@ -225,17 +225,17 @@ func _process_remote_action_queue() -> void:
 
 
 func _play_remote_move_now(action: Dictionary) -> void:
-	if world == null:
-		world = _find_world()
+	if runtime == null:
+		runtime = _find_runtime()
 
-	if world == null:
+	if runtime == null:
 		return
 
 	var from_cell: Vector2i = action.get("from_cell", current_cell)
 	var target_cell: Vector2i = action.get("target_cell", current_cell)
 	current_cell = from_cell
-	global_position = world.cell_to_world(from_cell)
-	if world.has_method("reserve_entity_cell") and not world.reserve_entity_cell(self, from_cell, target_cell):
+	global_position = runtime.cell_to_world(from_cell)
+	if not runtime.reserve_entity_cell(self, from_cell, target_cell):
 		return
 
 	_move_to_cell(target_cell, false)
@@ -243,15 +243,15 @@ func _play_remote_move_now(action: Dictionary) -> void:
 
 
 func _play_remote_attack_now(action: Dictionary) -> void:
-	if world == null:
-		world = _find_world()
+	if runtime == null:
+		runtime = _find_runtime()
 
-	if world == null:
+	if runtime == null:
 		return
 
-	current_cell = world.world_to_cell(global_position)
+	current_cell = runtime.world_to_cell(global_position)
 	var target_cell: Vector2i = action.get("target_cell", current_cell)
-	var should_apply := bool(action.get("should_apply", false))
+	var should_apply: bool = bool(action.get("should_apply", false))
 	request_attack_cell(
 		target_cell,
 		should_apply,
@@ -261,8 +261,8 @@ func _play_remote_attack_now(action: Dictionary) -> void:
 
 
 func _attack_cell(target_cell: Vector2i, direction: Vector2i, should_apply: bool, should_broadcast: bool) -> void:
-	var attack_facing_left := _get_facing_left()
-	var update_horizontal_facing := direction.x != 0
+	var attack_facing_left: bool = _get_facing_left()
+	var update_horizontal_facing: bool = direction.x != 0
 	if direction == Vector2i.RIGHT:
 		attack_facing_left = false
 	elif direction == Vector2i.LEFT:
@@ -283,9 +283,8 @@ func _attack(
 	attack_target_cell = target_cell
 	_play_target_incoming_attack_guard(target_cell, _get_attack_duration())
 
-	if view != null and view.has_method("play_attack"):
+	if view != null:
 		await view.play_attack(attack_facing_left, update_horizontal_facing)
-
 	if should_apply:
 		_apply_attack_to_world(should_broadcast)
 
@@ -295,10 +294,10 @@ func _attack(
 	pending_behavior_attack_target_id = ""
 	pending_behavior_attack_was_lethal = false
 	is_attacking = false
-	if world != null and world.has_method("notify_entity_action_finished_in_turn"):
-		world.notify_entity_action_finished_in_turn(self)
+	if runtime != null:
+		runtime.notify_entity_action_finished_in_turn(self)
 
-	if view != null and view.has_method("play_idle"):
+	if view != null:
 		view.play_idle()
 
 
@@ -315,8 +314,8 @@ func _perform_behavior_attack(target: Node) -> bool:
 
 	var target_cell: Vector2i = target.get("current_cell")
 	var direction: Vector2i = _get_attack_direction_to_cell(target_cell)
-	var attack_facing_left := _get_facing_left()
-	var update_horizontal_facing := direction.x != 0
+	var attack_facing_left: bool = _get_facing_left()
+	var update_horizontal_facing: bool = direction.x != 0
 	if direction == Vector2i.RIGHT:
 		attack_facing_left = false
 	elif direction == Vector2i.LEFT:
@@ -332,7 +331,7 @@ func _on_move_started(target_cell: Vector2i) -> void:
 
 
 func _on_move_stopped() -> void:
-	if view != null and view.has_method("play_idle"):
+	if view != null:
 		view.play_idle()
 
 	if is_running_behavior_turn or is_replaying_remote_action:
@@ -377,10 +376,10 @@ func _get_invalid_target_reason(target: Node) -> String:
 
 
 func _get_current_target() -> Node:
-	if target_entity_id.is_empty() or world == null or not world.has_method("get_entity_by_id"):
+	if target_entity_id.is_empty() or runtime == null:
 		return null
 
-	return world.get_entity_by_id(target_entity_id)
+	return runtime.get_entity_by_id(target_entity_id)
 
 
 func _can_attack_target(target: Node) -> bool:
@@ -398,7 +397,7 @@ func _get_attack_goal_cells(target: Node) -> Array[Vector2i]:
 	var target_cell: Vector2i = target.get("current_cell")
 	for direction in ORTHOGONAL_DIRECTIONS:
 		var attack_cell: Vector2i = target_cell + direction
-		if world.is_cell_inside(attack_cell) and world.is_cell_walkable(attack_cell):
+		if runtime.is_cell_inside(attack_cell) and runtime.is_cell_walkable(attack_cell):
 			cells.append(attack_cell)
 
 	return cells
@@ -410,10 +409,10 @@ func _has_terrain_path_to_any(goal_cells: Array[Vector2i]) -> bool:
 
 func _find_path_to_any(goal_cells: Array[Vector2i], respect_current_occupancy: bool) -> Array[Vector2i]:
 	var empty_path: Array[Vector2i] = []
-	if world == null or goal_cells.is_empty():
+	if runtime == null or goal_cells.is_empty():
 		return empty_path
 
-	var goals := {}
+	var goals: Dictionary = {}
 	for goal_cell in goal_cells:
 		goals[goal_cell] = true
 
@@ -421,7 +420,7 @@ func _find_path_to_any(goal_cells: Array[Vector2i], respect_current_occupancy: b
 		return empty_path
 
 	var frontier: Array[Vector2i] = [current_cell]
-	var came_from := {}
+	var came_from: Dictionary = {}
 	came_from[current_cell] = current_cell
 
 	while not frontier.is_empty():
@@ -444,14 +443,14 @@ func _find_path_to_any(goal_cells: Array[Vector2i], respect_current_occupancy: b
 
 
 func _can_path_enter_cell(cell: Vector2i, respect_current_occupancy: bool) -> bool:
-	if not world.is_cell_inside(cell) or not world.is_cell_walkable(cell):
+	if not runtime.is_cell_inside(cell) or not runtime.is_cell_walkable(cell):
 		return false
 
-	if world.has_method("get_object_at_cell") and world.get_object_at_cell(cell) != null:
+	if runtime.get_object_at_cell(cell) != null:
 		return false
 
 	if respect_current_occupancy:
-		return world.can_enter_cell(cell, self)
+		return runtime.can_enter_cell(cell, self)
 
 	return true
 
@@ -466,12 +465,12 @@ func _reconstruct_path(came_from: Dictionary, start_cell: Vector2i, end_cell: Ve
 	return path
 
 
-func _set_ai_state(new_state: String, new_target_entity_id: String, reason := REASON_NONE, should_broadcast := true) -> void:
+func _set_ai_state(new_state: String, new_target_entity_id: String, reason: String = REASON_NONE, should_broadcast: bool = true) -> void:
 	if ai_state == new_state and target_entity_id == new_target_entity_id:
 		return
 
-	var previous_state := ai_state
-	var previous_target_entity_id := target_entity_id
+	var previous_state: String = ai_state
+	var previous_target_entity_id: String = target_entity_id
 	ai_state = new_state
 	target_entity_id = new_target_entity_id
 	_print_ai_state_log(previous_state, previous_target_entity_id, reason)
@@ -481,7 +480,7 @@ func _set_ai_state(new_state: String, new_target_entity_id: String, reason := RE
 
 
 func _print_ai_state_log(previous_state: String, previous_target_entity_id: String, reason: String) -> void:
-	if world == null:
+	if runtime == null:
 		return
 
 	if previous_state != STATE_ACTIVE and ai_state == STATE_ACTIVE:
@@ -501,17 +500,17 @@ func _print_ai_state_log(previous_state: String, previous_target_entity_id: Stri
 
 
 func _print_ai_log(text: String) -> void:
-	ConsoleOutput.print_console(text, world)
+	ConsoleOutput.print_console(text, runtime)
 
 
 func _get_target_display_name(id: String) -> String:
 	if id.is_empty():
 		return "none"
 
-	if world != null and world.has_method("get_entity_by_id") and world.has_method("get_entity_display_name"):
-		var entity: Node = world.get_entity_by_id(id)
+	if runtime != null:
+		var entity: Node = runtime.get_entity_by_id(id)
 		if entity != null:
-			return world.get_entity_display_name(entity)
+			return runtime.get_entity_display_name(entity)
 
 	return id
 
@@ -532,10 +531,10 @@ func _will_attack_defeat_target(target: Node) -> bool:
 
 func _get_registered_characters() -> Array[Node]:
 	var characters: Array[Node] = []
-	if world == null or not world.has_method("get_registered_entities"):
+	if runtime == null:
 		return characters
 
-	for entity in world.get_registered_entities():
+	for entity in runtime.get_registered_entities():
 		if entity is Node and entity.get("entity_type") != null and int(entity.get("entity_type")) == EntityType.CHARACTER:
 			characters.append(entity)
 
@@ -549,8 +548,8 @@ func _get_entity_id(entity: Node) -> String:
 	if entity == null:
 		return ""
 
-	if world != null and world.has_method("get_entity_id"):
-		return world.get_entity_id(entity)
+	if runtime != null:
+		return runtime.get_entity_id(entity)
 
 	if entity.get("entity_id") != null:
 		return str(entity.get("entity_id"))
@@ -559,15 +558,15 @@ func _get_entity_id(entity: Node) -> String:
 
 
 func _sync_current_cell() -> void:
-	if world == null:
-		world = _find_world()
+	if runtime == null:
+		runtime = _find_runtime()
 
-	if world != null and world.has_method("world_to_cell"):
-		current_cell = world.world_to_cell(global_position)
+	if runtime != null:
+		current_cell = runtime.world_to_cell(global_position)
 
 
 func _is_turn_mode_enabled() -> bool:
-	return world != null and world.has_method("is_turn_mode_enabled") and world.is_turn_mode_enabled()
+	return runtime != null and runtime.is_turn_mode_enabled()
 
 
 func _is_ai_authority() -> bool:
@@ -575,14 +574,14 @@ func _is_ai_authority() -> bool:
 
 
 func _get_attack_duration() -> float:
-	if view != null and view.has_method("get_attack_duration"):
+	if view != null:
 		return float(view.get_attack_duration())
 
 	return 0.0
 
 
 func _get_facing_left() -> bool:
-	if view != null and view.has_method("get_facing_left"):
+	if view != null:
 		return bool(view.get_facing_left())
 
 	return false

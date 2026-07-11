@@ -1,10 +1,10 @@
-extends Node
+extends "res://scenes/entities/non_player_entity/non_player_view.gd"
 
 @export var sprite_path: NodePath = ^"../Sprite2D"
 @export var animation_player_path: NodePath = ^"../AnimationPlayer"
 
-@onready var sprite := get_node(sprite_path) as Sprite2D
-@onready var animation_player := get_node(animation_player_path) as AnimationPlayer
+@onready var sprite: Sprite2D = get_node(sprite_path) as Sprite2D
+@onready var animation_player: AnimationPlayer = get_node(animation_player_path) as AnimationPlayer
 
 var facing_left: bool = false
 

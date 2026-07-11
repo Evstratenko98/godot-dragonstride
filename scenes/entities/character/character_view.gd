@@ -1,3 +1,4 @@
+class_name CharacterView
 extends Node
 
 const WARRIOR_COLOR_BLUE := "Blue"
@@ -14,20 +15,24 @@ const WARRIOR_TEXTURES := {
 @export var sprite_path: NodePath = ^"../Sprite2D"
 @export var animation_player_path: NodePath = ^"../AnimationPlayer"
 
-@onready var sprite := get_node(sprite_path) as Sprite2D
-@onready var animation_player := get_node(animation_player_path) as AnimationPlayer
+@onready var sprite: Sprite2D = get_node(sprite_path) as Sprite2D
+@onready var animation_player: AnimationPlayer = get_node(animation_player_path) as AnimationPlayer
 
 var facing_left: bool = false
 
 
 func set_warrior_color(color_name: String) -> void:
-	var texture := WARRIOR_TEXTURES.get(color_name, WARRIOR_TEXTURES[WARRIOR_COLOR_BLUE]) as Texture2D
-	sprite.texture = texture
+	var texture: Texture2D = WARRIOR_TEXTURES.get(color_name, WARRIOR_TEXTURES[WARRIOR_COLOR_BLUE]) as Texture2D
+	var target_sprite: Sprite2D = _get_sprite()
+	if target_sprite != null:
+		target_sprite.texture = texture
 
 
 func apply_remote_visual_state(animation: String, remote_facing_left: bool) -> void:
 	facing_left = remote_facing_left
-	sprite.flip_h = facing_left
+	var target_sprite: Sprite2D = _get_sprite()
+	if target_sprite != null:
+		target_sprite.flip_h = facing_left
 	play_animation(StringName(animation))
 
 
@@ -36,7 +41,9 @@ func face_direction(direction: Vector2i) -> void:
 		return
 
 	facing_left = direction.x < 0
-	sprite.flip_h = facing_left
+	var target_sprite: Sprite2D = _get_sprite()
+	if target_sprite != null:
+		target_sprite.flip_h = facing_left
 
 
 func play_idle() -> void:
@@ -55,23 +62,44 @@ func play_attack(
 	if update_horizontal_facing:
 		facing_left = attack_facing_left
 
-	sprite.flip_h = attack_facing_left
-	animation_player.play(animation_name)
-	await animation_player.animation_finished
-	sprite.flip_h = facing_left
+	var target_sprite: Sprite2D = _get_sprite()
+	if target_sprite != null:
+		target_sprite.flip_h = attack_facing_left
+
+	var player: AnimationPlayer = _get_animation_player()
+	if player == null:
+		return
+
+	player.play(animation_name)
+	await player.animation_finished
+	target_sprite = _get_sprite()
+	if target_sprite != null:
+		target_sprite.flip_h = facing_left
 
 
 func play_animation(animation_name: StringName) -> void:
-	if animation_player.current_animation != animation_name:
-		animation_player.play(animation_name)
+	var player: AnimationPlayer = _get_animation_player()
+	if player == null:
+		return
+
+	if player.current_animation != animation_name:
+		player.play(animation_name)
 
 
 func get_current_animation() -> StringName:
-	return StringName(animation_player.current_animation)
+	var player: AnimationPlayer = _get_animation_player()
+	if player == null:
+		return &""
+
+	return StringName(player.current_animation)
 
 
 func get_animation_length(animation_name: StringName) -> float:
-	var animation := animation_player.get_animation(animation_name)
+	var player: AnimationPlayer = _get_animation_player()
+	if player == null:
+		return 0.0
+
+	var animation: Animation = player.get_animation(animation_name)
 	if animation == null:
 		return 0.0
 
@@ -80,3 +108,17 @@ func get_animation_length(animation_name: StringName) -> float:
 
 func get_facing_left() -> bool:
 	return facing_left
+
+
+func _get_sprite() -> Sprite2D:
+	if sprite == null:
+		sprite = get_node_or_null(sprite_path) as Sprite2D
+
+	return sprite
+
+
+func _get_animation_player() -> AnimationPlayer:
+	if animation_player == null:
+		animation_player = get_node_or_null(animation_player_path) as AnimationPlayer
+
+	return animation_player
