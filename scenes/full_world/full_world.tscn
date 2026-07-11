@@ -1,6 +1,6 @@
 [gd_scene format=4 uid="uid://dbpsjckioxl17"]
 
-[ext_resource type="Script" uid="uid://bxugl700mfh13" path="res://scenes/full_world/full_world.gd" id="1"]
+[ext_resource type="Script" uid="uid://bkbk4l0j2f628" path="res://scenes/full_world/world_level.gd" id="1"]
 [ext_resource type="Script" uid="uid://cgrid0taw4k1" path="res://scenes/full_world/world_grid.gd" id="2"]
 [ext_resource type="Script" uid="uid://dhdtlkgsasxg" path="res://scenes/full_world/world_registry.gd" id="3"]
 [ext_resource type="Script" uid="uid://cplayers5n8qd" path="res://scenes/full_world/world_players.gd" id="4"]
