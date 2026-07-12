@@ -194,6 +194,7 @@ func _on_peer_map_updated() -> void:
 func _on_peer_connected(_peer_id: int) -> void:
 	if GameSession.is_host():
 		NetworkManager.send_world_spawns_to_peer(_peer_id)
+		NetworkManager.send_world_removals_to_peer(_peer_id)
 		NetworkManager.send_entity_ai_states_to_peer(_peer_id)
 		broadcast_all_object_states()
 
@@ -443,14 +444,9 @@ func _on_entity_respawn_received(entity_id: String, cell: Vector2i, new_health: 
 	if entity == null:
 		return
 
-	entity.set("spawn_cell", cell)
-	entity.set("current_cell", cell)
-	entity.set("is_moving", false)
-	entity.set("is_attacking", false)
+	entity.spawn_cell = cell
+	entity.respawn()
 	entity.set_health(new_health)
-	runtime.respawn_entity(entity, cell)
-	if entity is Node2D:
-		entity.global_position = runtime.cell_to_world(cell)
 
 
 func _on_entity_removed_received(entity_id: String) -> void:

@@ -27,6 +27,8 @@ var is_moving: bool = false
 var is_attacking: bool = false
 var attack_target_cell: Vector2i = Vector2i.ZERO
 var health_bar: Node2D = null
+var movement_tween: Tween = null
+var action_generation: int = 0
 
 
 func _ready() -> void:
@@ -146,6 +148,10 @@ func die() -> void:
 
 
 func respawn() -> void:
+	action_generation += 1
+	if movement_tween != null and movement_tween.is_valid():
+		movement_tween.kill()
+	movement_tween = null
 	set_health(max_health)
 	is_moving = false
 	is_attacking = false
@@ -181,6 +187,10 @@ func get_occupied_cells(anchor_cell: Vector2i) -> Array[Vector2i]:
 	return cells
 
 
+func get_action_generation() -> int:
+	return action_generation
+
+
 func _move_to_cell(target_cell: Vector2i, should_broadcast: bool = true) -> void:
 	if runtime == null:
 		return
@@ -188,14 +198,19 @@ func _move_to_cell(target_cell: Vector2i, should_broadcast: bool = true) -> void
 	is_moving = true
 	var from_cell: Vector2i = current_cell
 	var target_position: Vector2 = runtime.cell_to_world(target_cell)
-	var tween: Tween = create_tween()
-	tween.set_trans(Tween.TRANS_LINEAR)
-	tween.set_ease(Tween.EASE_IN)
-	tween.tween_property(self, "global_position", target_position, move_time)
+	var move_generation: int = action_generation
+	movement_tween = create_tween()
+	movement_tween.set_trans(Tween.TRANS_LINEAR)
+	movement_tween.set_ease(Tween.EASE_IN)
+	movement_tween.tween_property(self, "global_position", target_position, move_time)
 	_on_move_started(target_cell)
 	if runtime != null:
 		runtime.handle_entity_move_started(self, from_cell, target_cell, should_broadcast)
-	tween.finished.connect(func() -> void:
+	movement_tween.finished.connect(func() -> void:
+		if move_generation != action_generation:
+			return
+
+		movement_tween = null
 		global_position = target_position
 		current_cell = target_cell
 		is_moving = false

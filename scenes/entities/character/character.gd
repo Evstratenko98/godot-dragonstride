@@ -158,6 +158,7 @@ func _attack(
 ) -> void:
 	is_attacking = true
 	attack_target_cell = target_cell
+	var attack_generation: int = get_action_generation()
 	var character_view: CharacterView = _get_view()
 	if character_view == null:
 		is_attacking = false
@@ -165,6 +166,8 @@ func _attack(
 
 	_play_target_incoming_attack_guard(target_cell, character_view.get_animation_length(animation_name))
 	await character_view.play_attack(animation_name, attack_facing_left, update_horizontal_facing)
+	if attack_generation != get_action_generation():
+		return
 
 	if should_apply:
 		_apply_attack_to_world(should_broadcast)

@@ -50,6 +50,11 @@ signal turn_end_requested(steam_id: int)
 signal steam_peer_disconnected(steam_id: int)
 signal world_spawn_requested(type_key: String, cell: Vector2i, requester_peer_id: int)
 signal world_spawn_received(record: Dictionary)
+signal world_spawns_received(records: Array[Dictionary])
+signal world_fill_requested(type_key: String, requester_peer_id: int)
+signal world_clear_requested(type_key: String, requester_peer_id: int)
+signal world_items_removed_received(records: Array[Dictionary])
+signal character_kill_requested(requester_peer_id: int)
 signal world_spawn_failed_received(message: String)
 
 var peer: MultiplayerPeer = null
@@ -63,7 +68,8 @@ var steam_id_by_peer_id: Dictionary = {}
 var peer_id_by_steam_id: Dictionary = {}
 var object_states: Dictionary = {}
 var entity_ai_states: Dictionary = {}
-var world_spawn_records: Array = []
+var world_spawn_records: Array[Dictionary] = []
+var removed_world_items: Array[Dictionary] = []
 var has_reported_ready := false
 var has_registered_with_host := false
 
@@ -187,6 +193,7 @@ func stop_network() -> void:
 	object_states.clear()
 	entity_ai_states.clear()
 	world_spawn_records.clear()
+	removed_world_items.clear()
 	has_reported_ready = false
 	has_registered_with_host = false
 
@@ -453,12 +460,76 @@ func request_world_spawn(type_key: String, cell: Vector2i) -> void:
 	rpc_id(1, "_submit_world_spawn", type_key, cell)
 
 
+func request_world_fill(type_key: String) -> void:
+	if not GameSession.is_multiplayer():
+		return
+
+	if not is_ready():
+		world_spawn_failed_received.emit("Cannot fill world: network is not ready.")
+		return
+
+	if is_host:
+		world_fill_requested.emit(type_key, 0)
+		return
+
+	rpc_id(1, "_submit_world_fill", type_key)
+
+
+func request_world_clear(type_key: String) -> void:
+	if not GameSession.is_multiplayer():
+		return
+
+	if not is_ready():
+		world_spawn_failed_received.emit("Cannot clear world: network is not ready.")
+		return
+
+	if is_host:
+		world_clear_requested.emit(type_key, 0)
+		return
+
+	rpc_id(1, "_submit_world_clear", type_key)
+
+
+func request_character_kill() -> void:
+	if not GameSession.is_multiplayer():
+		return
+
+	if not is_ready():
+		world_spawn_failed_received.emit("Cannot kill character: network is not ready.")
+		return
+
+	if is_host:
+		character_kill_requested.emit(0)
+		return
+
+	rpc_id(1, "_submit_character_kill")
+
+
 func broadcast_world_spawn(record: Dictionary) -> void:
 	if not GameSession.is_multiplayer() or not is_host or not is_ready():
 		return
 
 	_cache_world_spawn_record(record)
 	rpc("_receive_world_spawn", record)
+
+
+func broadcast_world_spawns(records: Array[Dictionary]) -> void:
+	if not GameSession.is_multiplayer() or not is_host or not is_ready() or records.is_empty():
+		return
+
+	for record_variant in records:
+		var record: Dictionary = record_variant
+		_cache_world_spawn_record(record)
+
+	rpc("_receive_world_spawns", records)
+
+
+func broadcast_world_items_removed(records: Array[Dictionary]) -> void:
+	if not GameSession.is_multiplayer() or not is_host or not is_ready() or records.is_empty():
+		return
+
+	_cache_world_item_removals(records)
+	rpc("_receive_world_items_removed", records)
 
 
 func send_world_spawn_failed(peer_id: int, message: String) -> void:
@@ -476,8 +547,16 @@ func send_world_spawns_to_peer(peer_id: int) -> void:
 	if not GameSession.is_multiplayer() or not is_host or not is_ready():
 		return
 
-	for record in world_spawn_records:
-		rpc_id(peer_id, "_receive_world_spawn", record)
+	if not world_spawn_records.is_empty():
+		rpc_id(peer_id, "_receive_world_spawns", world_spawn_records)
+
+
+func send_world_removals_to_peer(peer_id: int) -> void:
+	if not GameSession.is_multiplayer() or not is_host or not is_ready():
+		return
+
+	if not removed_world_items.is_empty():
+		rpc_id(peer_id, "_receive_world_items_removed", removed_world_items)
 
 
 func send_entity_ai_states_to_peer(peer_id: int) -> void:
@@ -496,8 +575,12 @@ func send_entity_ai_states_to_peer(peer_id: int) -> void:
 		)
 
 
-func get_world_spawn_records() -> Array:
+func get_world_spawn_records() -> Array[Dictionary]:
 	return world_spawn_records.duplicate(true)
+
+
+func get_removed_world_items() -> Array[Dictionary]:
+	return removed_world_items.duplicate(true)
 
 
 func request_end_game() -> void:
@@ -983,10 +1066,49 @@ func _submit_world_spawn(type_key: String, cell: Vector2i) -> void:
 	world_spawn_requested.emit(type_key, cell, multiplayer.get_remote_sender_id())
 
 
+@rpc("any_peer", "reliable")
+func _submit_world_fill(type_key: String) -> void:
+	if not is_host:
+		return
+
+	world_fill_requested.emit(type_key, multiplayer.get_remote_sender_id())
+
+
+@rpc("any_peer", "reliable")
+func _submit_world_clear(type_key: String) -> void:
+	if not is_host:
+		return
+
+	world_clear_requested.emit(type_key, multiplayer.get_remote_sender_id())
+
+
+@rpc("any_peer", "reliable")
+func _submit_character_kill() -> void:
+	if not is_host:
+		return
+
+	character_kill_requested.emit(multiplayer.get_remote_sender_id())
+
+
 @rpc("authority", "reliable")
 func _receive_world_spawn(record: Dictionary) -> void:
 	_cache_world_spawn_record(record)
 	world_spawn_received.emit(record)
+
+
+@rpc("authority", "reliable")
+func _receive_world_spawns(records: Array[Dictionary]) -> void:
+	for record_variant in records:
+		var record: Dictionary = record_variant
+		_cache_world_spawn_record(record)
+
+	world_spawns_received.emit(records)
+
+
+@rpc("authority", "reliable")
+func _receive_world_items_removed(records: Array[Dictionary]) -> void:
+	_cache_world_item_removals(records)
+	world_items_removed_received.emit(records)
 
 
 @rpc("authority", "reliable")
@@ -1062,15 +1184,66 @@ func _on_server_disconnected() -> void:
 
 
 func _cache_world_spawn_record(record: Dictionary) -> void:
-	var spawn_id := str(record.get("spawn_id", ""))
+	var spawn_id: String = str(record.get("spawn_id", ""))
 	if spawn_id.is_empty():
 		return
+
+	_remove_world_item_tombstone(spawn_id)
 
 	for existing_record in world_spawn_records:
 		if str(existing_record.get("spawn_id", "")) == spawn_id:
 			return
 
 	world_spawn_records.append(record.duplicate(true))
+
+
+func _cache_world_item_removals(records: Array[Dictionary]) -> void:
+	for record_variant in records:
+		var record: Dictionary = record_variant
+		_cache_world_item_removal(record)
+
+
+func _cache_world_item_removal(record: Dictionary) -> void:
+	var item_id: String = str(record.get("id", ""))
+	var kind: String = str(record.get("kind", ""))
+	if item_id.is_empty() or (kind != "entity" and kind != "object"):
+		return
+
+	var was_dynamic_spawn: bool = _erase_world_spawn_record(item_id)
+	object_states.erase(item_id)
+	entity_ai_states.erase(item_id)
+	if was_dynamic_spawn:
+		return
+
+	for existing_variant in removed_world_items:
+		var existing_record: Dictionary = existing_variant
+		if (
+			str(existing_record.get("id", "")) == item_id
+			and str(existing_record.get("kind", "")) == kind
+		):
+			return
+
+	removed_world_items.append({
+		"kind": kind,
+		"id": item_id,
+	})
+
+
+func _erase_world_spawn_record(spawn_id: String) -> bool:
+	for index in range(world_spawn_records.size() - 1, -1, -1):
+		var record: Dictionary = world_spawn_records[index]
+		if str(record.get("spawn_id", "")) == spawn_id:
+			world_spawn_records.remove_at(index)
+			return true
+
+	return false
+
+
+func _remove_world_item_tombstone(item_id: String) -> void:
+	for index in range(removed_world_items.size() - 1, -1, -1):
+		var record: Dictionary = removed_world_items[index]
+		if str(record.get("id", "")) == item_id:
+			removed_world_items.remove_at(index)
 
 
 func _cache_entity_ai_state(entity_id: String, state: String, target_entity_id: String, reason: String) -> void:

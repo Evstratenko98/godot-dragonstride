@@ -37,6 +37,19 @@ func register_object(blocker: Node, anchor_cell: Vector2i) -> void:
 		occupied_cells[occupied_cell] = blocker
 
 
+func unregister_object(target_object: Node) -> void:
+	var object_id: String = ""
+	if target_object is GridObject:
+		object_id = (target_object as GridObject).object_id
+
+	if not object_id.is_empty():
+		objects_by_id.erase(object_id)
+
+	for cell in occupied_cells.keys():
+		if occupied_cells[cell] == target_object:
+			occupied_cells.erase(cell)
+
+
 func clear_entities() -> void:
 	entities_by_id.clear()
 	entity_cells.clear()

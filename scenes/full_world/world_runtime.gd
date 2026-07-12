@@ -53,6 +53,7 @@ func start_game() -> void:
 		players_service.start_singleplayer()
 
 	_register_world_entities()
+	spawner.apply_cached_world_removals()
 	network.apply_cached_entity_ai_states()
 
 
@@ -89,11 +90,17 @@ func register_entity(entity: Node) -> void:
 
 
 func unregister_entity(entity: Node) -> void:
+	if turn_manager != null:
+		turn_manager.notify_entity_removed(entity)
 	registry.unregister_entity(entity)
 
 
 func register_object(target_object: Node, anchor_cell: Vector2i) -> void:
 	registry.register_object(target_object, anchor_cell)
+
+
+func unregister_object(target_object: Node) -> void:
+	registry.unregister_object(target_object)
 
 
 func get_placement_error(spawn_node: Node, anchor_cell: Vector2i) -> String:

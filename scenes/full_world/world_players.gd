@@ -3,6 +3,7 @@ extends Node
 
 const CHARACTER_SCENE := preload("res://scenes/entities/character/character.tscn")
 const CAMERA_SCENE := preload("res://scenes/camera/camera.tscn")
+const KILL_COMMAND_NAME := "game_character_kill"
 const SINGLEPLAYER_WARRIOR_COLOR := "Purple"
 const MULTIPLAYER_WARRIOR_COLORS := ["Blue", "Purple", "Red", "Yellow"]
 
@@ -26,6 +27,13 @@ func _ready() -> void:
 	level = get_parent() as WorldLevel
 	if level != null:
 		runtime = level.get_runtime()
+	_register_console_commands()
+	_connect_network_signals()
+
+
+func _exit_tree() -> void:
+	_unregister_console_commands()
+	_disconnect_network_signals()
 
 
 func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void:
@@ -96,6 +104,84 @@ func get_player_by_steam_id(steam_id: int) -> PlayerCharacter:
 
 func get_local_player() -> PlayerCharacter:
 	return local_player
+
+
+func console_kill_character() -> void:
+	if local_player == null:
+		ConsoleOutput.print_console("ERROR: Local character is not ready.", runtime)
+		return
+	if GameSession.is_multiplayer() and not NetworkManager.is_ready():
+		ConsoleOutput.print_console("ERROR: Cannot kill character: network is not ready.", runtime)
+		return
+
+	if GameSession.is_multiplayer() and not GameSession.is_host():
+		NetworkManager.request_character_kill()
+		return
+
+	_kill_and_respawn_player(local_player)
+
+
+func _kill_and_respawn_player(player: PlayerCharacter) -> void:
+	if player == null:
+		return
+
+	player.die()
+	runtime.notify_entity_action_finished_in_turn(player)
+	if GameSession.is_multiplayer():
+		NetworkManager.broadcast_entity_respawn(
+			player.entity_id,
+			player.spawn_cell,
+			player.health
+		)
+
+	ConsoleOutput.print_console("Character killed and respawned at %s." % str(player.spawn_cell), runtime)
+
+
+func _register_console_commands() -> void:
+	var console: Node = get_node_or_null("/root/Console")
+	if console == null or not console.has_method("add_command"):
+		return
+
+	console.add_command(
+		KILL_COMMAND_NAME,
+		console_kill_character,
+		0,
+		0,
+		"Kill and immediately respawn the local character."
+	)
+
+
+func _unregister_console_commands() -> void:
+	var console: Node = get_node_or_null("/root/Console")
+	if console == null or not console.has_method("remove_command"):
+		return
+
+	console.remove_command(KILL_COMMAND_NAME)
+
+
+func _connect_network_signals() -> void:
+	if not NetworkManager.character_kill_requested.is_connected(_on_character_kill_requested):
+		NetworkManager.character_kill_requested.connect(_on_character_kill_requested)
+
+
+func _disconnect_network_signals() -> void:
+	if NetworkManager.character_kill_requested.is_connected(_on_character_kill_requested):
+		NetworkManager.character_kill_requested.disconnect(_on_character_kill_requested)
+
+
+func _on_character_kill_requested(requester_peer_id: int) -> void:
+	if not GameSession.is_host():
+		return
+
+	var target_player: PlayerCharacter = local_player
+	if requester_peer_id != 0:
+		var requester_steam_id: int = NetworkManager.get_steam_id_for_peer_id(requester_peer_id)
+		target_player = get_player_by_steam_id(requester_steam_id)
+
+	if target_player == null:
+		return
+
+	_kill_and_respawn_player(target_player)
 
 
 func _spawn_player(

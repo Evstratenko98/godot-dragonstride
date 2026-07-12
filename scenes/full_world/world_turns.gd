@@ -164,6 +164,19 @@ func notify_entity_action_finished(entity: Node) -> void:
 	_finish_pending_turn_if_ready()
 
 
+func notify_entity_removed(entity: Node) -> void:
+	if not _is_authority() or entity == null:
+		return
+
+	var entity_id: String = runtime.get_entity_id(entity)
+	if entity_id.is_empty() or not pending_world_entity_ids.has(entity_id):
+		return
+
+	pending_world_entity_ids.erase(entity_id)
+	if not is_starting_world_behaviors:
+		_finish_world_turn_if_ready()
+
+
 func request_end_turn(entity: Node) -> void:
 	if state != STATE_PLAYER_TURN or not _is_active_entity(entity):
 		return
