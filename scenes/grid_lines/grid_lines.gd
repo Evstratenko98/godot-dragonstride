@@ -87,12 +87,19 @@ func _get_world_cell_size() -> int:
 
 func _is_cell_walkable(cell: Vector2i) -> bool:
 	if runtime != null:
-		return runtime.is_cell_walkable(cell)
+		return runtime.is_cell_walkable_for_character(cell)
 
 	if level == null:
 		return false
 
-	for layer_name in level.walkable_layer_names:
+	if _is_cell_in_layers(cell, level.walkable_layer_names):
+		return true
+
+	return _is_cell_in_layers(cell, level.character_walkable_layer_names)
+
+
+func _is_cell_in_layers(cell: Vector2i, layer_names: PackedStringArray) -> bool:
+	for layer_name in layer_names:
 		var layer: Node = level.get_node_or_null(NodePath(str(layer_name)))
 		if layer is TileMapLayer and layer.get_cell_source_id(cell) != -1:
 			return true

@@ -7,10 +7,10 @@ const SINGLEPLAYER_WARRIOR_COLOR := "Purple"
 const MULTIPLAYER_WARRIOR_COLORS := ["Blue", "Purple", "Red", "Yellow"]
 
 @export var spawn_cells: Array[Vector2i] = [
-	Vector2i(5, 5),
-	Vector2i(6, 5),
-	Vector2i(5, 6),
-	Vector2i(6, 6),
+	Vector2i(8, 0),
+	Vector2i(10, 0),
+	Vector2i(8, 2),
+	Vector2i(10, 2),
 ]
 
 @onready var players_root: Node2D = $"../Players"
@@ -165,7 +165,7 @@ func _get_spawn_cell(index: int) -> Vector2i:
 	for y in range(grid_size.y):
 		for x in range(grid_size.x):
 			var cell: Vector2i = Vector2i(x, y)
-			if runtime.is_cell_walkable(cell):
+			if runtime.is_cell_walkable_for_character(cell):
 				return cell
 
 	return Vector2i(1, 1)

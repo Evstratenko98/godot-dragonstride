@@ -287,6 +287,14 @@ func is_cell_walkable(cell: Vector2i) -> bool:
 	return grid.is_cell_walkable(cell)
 
 
+func is_cell_walkable_for_entity(cell: Vector2i, entity: Entity) -> bool:
+	return grid.is_cell_walkable_for_entity(cell, entity)
+
+
+func is_cell_walkable_for_character(cell: Vector2i) -> bool:
+	return grid.is_cell_walkable_for_character(cell)
+
+
 func is_cell_inside(cell: Vector2i) -> bool:
 	return grid.is_cell_inside(cell)
 
@@ -355,7 +363,11 @@ func _configure_services() -> void:
 		return
 
 	if grid != null:
-		grid.configure(level.grid_size, level.walkable_layer_names)
+		grid.configure(
+			level.grid_size,
+			level.walkable_layer_names,
+			level.character_walkable_layer_names
+		)
 	if players_service != null:
 		players_service.configure(level.spawn_cells)
 

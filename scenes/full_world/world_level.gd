@@ -1,13 +1,14 @@
 class_name WorldLevel
 extends Node2D
 
-@export var grid_size: Vector2i = Vector2i(18, 18)
+@export var grid_size: Vector2i = Vector2i(19, 19)
 @export var walkable_layer_names: PackedStringArray = ["Ground"]
+@export var character_walkable_layer_names: PackedStringArray = ["Hay", "Bridge"]
 @export var spawn_cells: Array[Vector2i] = [
-	Vector2i(5, 5),
-	Vector2i(6, 5),
-	Vector2i(5, 6),
-	Vector2i(6, 6),
+	Vector2i(8, 0),
+	Vector2i(10, 0),
+	Vector2i(8, 2),
+	Vector2i(10, 2),
 ]
 
 

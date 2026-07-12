@@ -163,8 +163,13 @@ func get_placement_error(spawn_node: Node, anchor_cell: Vector2i) -> String:
 
 
 func can_enter_cell(cell: Vector2i, moving_entity: Node = null) -> bool:
+	var typed_entity: Entity = moving_entity as Entity
 	for occupied_cell in _get_node_occupied_cells(moving_entity, cell):
-		if not runtime.is_cell_inside(occupied_cell) or not runtime.is_cell_walkable(occupied_cell) or occupied_cells.has(occupied_cell):
+		if (
+			not runtime.is_cell_inside(occupied_cell)
+			or not runtime.is_cell_walkable_for_entity(occupied_cell, typed_entity)
+			or occupied_cells.has(occupied_cell)
+		):
 			return false
 
 		var entity_at_cell: Node = entity_cells.get(occupied_cell, null) as Node
@@ -179,7 +184,11 @@ func can_enter_cell(cell: Vector2i, moving_entity: Node = null) -> bool:
 
 
 func is_cell_interactable(cell: Vector2i) -> bool:
-	return runtime.is_cell_inside(cell) and (runtime.is_cell_walkable(cell) or occupied_cells.has(cell) or entity_cells.has(cell))
+	return runtime.is_cell_inside(cell) and (
+		runtime.is_cell_walkable_for_character(cell)
+		or occupied_cells.has(cell)
+		or entity_cells.has(cell)
+	)
 
 
 func get_cell_display_name(cell: Vector2i) -> String:
@@ -187,12 +196,24 @@ func get_cell_display_name(cell: Vector2i) -> String:
 	if target_entity != null:
 		return runtime.get_entity_display_name(target_entity)
 
-	for layer_name in level.walkable_layer_names:
-		var layer: Node = level.get_node_or_null(NodePath(layer_name))
-		if layer is TileMapLayer and layer.get_cell_source_id(cell) != -1:
-			return layer.name
+	var character_layer_name: String = _get_layer_name_at_cell(cell, level.character_walkable_layer_names)
+	if not character_layer_name.is_empty():
+		return character_layer_name
+
+	var walkable_layer_name: String = _get_layer_name_at_cell(cell, level.walkable_layer_names)
+	if not walkable_layer_name.is_empty():
+		return walkable_layer_name
 
 	return "ground"
+
+
+func _get_layer_name_at_cell(cell: Vector2i, layer_names: PackedStringArray) -> String:
+	for layer_name in layer_names:
+		var layer: Node = level.get_node_or_null(NodePath(layer_name))
+		if layer is TileMapLayer and layer.get_cell_source_id(cell) != -1:
+			return str(layer.name)
+
+	return ""
 
 
 func _register_object(blocker: Node) -> void:
