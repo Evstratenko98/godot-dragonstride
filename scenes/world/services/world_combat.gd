@@ -26,8 +26,13 @@ func apply_attack_to_cell(
 
 	var target_object: GridObject = runtime.get_object_at_cell(cell) as GridObject
 	if target_object != null:
+		var was_damaged: bool = target_object.take_damage()
+		if not was_damaged:
+			return
 		print_non_entity_attack_result(attacker, cell)
-		target_object.take_damage()
+		if target_object is ItemObject:
+			runtime.remove_world_object(target_object)
+			return
 		runtime.broadcast_object_state(target_object)
 		return
 

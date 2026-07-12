@@ -114,6 +114,10 @@ func unregister_object(target_object: Node) -> void:
 	registry.unregister_object(target_object)
 
 
+func remove_world_object(target_object: GridObject) -> bool:
+	return spawner.remove_world_object(target_object)
+
+
 func get_placement_error(spawn_node: Node, anchor_cell: Vector2i) -> String:
 	return registry.get_placement_error(spawn_node, anchor_cell)
 

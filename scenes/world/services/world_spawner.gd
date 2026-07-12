@@ -11,6 +11,7 @@ const SHEEP_SCENE := preload("res://scenes/entities/sheep/sheep.tscn")
 const WARRIOR_SCENE := preload("res://scenes/entities/enemies/warrior/warrior.tscn")
 const TREE_SCENE := preload("res://scenes/objects/tree/tree.tscn")
 const HOUSE_SCENE := preload("res://scenes/objects/house/house.tscn")
+const MEAT_SCENE := preload("res://scenes/objects/meat/meat.tscn")
 
 const CATALOG := {
 	"sheep": {
@@ -32,6 +33,11 @@ const CATALOG := {
 		"kind": SPAWN_KIND_OBJECT,
 		"scene": HOUSE_SCENE,
 		"display_name": "House",
+	},
+	"meat": {
+		"kind": SPAWN_KIND_OBJECT,
+		"scene": MEAT_SCENE,
+		"display_name": "Meat",
 	},
 }
 
@@ -104,6 +110,23 @@ func console_clear_full(type_key: String = "") -> void:
 		return
 
 	_clear_authoritative(normalized_type, 0)
+
+
+func remove_world_object(target_object: GridObject) -> bool:
+	if target_object == null:
+		return false
+	if GameSession.is_multiplayer() and not GameSession.is_host():
+		return false
+
+	var removal_record: Dictionary = _remove_world_item(target_object)
+	if removal_record.is_empty():
+		return false
+
+	if GameSession.is_multiplayer():
+		var removal_records: Array[Dictionary] = [removal_record]
+		NetworkManager.broadcast_world_items_removed(removal_records)
+
+	return true
 
 
 func _try_create_authoritative(type_key: String, cell: Vector2i, should_broadcast: bool, requester_peer_id: int) -> bool:
