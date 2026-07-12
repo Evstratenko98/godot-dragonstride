@@ -41,6 +41,10 @@ func consider_character_trigger(_character: Node) -> void:
 	pass
 
 
+func consider_character_defeated(_character_entity_id: String) -> void:
+	pass
+
+
 func apply_remote_ai_state(_new_state: String, _new_target_entity_id: String, _reason: String) -> void:
 	pass
 

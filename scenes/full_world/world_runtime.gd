@@ -69,7 +69,13 @@ func handle_entity_attack(attacker: Node, target_cell: Vector2i, should_broadcas
 
 
 func handle_entity_move_started(entity: Node, from_cell: Vector2i, target_cell: Vector2i, should_broadcast: bool = true) -> void:
-	network.broadcast_entity_move_started(entity, from_cell, target_cell, should_broadcast)
+	network.request_entity_move_started(entity, from_cell, target_cell, should_broadcast)
+
+
+func handle_entity_move_completed(entity: Node, from_cell: Vector2i, target_cell: Vector2i, should_broadcast: bool = true) -> void:
+	complete_entity_move(entity, from_cell, target_cell)
+	notify_entity_moved_in_turn(entity, from_cell, target_cell)
+	network.report_entity_move_completed(entity, from_cell, target_cell, should_broadcast)
 
 
 func handle_character_attack(attacker: Node, target_cell: Vector2i) -> void:
@@ -108,6 +114,11 @@ func respawn_entity(entity: Node, cell: Vector2i) -> void:
 	registry.respawn_entity(entity, cell)
 
 
+func notify_character_defeated(character: PlayerCharacter) -> void:
+	if awareness != null:
+		awareness.notify_character_defeated(character)
+
+
 func sync_entity_cell(entity: Node, cell: Vector2i) -> void:
 	var previous_cell: Vector2i = Vector2i.ZERO
 	var had_previous_cell: bool = entity != null and entity.get("current_cell") != null
@@ -129,6 +140,14 @@ func get_entity_by_id(entity_id: String) -> Node:
 
 func get_entity_at_cell(cell: Vector2i) -> Node:
 	return registry.get_entity_at_cell(cell)
+
+
+func is_entity_registered_at_cell(entity: Node, cell: Vector2i) -> bool:
+	return registry.is_entity_registered_at_cell(entity, cell)
+
+
+func has_entity_cell_reservation(entity: Node, cell: Vector2i) -> bool:
+	return registry.has_entity_cell_reservation(entity, cell)
 
 
 func get_object_at_cell(cell: Vector2i) -> Node:

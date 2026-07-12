@@ -45,7 +45,8 @@ func apply_remote_state(
 	remote_position: Vector2,
 	animation: String,
 	moving: bool,
-	remote_facing_left: bool
+	remote_facing_left: bool,
+	should_sync_cell: bool = true
 ) -> void:
 	if is_attacking:
 		return
@@ -57,7 +58,7 @@ func apply_remote_state(
 	if character_view != null:
 		character_view.apply_remote_visual_state(animation, remote_facing_left)
 
-	if runtime != null:
+	if runtime != null and should_sync_cell:
 		current_cell = runtime.world_to_cell(global_position)
 		if not moving:
 			runtime.sync_entity_cell(self, current_cell)
@@ -102,6 +103,8 @@ func send_network_state() -> void:
 
 
 func die() -> void:
+	if runtime != null:
+		runtime.notify_character_defeated(self)
 	respawn()
 
 

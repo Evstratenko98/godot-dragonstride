@@ -37,6 +37,19 @@ func notify_character_changed(character: Node) -> void:
 			(entity as NonPlayerEntity).consider_character_trigger(character)
 
 
+func notify_character_defeated(character: PlayerCharacter) -> void:
+	if not _can_update_warrior_ai_state() or character == null:
+		return
+
+	var character_entity_id: String = runtime.get_entity_id(character)
+	if character_entity_id.is_empty():
+		return
+
+	for entity in runtime.get_registered_entities():
+		if entity is NonPlayerEntity:
+			(entity as NonPlayerEntity).consider_character_defeated(character_entity_id)
+
+
 func is_character_entity(entity: Node) -> bool:
 	return entity != null and entity.get("entity_type") != null and int(entity.get("entity_type")) == Entity.EntityType.CHARACTER
 

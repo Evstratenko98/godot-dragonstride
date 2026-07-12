@@ -201,8 +201,7 @@ func _move_to_cell(target_cell: Vector2i, should_broadcast: bool = true) -> void
 		is_moving = false
 
 		if runtime != null:
-			runtime.complete_entity_move(self, from_cell, target_cell)
-			runtime.notify_entity_moved_in_turn(self, from_cell, target_cell)
+			runtime.handle_entity_move_completed(self, from_cell, target_cell, should_broadcast)
 
 		_on_move_finished(target_cell)
 		if _try_continue_moving():

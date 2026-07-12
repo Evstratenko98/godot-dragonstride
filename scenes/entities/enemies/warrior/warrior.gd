@@ -23,8 +23,8 @@ var ai_state: String = STATE_PASSIVE
 var target_entity_id: String = ""
 var attacks_used_this_turn: int = 0
 var is_running_behavior_turn: bool = false
+var ignored_defeated_character_ids: Dictionary[String, bool] = {}
 var pending_behavior_attack_target_id: String = ""
-var pending_behavior_attack_was_lethal: bool = false
 var remote_action_queue: Array[Dictionary] = []
 var is_processing_remote_actions: bool = false
 var is_replaying_remote_action: bool = false
@@ -140,6 +140,9 @@ func consider_character_triggers(characters: Array[Node]) -> void:
 
 	var selected_character: Node = null
 	for character in characters:
+		if ignored_defeated_character_ids.has(_get_entity_id(character)):
+			continue
+
 		if _can_trigger_on_character(character):
 			selected_character = character
 
@@ -151,10 +154,22 @@ func consider_character_trigger(character: Node) -> void:
 	if not _is_ai_authority() or not _is_turn_mode_enabled():
 		return
 
+	ignored_defeated_character_ids.erase(_get_entity_id(character))
 	if not _can_trigger_on_character(character):
 		return
 
 	_set_ai_state(STATE_ACTIVE, _get_entity_id(character), REASON_NONE)
+
+
+func consider_character_defeated(character_entity_id: String) -> void:
+	if not _is_ai_authority() or character_entity_id.is_empty():
+		return
+
+	if ai_state != STATE_ACTIVE or target_entity_id != character_entity_id:
+		return
+
+	ignored_defeated_character_ids[character_entity_id] = true
+	_set_ai_state(STATE_PASSIVE, "", REASON_TARGET_DEFEATED)
 
 
 func apply_remote_ai_state(new_state: String, new_target_entity_id: String, reason: String) -> void:
@@ -285,14 +300,18 @@ func _attack(
 
 	if view != null:
 		await view.play_attack(attack_facing_left, update_horizontal_facing)
-	if should_apply:
+
+	var can_apply_attack: bool = should_apply
+	if not pending_behavior_attack_target_id.is_empty():
+		can_apply_attack = (
+			ai_state == STATE_ACTIVE
+			and target_entity_id == pending_behavior_attack_target_id
+		)
+
+	if can_apply_attack:
 		_apply_attack_to_world(should_broadcast)
 
-	if pending_behavior_attack_was_lethal:
-		_set_ai_state(STATE_PASSIVE, "", REASON_TARGET_DEFEATED)
-
 	pending_behavior_attack_target_id = ""
-	pending_behavior_attack_was_lethal = false
 	is_attacking = false
 	if runtime != null:
 		runtime.notify_entity_action_finished_in_turn(self)
@@ -310,7 +329,6 @@ func _perform_behavior_attack(target: Node) -> bool:
 
 	attacks_used_this_turn += 1
 	pending_behavior_attack_target_id = _get_entity_id(target)
-	pending_behavior_attack_was_lethal = _will_attack_defeat_target(target)
 
 	var target_cell: Vector2i = target.get("current_cell")
 	var direction: Vector2i = _get_attack_direction_to_cell(target_cell)
@@ -520,13 +538,6 @@ func _get_passive_reason_text(reason: String) -> String:
 		return "no target"
 
 	return reason
-
-
-func _will_attack_defeat_target(target: Node) -> bool:
-	if target == null or target.get("health") == null:
-		return false
-
-	return int(target.get("health")) > 0 and int(target.get("health")) <= damage
 
 
 func _get_registered_characters() -> Array[Node]:

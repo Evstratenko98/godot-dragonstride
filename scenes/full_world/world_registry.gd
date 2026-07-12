@@ -74,6 +74,8 @@ func reserve_entity_cell(entity: Node, _from_cell: Vector2i, target_cell: Vector
 
 func complete_entity_move(entity: Node, _from_cell: Vector2i, target_cell: Vector2i) -> void:
 	_remove_entity_cell_refs(entity)
+	if entity is Entity:
+		(entity as Entity).current_cell = target_cell
 	_add_entity_cells(entity, target_cell)
 
 
@@ -97,6 +99,28 @@ func get_entity_by_id(entity_id: String) -> Node:
 
 func get_entity_at_cell(cell: Vector2i) -> Node:
 	return entity_cells.get(cell, null) as Node
+
+
+func is_entity_registered_at_cell(entity: Node, anchor_cell: Vector2i) -> bool:
+	if entity == null:
+		return false
+
+	for cell in _get_node_occupied_cells(entity, anchor_cell):
+		if entity_cells.get(cell, null) != entity:
+			return false
+
+	return true
+
+
+func has_entity_cell_reservation(entity: Node, anchor_cell: Vector2i) -> bool:
+	if entity == null:
+		return false
+
+	for cell in _get_node_occupied_cells(entity, anchor_cell):
+		if reserved_entity_cells.get(cell, null) != entity:
+			return false
+
+	return true
 
 
 func get_object_at_cell(cell: Vector2i) -> Node:

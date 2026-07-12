@@ -18,7 +18,20 @@ signal character_state_received(
 signal attack_requested(steam_id: int, target_cell: Vector2i)
 signal attack_received(steam_id: int, target_cell: Vector2i)
 signal object_state_received(object_id: String, object_state: int)
+signal entity_move_requested(
+	requester_steam_id: int,
+	entity_id: String,
+	from_cell: Vector2i,
+	target_cell: Vector2i
+)
 signal entity_move_received(entity_id: String, from_cell: Vector2i, target_cell: Vector2i)
+signal entity_move_completed_requested(
+	requester_steam_id: int,
+	entity_id: String,
+	from_cell: Vector2i,
+	target_cell: Vector2i
+)
+signal entity_move_completed_received(entity_id: String, from_cell: Vector2i, target_cell: Vector2i)
 signal entity_attack_received(entity_id: String, target_cell: Vector2i)
 signal entity_attack_result_received(
 	attacker_entity_id: String,
@@ -281,15 +294,40 @@ func broadcast_attack(steam_id: int, target_cell: Vector2i) -> void:
 	rpc("_receive_attack", steam_id, target_cell)
 
 
-func broadcast_entity_move(entity_id: String, from_cell: Vector2i, target_cell: Vector2i) -> void:
+func request_entity_move(entity_id: String, from_cell: Vector2i, target_cell: Vector2i) -> void:
 	if not GameSession.is_multiplayer() or not is_ready():
 		return
 
 	if is_host:
-		rpc("_receive_entity_move", entity_id, from_cell, target_cell)
+		broadcast_entity_move(entity_id, from_cell, target_cell)
 		return
 
-	rpc_id(1, "_relay_entity_move", entity_id, from_cell, target_cell)
+	rpc_id(1, "_submit_entity_move", entity_id, from_cell, target_cell)
+
+
+func broadcast_entity_move(entity_id: String, from_cell: Vector2i, target_cell: Vector2i) -> void:
+	if not GameSession.is_multiplayer() or not is_host or not is_ready():
+		return
+
+	rpc("_receive_entity_move", entity_id, from_cell, target_cell)
+
+
+func report_entity_move_completed(entity_id: String, from_cell: Vector2i, target_cell: Vector2i) -> void:
+	if not GameSession.is_multiplayer() or not is_ready():
+		return
+
+	if is_host:
+		broadcast_entity_move_completed(entity_id, from_cell, target_cell)
+		return
+
+	rpc_id(1, "_submit_entity_move_completed", entity_id, from_cell, target_cell)
+
+
+func broadcast_entity_move_completed(entity_id: String, from_cell: Vector2i, target_cell: Vector2i) -> void:
+	if not GameSession.is_multiplayer() or not is_host or not is_ready():
+		return
+
+	rpc("_receive_entity_move_completed", entity_id, from_cell, target_cell)
 
 
 func broadcast_entity_attack(entity_id: String, target_cell: Vector2i) -> void:
@@ -769,17 +807,39 @@ func _receive_attack(steam_id: int, target_cell: Vector2i) -> void:
 
 
 @rpc("any_peer", "reliable")
-func _relay_entity_move(entity_id: String, from_cell: Vector2i, target_cell: Vector2i) -> void:
+func _submit_entity_move(entity_id: String, from_cell: Vector2i, target_cell: Vector2i) -> void:
 	if not is_host:
 		return
 
-	entity_move_received.emit(entity_id, from_cell, target_cell)
-	rpc("_receive_entity_move", entity_id, from_cell, target_cell)
+	var sender_peer_id: int = multiplayer.get_remote_sender_id()
+	var requester_steam_id: int = get_steam_id_for_peer_id(sender_peer_id)
+	if requester_steam_id == 0:
+		return
+
+	entity_move_requested.emit(requester_steam_id, entity_id, from_cell, target_cell)
 
 
 @rpc("authority", "reliable")
 func _receive_entity_move(entity_id: String, from_cell: Vector2i, target_cell: Vector2i) -> void:
 	entity_move_received.emit(entity_id, from_cell, target_cell)
+
+
+@rpc("any_peer", "reliable")
+func _submit_entity_move_completed(entity_id: String, from_cell: Vector2i, target_cell: Vector2i) -> void:
+	if not is_host:
+		return
+
+	var sender_peer_id: int = multiplayer.get_remote_sender_id()
+	var requester_steam_id: int = get_steam_id_for_peer_id(sender_peer_id)
+	if requester_steam_id == 0:
+		return
+
+	entity_move_completed_requested.emit(requester_steam_id, entity_id, from_cell, target_cell)
+
+
+@rpc("authority", "reliable")
+func _receive_entity_move_completed(entity_id: String, from_cell: Vector2i, target_cell: Vector2i) -> void:
+	entity_move_completed_received.emit(entity_id, from_cell, target_cell)
 
 
 @rpc("any_peer", "reliable")

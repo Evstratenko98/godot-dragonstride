@@ -38,6 +38,15 @@ func connect_signals() -> void:
 	if not NetworkManager.entity_move_received.is_connected(_on_entity_move_received):
 		NetworkManager.entity_move_received.connect(_on_entity_move_received)
 
+	if not NetworkManager.entity_move_requested.is_connected(_on_entity_move_requested):
+		NetworkManager.entity_move_requested.connect(_on_entity_move_requested)
+
+	if not NetworkManager.entity_move_completed_requested.is_connected(_on_entity_move_completed_requested):
+		NetworkManager.entity_move_completed_requested.connect(_on_entity_move_completed_requested)
+
+	if not NetworkManager.entity_move_completed_received.is_connected(_on_entity_move_completed_received):
+		NetworkManager.entity_move_completed_received.connect(_on_entity_move_completed_received)
+
 	if not NetworkManager.entity_attack_received.is_connected(_on_entity_attack_received):
 		NetworkManager.entity_attack_received.connect(_on_entity_attack_received)
 
@@ -82,6 +91,15 @@ func disconnect_signals() -> void:
 	if NetworkManager.entity_move_received.is_connected(_on_entity_move_received):
 		NetworkManager.entity_move_received.disconnect(_on_entity_move_received)
 
+	if NetworkManager.entity_move_requested.is_connected(_on_entity_move_requested):
+		NetworkManager.entity_move_requested.disconnect(_on_entity_move_requested)
+
+	if NetworkManager.entity_move_completed_requested.is_connected(_on_entity_move_completed_requested):
+		NetworkManager.entity_move_completed_requested.disconnect(_on_entity_move_completed_requested)
+
+	if NetworkManager.entity_move_completed_received.is_connected(_on_entity_move_completed_received):
+		NetworkManager.entity_move_completed_received.disconnect(_on_entity_move_completed_received)
+
 	if NetworkManager.entity_attack_received.is_connected(_on_entity_attack_received):
 		NetworkManager.entity_attack_received.disconnect(_on_entity_attack_received)
 
@@ -125,7 +143,7 @@ func apply_cached_entity_ai_states() -> void:
 		)
 
 
-func broadcast_entity_move_started(entity: Node, from_cell: Vector2i, target_cell: Vector2i, should_broadcast: bool = true) -> void:
+func request_entity_move_started(entity: Node, from_cell: Vector2i, target_cell: Vector2i, should_broadcast: bool = true) -> void:
 	if not should_broadcast or not GameSession.is_multiplayer():
 		return
 
@@ -133,7 +151,18 @@ func broadcast_entity_move_started(entity: Node, from_cell: Vector2i, target_cel
 	if id.is_empty():
 		return
 
-	NetworkManager.broadcast_entity_move(id, from_cell, target_cell)
+	NetworkManager.request_entity_move(id, from_cell, target_cell)
+
+
+func report_entity_move_completed(entity: Node, from_cell: Vector2i, target_cell: Vector2i, should_broadcast: bool = true) -> void:
+	if not should_broadcast or not GameSession.is_multiplayer() or not (entity is PlayerCharacter):
+		return
+
+	var id: String = runtime.get_entity_id(entity)
+	if id.is_empty():
+		return
+
+	NetworkManager.report_entity_move_completed(id, from_cell, target_cell)
 
 
 func broadcast_object_state(target_object: Node) -> void:
@@ -186,7 +215,14 @@ func _on_character_state_received(
 	if GameSession.is_host() and not runtime.can_entity_sync_state_in_turn(player):
 		return
 
-	player.apply_remote_state(player_position, animation, is_moving_player, facing_left_player)
+	var should_sync_cell: bool = not (GameSession.is_host() and runtime.is_turn_mode_enabled())
+	player.apply_remote_state(
+		player_position,
+		animation,
+		is_moving_player,
+		facing_left_player,
+		should_sync_cell
+	)
 
 
 func _on_attack_requested(steam_id: int, target_cell: Vector2i) -> void:
@@ -225,18 +261,116 @@ func _on_entity_move_received(entity_id: String, from_cell: Vector2i, target_cel
 	if entity == null or entity == runtime.get_local_player():
 		return
 
-	if GameSession.is_host() and not runtime.can_entity_move_in_turn(entity):
-		return
-
 	if entity is NonPlayerEntity:
 		(entity as NonPlayerEntity).play_remote_move(from_cell, target_cell)
 		return
 
-	if not runtime.reserve_entity_cell(entity, from_cell, target_cell):
+	runtime.reserve_entity_cell(entity, from_cell, target_cell)
+
+
+func _on_entity_move_requested(
+	requester_steam_id: int,
+	entity_id: String,
+	from_cell: Vector2i,
+	target_cell: Vector2i
+) -> void:
+	var player: PlayerCharacter = _get_requested_player(requester_steam_id, entity_id)
+	if not _can_accept_player_move_started(player, from_cell, target_cell):
 		return
 
-	if GameSession.is_host():
-		runtime.notify_entity_moved_in_turn(entity, from_cell, target_cell)
+	if not runtime.reserve_entity_cell(player, from_cell, target_cell):
+		return
+
+	NetworkManager.broadcast_entity_move(entity_id, from_cell, target_cell)
+
+
+func _on_entity_move_completed_requested(
+	requester_steam_id: int,
+	entity_id: String,
+	from_cell: Vector2i,
+	target_cell: Vector2i
+) -> void:
+	var player: PlayerCharacter = _get_requested_player(requester_steam_id, entity_id)
+	if not _can_accept_player_move_completed(player, from_cell, target_cell):
+		return
+
+	_apply_confirmed_player_move(player, from_cell, target_cell)
+	runtime.notify_entity_moved_in_turn(player, from_cell, target_cell)
+	NetworkManager.broadcast_entity_move_completed(entity_id, from_cell, target_cell)
+
+
+func _on_entity_move_completed_received(entity_id: String, from_cell: Vector2i, target_cell: Vector2i) -> void:
+	var player: PlayerCharacter = runtime.get_entity_by_id(entity_id) as PlayerCharacter
+	if player == null or player == runtime.get_local_player():
+		return
+
+	_apply_confirmed_player_move(player, from_cell, target_cell)
+
+
+func _get_requested_player(requester_steam_id: int, entity_id: String) -> PlayerCharacter:
+	if not GameSession.is_host() or requester_steam_id == 0:
+		return null
+
+	var player: PlayerCharacter = runtime.get_entity_by_id(entity_id) as PlayerCharacter
+	if player == null or player.steam_id != requester_steam_id:
+		return null
+
+	if runtime.get_player_by_steam_id(requester_steam_id) != player:
+		return null
+
+	return player
+
+
+func _can_accept_player_move_started(
+	player: PlayerCharacter,
+	from_cell: Vector2i,
+	target_cell: Vector2i
+) -> bool:
+	if player == null or player.health <= 0:
+		return false
+
+	if not _is_single_cell_move(from_cell, target_cell):
+		return false
+
+	if not runtime.is_entity_registered_at_cell(player, from_cell):
+		return false
+
+	if not runtime.can_entity_move_in_turn(player):
+		return false
+
+	return runtime.can_enter_cell(target_cell, player)
+
+
+func _can_accept_player_move_completed(
+	player: PlayerCharacter,
+	from_cell: Vector2i,
+	target_cell: Vector2i
+) -> bool:
+	if player == null or player.health <= 0:
+		return false
+
+	if not _is_single_cell_move(from_cell, target_cell):
+		return false
+
+	if not runtime.is_entity_registered_at_cell(player, from_cell):
+		return false
+
+	if not runtime.has_entity_cell_reservation(player, target_cell):
+		return false
+
+	return runtime.can_entity_move_in_turn(player)
+
+
+func _apply_confirmed_player_move(player: PlayerCharacter, from_cell: Vector2i, target_cell: Vector2i) -> void:
+	player.global_position = runtime.cell_to_world(target_cell)
+	player.current_cell = target_cell
+	player.is_moving = false
+	runtime.complete_entity_move(player, from_cell, target_cell)
+
+
+func _is_single_cell_move(from_cell: Vector2i, target_cell: Vector2i) -> bool:
+	var delta: Vector2i = target_cell - from_cell
+	return absi(delta.x) + absi(delta.y) == 1
 
 
 func _on_entity_attack_received(entity_id: String, target_cell: Vector2i) -> void:
