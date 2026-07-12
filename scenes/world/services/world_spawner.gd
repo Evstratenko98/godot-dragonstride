@@ -41,17 +41,14 @@ var spawned_counter: int = 0
 
 
 func _ready() -> void:
-	level = get_parent() as WorldLevel
-	if level != null:
-		runtime = level.get_runtime()
 	_register_console_commands()
 	_connect_network_signals()
-	call_deferred("_apply_cached_world_spawns")
 
 
 func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void:
 	runtime = new_runtime
 	level = new_level
+	call_deferred("_apply_cached_world_spawns")
 
 
 func _exit_tree() -> void:
@@ -399,7 +396,7 @@ func _has_spawn_id(spawn_id: String) -> bool:
 
 
 func _get_world_entities_root() -> Node2D:
-	var root: Node2D = level.get_node_or_null("WorldEntities") as Node2D
+	var root: Node2D = level.get_world_entities_root()
 	if root != null:
 		return root
 
@@ -410,7 +407,7 @@ func _get_world_entities_root() -> Node2D:
 
 
 func _get_spawned_objects_root() -> Node2D:
-	var root: Node2D = level.get_node_or_null("SpawnedObjects") as Node2D
+	var root: Node2D = level.get_spawned_objects_root()
 	if root != null:
 		return root
 

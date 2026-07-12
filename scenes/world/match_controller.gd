@@ -1,0 +1,125 @@
+class_name MatchController
+extends Node
+
+const MAIN_MENU_SCENE_PATH := "res://scenes/menu/main_menu/main_menu.tscn"
+
+@export var runtime_path: NodePath = ^"../WorldRuntime"
+@export var level_container_path: NodePath = ^"../LevelContainer"
+@export var grid_lines_path: NodePath = ^"../GridLines"
+@export var cell_hover_path: NodePath = ^"../CellHover"
+@export var music_player_path: NodePath = ^"../Music"
+@export var death_sound_player_path: NodePath = ^"../DeathSound"
+
+@onready var runtime: WorldRuntime = get_node(runtime_path) as WorldRuntime
+@onready var level_container: Node2D = get_node(level_container_path) as Node2D
+@onready var grid_lines: GridLines = get_node(grid_lines_path) as GridLines
+@onready var cell_hover: CellHover = get_node(cell_hover_path) as CellHover
+@onready var music_player: AudioStreamPlayer = get_node(music_player_path) as AudioStreamPlayer
+@onready var death_sound_player: AudioStreamPlayer = get_node(death_sound_player_path) as AudioStreamPlayer
+
+var level: WorldLevel = null
+var is_ending_game: bool = false
+var has_started_match: bool = false
+
+
+func _ready() -> void:
+	if not GameSession.has_active_session():
+		GameSession.start_singleplayer()
+
+	call_deferred("_initialize_match")
+
+
+func _exit_tree() -> void:
+	if runtime != null:
+		if runtime.match_end_requested.is_connected(_on_runtime_match_end_requested):
+			runtime.match_end_requested.disconnect(_on_runtime_match_end_requested)
+		runtime.disconnect_signals()
+
+
+func start_match() -> void:
+	if has_started_match or runtime == null or level == null:
+		return
+
+	has_started_match = true
+	runtime.start_game()
+	_play_level_music()
+
+
+func game_over(should_broadcast: bool = true) -> void:
+	if is_ending_game:
+		return
+
+	if should_broadcast and GameSession.is_multiplayer():
+		NetworkManager.request_end_game()
+		return
+
+	is_ending_game = true
+	_stop_level_music()
+	_play_level_death_sound()
+	_leave_active_multiplayer_session()
+	GameSession.clear()
+	get_tree().change_scene_to_file(MAIN_MENU_SCENE_PATH)
+
+
+func _initialize_match() -> void:
+	if not is_inside_tree():
+		return
+
+	var level_scene: PackedScene = GameSession.get_selected_level_scene()
+	if level_scene == null:
+		push_error("Selected level scene is not available: " + GameSession.selected_level_id)
+		return
+
+	var loaded_level: WorldLevel = level_scene.instantiate() as WorldLevel
+	if loaded_level == null:
+		push_error("Selected scene root must inherit WorldLevel: " + GameSession.selected_level_id)
+		return
+
+	level = loaded_level
+	runtime.configure_for_level(level)
+	if not runtime.match_end_requested.is_connected(_on_runtime_match_end_requested):
+		runtime.match_end_requested.connect(_on_runtime_match_end_requested)
+	level_container.add_child(level)
+	grid_lines.configure_context(runtime, level)
+	cell_hover.configure_context(runtime)
+	_configure_level_audio()
+	runtime.connect_signals()
+	call_deferred("_start_match_deferred")
+
+
+func _start_match_deferred() -> void:
+	if not is_inside_tree():
+		return
+
+	start_match()
+
+
+func _configure_level_audio() -> void:
+	music_player.stream = level.get_music_stream()
+	death_sound_player.stream = level.get_death_sound_stream()
+
+
+func _play_level_music() -> void:
+	if music_player.stream != null:
+		music_player.play()
+
+
+func _stop_level_music() -> void:
+	music_player.stop()
+
+
+func _play_level_death_sound() -> void:
+	if death_sound_player.stream != null:
+		death_sound_player.play()
+
+
+func _leave_active_multiplayer_session() -> void:
+	if SteamManager.get_current_lobby_id() != 0:
+		SteamManager.leave_lobby()
+		return
+
+	NetworkManager.stop_network()
+
+
+func _on_runtime_match_end_requested() -> void:
+	game_over(false)

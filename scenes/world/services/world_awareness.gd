@@ -5,12 +5,6 @@ var runtime: WorldRuntime = null
 var level: WorldLevel = null
 
 
-func _ready() -> void:
-	level = get_parent() as WorldLevel
-	if level != null:
-		runtime = level.get_runtime()
-
-
 func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void:
 	runtime = new_runtime
 	level = new_level

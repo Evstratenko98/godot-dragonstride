@@ -10,12 +10,6 @@ var reserved_entity_cells: Dictionary = {}
 var entities_by_id: Dictionary = {}
 
 
-func _ready() -> void:
-	level = get_parent() as WorldLevel
-	if level != null:
-		runtime = level.get_runtime()
-
-
 func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void:
 	runtime = new_runtime
 	level = new_level
@@ -209,11 +203,11 @@ func get_cell_display_name(cell: Vector2i) -> String:
 	if target_entity != null:
 		return runtime.get_entity_display_name(target_entity)
 
-	var character_layer_name: String = _get_layer_name_at_cell(cell, level.character_walkable_layer_names)
+	var character_layer_name: String = _get_layer_name_at_cell(cell, level.get_character_walkable_layer_names())
 	if not character_layer_name.is_empty():
 		return character_layer_name
 
-	var walkable_layer_name: String = _get_layer_name_at_cell(cell, level.walkable_layer_names)
+	var walkable_layer_name: String = _get_layer_name_at_cell(cell, level.get_walkable_layer_names())
 	if not walkable_layer_name.is_empty():
 		return walkable_layer_name
 

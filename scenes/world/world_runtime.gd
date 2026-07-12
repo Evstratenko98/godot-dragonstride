@@ -1,6 +1,17 @@
 class_name WorldRuntime
 extends Node
 
+signal match_end_requested()
+
+@export var grid_path: NodePath = ^"../Grid"
+@export var registry_path: NodePath = ^"../Registry"
+@export var players_service_path: NodePath = ^"../PlayersService"
+@export var combat_path: NodePath = ^"../Combat"
+@export var network_path: NodePath = ^"../Network"
+@export var turn_manager_path: NodePath = ^"../TurnManager"
+@export var spawner_path: NodePath = ^"../WorldSpawner"
+@export var awareness_path: NodePath = ^"../Awareness"
+
 var level: WorldLevel = null
 var grid: WorldGrid = null
 var registry: WorldRegistry = null
@@ -12,12 +23,10 @@ var spawner: WorldSpawner = null
 var awareness: WorldAwareness = null
 
 
-func _ready() -> void:
-	configure_for_level(get_parent() as WorldLevel)
-
-
 func configure_for_level(new_level: WorldLevel) -> void:
 	level = new_level
+	if level != null:
+		level.configure_runtime(self)
 	_bind_services()
 	_configure_services()
 
@@ -58,11 +67,13 @@ func start_game() -> void:
 
 
 func connect_signals() -> void:
-	network.connect_signals()
+	if network != null:
+		network.connect_signals()
 
 
 func disconnect_signals() -> void:
-	network.disconnect_signals()
+	if network != null:
+		network.disconnect_signals()
 
 
 func handle_entity_attack(attacker: Node, target_cell: Vector2i, should_broadcast: bool = true) -> void:
@@ -278,6 +289,10 @@ func get_local_player() -> PlayerCharacter:
 	return players_service.get_local_player()
 
 
+func get_players_root() -> Node2D:
+	return players_service.get_players_root()
+
+
 func update_player_authorities() -> void:
 	players_service.update_player_authorities()
 
@@ -338,14 +353,14 @@ func _bind_services() -> void:
 	if level == null:
 		return
 
-	grid = level.get_node_or_null("Grid") as WorldGrid
-	registry = level.get_node_or_null("Registry") as WorldRegistry
-	players_service = level.get_node_or_null("PlayersService") as WorldPlayers
-	combat = level.get_node_or_null("Combat") as WorldCombat
-	network = level.get_node_or_null("Network") as WorldNetwork
-	turn_manager = level.get_node_or_null("TurnManager") as WorldTurns
-	spawner = level.get_node_or_null("WorldSpawner") as WorldSpawner
-	awareness = level.get_node_or_null("Awareness") as WorldAwareness
+	grid = get_node_or_null(grid_path) as WorldGrid
+	registry = get_node_or_null(registry_path) as WorldRegistry
+	players_service = get_node_or_null(players_service_path) as WorldPlayers
+	combat = get_node_or_null(combat_path) as WorldCombat
+	network = get_node_or_null(network_path) as WorldNetwork
+	turn_manager = get_node_or_null(turn_manager_path) as WorldTurns
+	spawner = get_node_or_null(spawner_path) as WorldSpawner
+	awareness = get_node_or_null(awareness_path) as WorldAwareness
 
 	if grid != null:
 		grid.configure_context(self, level)
@@ -357,6 +372,8 @@ func _bind_services() -> void:
 		combat.configure_context(self, level)
 	if network != null:
 		network.configure_context(self, level)
+		if not network.match_end_requested.is_connected(_on_network_match_end_requested):
+			network.match_end_requested.connect(_on_network_match_end_requested)
 	if turn_manager != null:
 		turn_manager.configure_context(self, level)
 	if spawner != null:
@@ -371,12 +388,12 @@ func _configure_services() -> void:
 
 	if grid != null:
 		grid.configure(
-			level.grid_size,
-			level.walkable_layer_names,
-			level.character_walkable_layer_names
+			level.get_grid_size(),
+			level.get_walkable_layer_names(),
+			level.get_character_walkable_layer_names()
 		)
 	if players_service != null:
-		players_service.configure(level.spawn_cells)
+		players_service.configure(level.get_spawn_cells())
 
 
 func _register_world_entities() -> void:
@@ -410,7 +427,8 @@ func _ensure_world_entity_id(entity: Node) -> void:
 
 
 func _get_grid_service() -> WorldGrid:
-	if grid != null:
-		return grid
+	return grid
 
-	return level.get_node("Grid") as WorldGrid
+
+func _on_network_match_end_requested() -> void:
+	match_end_requested.emit()

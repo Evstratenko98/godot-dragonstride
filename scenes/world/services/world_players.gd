@@ -13,8 +13,9 @@ const MULTIPLAYER_WARRIOR_COLORS := ["Blue", "Purple", "Red", "Yellow"]
 	Vector2i(8, 2),
 	Vector2i(10, 2),
 ]
+@export var players_root_path: NodePath = ^"../WorldRuntime/Players"
 
-@onready var players_root: Node2D = $"../Players"
+@onready var players_root: Node2D = get_node(players_root_path) as Node2D
 
 var runtime: WorldRuntime = null
 var level: WorldLevel = null
@@ -24,9 +25,6 @@ var local_camera: Camera2D = null
 
 
 func _ready() -> void:
-	level = get_parent() as WorldLevel
-	if level != null:
-		runtime = level.get_runtime()
 	_register_console_commands()
 	_connect_network_signals()
 
@@ -104,6 +102,10 @@ func get_player_by_steam_id(steam_id: int) -> PlayerCharacter:
 
 func get_local_player() -> PlayerCharacter:
 	return local_player
+
+
+func get_players_root() -> Node2D:
+	return players_root
 
 
 func console_kill_character() -> void:
@@ -222,7 +224,7 @@ func _spawn_camera_for_player(player: Node2D) -> void:
 		return
 
 	local_camera = camera
-	level.add_child.call_deferred(camera)
+	players_root.add_child.call_deferred(camera)
 	call_deferred("_configure_camera_for_player", camera, player)
 
 

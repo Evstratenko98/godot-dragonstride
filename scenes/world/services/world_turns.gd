@@ -36,9 +36,6 @@ var is_starting_world_behaviors: bool = false
 
 
 func _ready() -> void:
-	level = get_parent() as WorldLevel
-	if level != null:
-		runtime = level.get_runtime()
 	_register_console_commands()
 	_connect_network_signals()
 
@@ -405,7 +402,7 @@ func _build_player_turn_order() -> void:
 		_add_player_to_turn_order(player, steam_id)
 
 	if turn_order.is_empty():
-		var players_root: Node = level.get_node_or_null("Players")
+		var players_root: Node2D = runtime.get_players_root()
 		if players_root != null:
 			for child in players_root.get_children():
 				if child is Node and child.get("entity_type") != null and int(child.get("entity_type")) == Entity.EntityType.CHARACTER:

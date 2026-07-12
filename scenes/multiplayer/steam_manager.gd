@@ -15,6 +15,7 @@ signal lobby_game_start_requested()
 const LOBBY_GAME_KEY := "game"
 const LOBBY_GAME_VALUE := "dragonsride"
 const LOBBY_STATUS_KEY := "status"
+const LOBBY_LEVEL_KEY := "level_id"
 const LOBBY_STATUS_WAITING := "waiting"
 const LOBBY_STATUS_IN_GAME := "in_game"
 const LOBBY_MESSAGE_START_GAME := "start_game"
@@ -73,6 +74,7 @@ func _on_lobby_created(result: int, created_lobby_id: int) -> void:
 	Steam.setLobbyData(lobby_id, "name", Steam.getPersonaName() + "'s Lobby")
 	Steam.setLobbyData(lobby_id, LOBBY_GAME_KEY, LOBBY_GAME_VALUE)
 	Steam.setLobbyData(lobby_id, LOBBY_STATUS_KEY, LOBBY_STATUS_WAITING)
+	Steam.setLobbyData(lobby_id, LOBBY_LEVEL_KEY, LevelCatalog.DEFAULT_LEVEL_ID)
 	Steam.setLobbyData(lobby_id, "host_id", str(Steam.getSteamID()))
 	Steam.setLobbyJoinable(lobby_id, true)
 
@@ -243,6 +245,24 @@ func set_lobby_status(status: String) -> void:
 		return
 
 	Steam.setLobbyData(lobby_id, LOBBY_STATUS_KEY, status)
+
+
+func set_lobby_level_id(level_id: String) -> bool:
+	if lobby_id == 0 or not is_lobby_owner():
+		return false
+
+	return bool(Steam.setLobbyData(lobby_id, LOBBY_LEVEL_KEY, level_id))
+
+
+func get_lobby_level_id() -> String:
+	if lobby_id == 0:
+		return LevelCatalog.DEFAULT_LEVEL_ID
+
+	var level_id: String = str(Steam.getLobbyData(lobby_id, LOBBY_LEVEL_KEY))
+	if level_id.is_empty():
+		return LevelCatalog.DEFAULT_LEVEL_ID
+
+	return level_id
 
 
 func request_start_game_from_lobby() -> void:

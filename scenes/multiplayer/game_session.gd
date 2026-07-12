@@ -8,10 +8,10 @@ const MODE_SINGLEPLAYER := "singleplayer"
 const MODE_MULTIPLAYER_HOST := "multiplayer_host"
 const MODE_MULTIPLAYER_CLIENT := "multiplayer_client"
 
-const GAME_SCENE_PATH := "res://scenes/full_world/full_world.tscn"
+const MATCH_SCENE_PATH := "res://scenes/world/match_world.tscn"
 
 var mode: String = MODE_NONE
-var selected_scene_path: String = GAME_SCENE_PATH
+var selected_level_id: String = LevelCatalog.DEFAULT_LEVEL_ID
 var lobby_id: int = 0
 var host_steam_id: int = 0
 var local_steam_id: int = 0
@@ -23,8 +23,8 @@ func start_singleplayer(settings: Dictionary = {}) -> void:
 	clear()
 
 	mode = MODE_SINGLEPLAYER
-	selected_scene_path = GAME_SCENE_PATH
 	match_settings = settings.duplicate(true)
+	_select_level_from_settings()
 	players = [_make_player_info(0, "Player", true, true)]
 
 	session_started.emit(mode)
@@ -34,11 +34,11 @@ func start_multiplayer_from_lobby(settings: Dictionary = {}) -> void:
 	clear()
 
 	mode = _get_multiplayer_mode_from_lobby()
-	selected_scene_path = GAME_SCENE_PATH
 	lobby_id = SteamManager.get_current_lobby_id()
 	host_steam_id = SteamManager.get_lobby_owner_id()
 	local_steam_id = _get_local_steam_id()
 	match_settings = settings.duplicate(true)
+	_select_level_from_settings()
 	players = _build_players_from_lobby()
 
 	session_started.emit(mode)
@@ -46,7 +46,7 @@ func start_multiplayer_from_lobby(settings: Dictionary = {}) -> void:
 
 func clear() -> void:
 	mode = MODE_NONE
-	selected_scene_path = GAME_SCENE_PATH
+	selected_level_id = LevelCatalog.DEFAULT_LEVEL_ID
 	lobby_id = 0
 	host_steam_id = 0
 	local_steam_id = 0
@@ -103,8 +103,38 @@ func set_match_setting(key: String, value: Variant) -> void:
 	match_settings[key] = value
 
 
+func set_selected_level(level_id: String, should_sync_lobby: bool = true) -> bool:
+	if not LevelCatalog.has_level(level_id):
+		return false
+	if is_multiplayer() and should_sync_lobby:
+		if not is_host() or not SteamManager.set_lobby_level_id(level_id):
+			return false
+
+	selected_level_id = level_id
+	match_settings["level_id"] = level_id
+	return true
+
+
+func get_selected_level_scene() -> PackedScene:
+	return LevelCatalog.get_level_scene(selected_level_id)
+
+
+func get_available_level_ids() -> PackedStringArray:
+	return LevelCatalog.get_level_ids()
+
+
 func go_to_selected_scene() -> void:
-	get_tree().change_scene_to_file(selected_scene_path)
+	get_tree().change_scene_to_file(MATCH_SCENE_PATH)
+
+
+func _select_level_from_settings() -> void:
+	var fallback_level_id: String = LevelCatalog.DEFAULT_LEVEL_ID
+	if is_multiplayer():
+		fallback_level_id = SteamManager.get_lobby_level_id()
+
+	var requested_level_id: String = str(match_settings.get("level_id", fallback_level_id))
+	if not set_selected_level(requested_level_id, false):
+		selected_level_id = LevelCatalog.DEFAULT_LEVEL_ID
 
 
 func _get_multiplayer_mode_from_lobby() -> String:
@@ -116,13 +146,14 @@ func _get_multiplayer_mode_from_lobby() -> String:
 
 func _build_players_from_lobby() -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
-	var members := SteamManager.get_current_lobby_members()
+	var members: Array = SteamManager.get_current_lobby_members()
 
-	for member in members:
-		var steam_id := int(member.get("id", 0))
-		var player_name := str(member.get("name", "Player"))
-		var is_host_player := bool(member.get("is_owner", false))
-		var is_local_player := bool(member.get("is_me", false))
+	for member_variant: Variant in members:
+		var member: Dictionary = member_variant as Dictionary
+		var steam_id: int = int(member.get("id", 0))
+		var player_name: String = str(member.get("name", "Player"))
+		var is_host_player: bool = bool(member.get("is_owner", false))
+		var is_local_player: bool = bool(member.get("is_me", false))
 
 		result.append(_make_player_info(
 			steam_id,

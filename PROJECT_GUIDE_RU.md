@@ -2,13 +2,13 @@
 
 Этот документ предназначен для разработчика, который впервые открыл проект. Он описывает не только целевую архитектуру из `AGENTS.md`, но и фактически реализованное поведение текущего кода.
 
-Актуальность описания: состояние рабочей копии на 11 июля 2026 года. Проект использует Godot 4.6 и GDScript.
+Актуальность описания: состояние рабочей копии на 12 июля 2026 года. Проект использует Godot 4.6 и GDScript.
 
 ## 1. Что это за проект
 
 DragonStride сейчас представляет собой двухмерную игру на клеточной карте. Игрок управляет персонажем, перемещается по проходимым клеткам, атакует соседние клетки, сущности и объекты. Игра поддерживает одиночный режим и Steam-мультиплеер с лобби. Дополнительно существует включаемый через консоль пошаговый режим, в котором игроки и мир действуют по очереди.
 
-Текущая игровая сцена — `scenes/full_world/full_world.tscn`. Важно понимать: по архитектурным правилам это один конкретный уровень, а не «вся игра». Меню, сессия, сетевое соединение и жизненный цикл матча находятся вне данных карты.
+Общая игровая оболочка — `scenes/world/match_world.tscn`, а `scenes/full_world/full_world.tscn` является одним конкретным уровнем. Меню, сессия, сетевое соединение и жизненный цикл матча находятся вне данных карты.
 
 ## 2. Короткая ментальная модель
 
@@ -42,10 +42,10 @@ DragonStride сейчас представляет собой двухмерну
 ### 3.2. Игровая сессия
 
 - Поддерживаются состояния: сессии нет, одиночная игра, multiplayer-host и multiplayer-client.
-- В сессии хранятся выбранная сцена, lobby ID, Steam ID хоста и локального игрока, список игроков и настройки матча.
+- В сессии хранятся выбранный `level_id`, lobby ID, Steam ID хоста и локального игрока, список игроков и настройки матча.
 - Для одиночной игры создаётся один локальный игрок `Patrick`.
 - Для мультиплеера список игроков строится по участникам Steam-лобби.
-- Сейчас выбранный уровень всегда указывает на `full_world.tscn`, хотя архитектура рассчитана на появление нескольких уровней.
+- Уровень выбирается по разрешённому `level_id`; каталог содержит `full_world` и тестовый `level_1`.
 
 ### 3.3. Steam-лобби
 
@@ -294,8 +294,8 @@ sequenceDiagram
         Net-->>Menu: network_started
     end
     Menu->>Session: go_to_selected_scene()
-    Session->>Level: Загружается full_world.tscn
-    Level->>Match: Дерево сцены готово
+    Session->>Match: Загружается match_world.tscn
+    Match->>Level: Создаётся сцена выбранного level_id
     Match->>Runtime: configure_for_level(level)
     Runtime->>Registry: collect_blockers()
     Runtime->>Players: prepare_players_root()
@@ -468,18 +468,19 @@ flowchart TB
 
 | Блок | Где находится | Что инкапсулирует |
 |---|---|---|
-| `WorldLevel` | `scenes/full_world/world_level.gd` | Данные конкретной карты и типизированный доступ к корням/узлам уровня. |
-| `full_world.tscn` | `scenes/full_world/full_world.tscn` | Конкретную карту: сервисные узлы, Water/Ground/Clouds, размещённые House/Tree/Sheep, Players, audio и HUD. |
-| `MatchController` | `scenes/full_world/match_controller.gd` | Запуск/завершение матча, runtime-signals, музыку, выход из multiplayer и переход в меню. |
-| `WorldRuntime` | `scenes/full_world/world_runtime.gd` | Устойчивый API мира для сущностей и компонентов. Связывает уровень с сервисами и координирует операции между ними. |
-| `WorldGrid` | `scenes/full_world/world_grid.gd` | Размер и координаты сетки, границы, размер клетки и проходимые TileMap-слои. |
-| `WorldRegistry` | `scenes/full_world/world_registry.gd` | ID, регистрацию, занятые и зарезервированные клетки, поиск сущностей/объектов и проверку размещения. |
-| `WorldPlayers` | `scenes/full_world/world_players.gd` | Создание игроков, spawn cells, цвета, локального игрока, камеру и multiplayer authority. |
-| `WorldCombat` | `scenes/full_world/world_combat.gd` | Выбор цели в клетке, применение урона, повреждение объектов и формирование результата боя. |
-| `WorldTurns` | `scenes/full_world/world_turns.gd` | Состояние раунда/хода, порядок игроков, лимиты действий, мировой ход и сетевые snapshots. |
-| `WorldSpawner` | `scenes/full_world/world_spawner.gd` | Каталог разрешённых типов, проверку размещения, создание, ID и сетевую репликацию runtime-spawn. |
-| `WorldAwareness` | `scenes/full_world/world_awareness.gd` | Уведомление NPC о появлении и изменении положения персонажей; решения конкретного AI остаются в NPC. |
-| `WorldNetwork` | `scenes/full_world/world_network.gd` | Перевод сетевых сигналов в операции текущего уровня и доменных событий в вызовы `NetworkManager`. |
+| `WorldLevel` | `scenes/world/world_level.gd` | Данные конкретной карты и типизированный доступ к корням/узлам уровня. |
+| `match_world.tscn` | `scenes/world/match_world.tscn` | Общую оболочку матча: сервисы, runtime, controller, Players, audio, HUD и контейнер выбранного уровня. |
+| `full_world.tscn` | `scenes/full_world/full_world.tscn` | Конкретную карту: Water/Ground/Clouds и размещённые House/Tree/Sheep/Warrior без общей инфраструктуры. |
+| `MatchController` | `scenes/world/match_controller.gd` | Загрузку выбранного уровня, запуск/завершение матча, runtime-signals, музыку и переход в меню. |
+| `WorldRuntime` | `scenes/world/world_runtime.gd` | Устойчивый API мира для сущностей и компонентов. Связывает загруженный уровень с общими сервисами. |
+| `WorldGrid` | `scenes/world/services/world_grid.gd` | Размер и координаты сетки, границы, размер клетки и проходимые TileMap-слои. |
+| `WorldRegistry` | `scenes/world/services/world_registry.gd` | ID, регистрацию, занятые и зарезервированные клетки, поиск сущностей/объектов и проверку размещения. |
+| `WorldPlayers` | `scenes/world/services/world_players.gd` | Создание игроков, spawn cells, цвета, локального игрока, камеру и multiplayer authority. |
+| `WorldCombat` | `scenes/world/services/world_combat.gd` | Выбор цели в клетке, применение урона, повреждение объектов и формирование результата боя. |
+| `WorldTurns` | `scenes/world/services/world_turns.gd` | Состояние раунда/хода, порядок игроков, лимиты действий, мировой ход и сетевые snapshots. |
+| `WorldSpawner` | `scenes/world/services/world_spawner.gd` | Каталог разрешённых типов, проверку размещения, создание, ID и сетевую репликацию runtime-spawn. |
+| `WorldAwareness` | `scenes/world/services/world_awareness.gd` | Уведомление NPC о появлении и изменении положения персонажей; решения конкретного AI остаются в NPC. |
+| `WorldNetwork` | `scenes/world/services/world_network.gd` | Перевод сетевых сигналов в операции текущего уровня и доменных событий в вызовы `NetworkManager`. |
 
 ### 10.3. Сущности, модели и представления
 
@@ -536,7 +537,9 @@ PROJECT_GUIDE_RU.md            этот вводный документ
 scenes/
   menu/                        главное меню, настройки, Steam lobby UI
   multiplayer/                 GameSession, SteamManager, NetworkManager
-  full_world/                  уровень, runtime, lifecycle и World-сервисы
+  world/                       общая оболочка матча, runtime, lifecycle и World-сервисы
+  full_world/                  сцена и конфигурация уровня full_world
+  levels/                      дополнительные сцены и конфигурации уровней
   entities/
     entity/                    базовая Entity
     character/                 игрок: model + view + scene
@@ -574,7 +577,7 @@ fonts/                         шрифты и лицензии
 | Раунды и лимиты действий | `WorldTurns` | `NetworkManager` turn RPC и NPC `behavior()`. |
 | Поведение конкретного NPC | Скрипт NPC, например `warrior.gd` | `NonPlayerEntity`, `WorldAwareness`, `WorldTurns`. |
 | Создание нового runtime-объекта | `WorldSpawner.CATALOG` | Новая scene, базовый `Entity` или `GridObject`, network cache. |
-| Создание нового уровня | Новый `WorldLevel`-совместимый `.tscn` | Отдельные Runtime/Controller/сервисы и выбор в `GameSession`. |
+| Создание нового уровня | Новый `WorldLevel`-совместимый `.tscn`, level-скрипт и `LevelDefinition.tres` | Каталог `GameSession`; Runtime/Controller/сервисы предоставляет общий `match_world.tscn`. |
 | Lobby | `SteamManager` и `scenes/menu/lobby/` | `GameSession.start_multiplayer_from_lobby()`. |
 | RPC или delivery mode | `NetworkManager` | Доменное применение события в `WorldNetwork`. |
 | Анимацию игрока | `CharacterView` и `character.tscn` | Не переносить туда combat/turn/network rules. |
@@ -631,9 +634,8 @@ View показывает спрайт, направление и анимаци
 
 Это не список требований на немедленную переделку, а ориентир для понимания зрелости проекта:
 
-- Реально используется только один уровень, жёстко выбранный в `GameSession`.
-- Автоматических тестов в репозитории не найдено.
-- В текущей среде `godot`/`godot4` не найден в `PATH`, поэтому этот документ не подтверждает успешный headless parse или smoke test сцены.
+- UI выбора уровня пока не добавлен; `GameSession` предоставляет каталог и программный выбор по `level_id`.
+- Smoke-тест `tests/match_world_smoke.tscn` проверяет загрузку `full_world` и `level_1`, конфигурацию runtime, регистрацию содержимого и перемещение игрока.
 - Runtime-spawner ограничен четырьмя типами и не является универсальным редактором карты.
 - Объекты имеют только бинарное состояние цел/уничтожен и не имеют числового здоровья.
 - Непрерывное состояние позиции игрока приходит от клиента. Host проверяет соответствие Steam ID и право действовать в текущем ходу, но в этом пути не пересчитывает полностью клеточную траекторию и коллизии клиента. При развитии соревновательной сетевой модели это важная зона усиления authority-validation.

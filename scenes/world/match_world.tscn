@@ -1,0 +1,64 @@
+[gd_scene load_steps=14 format=3]
+
+[ext_resource type="Script" path="res://scenes/world/services/world_grid.gd" id="1_grid"]
+[ext_resource type="Script" path="res://scenes/world/services/world_registry.gd" id="2_registry"]
+[ext_resource type="Script" path="res://scenes/world/services/world_players.gd" id="3_players"]
+[ext_resource type="Script" path="res://scenes/world/services/world_combat.gd" id="4_combat"]
+[ext_resource type="Script" path="res://scenes/world/services/world_network.gd" id="5_network"]
+[ext_resource type="Script" path="res://scenes/world/services/world_turns.gd" id="6_turns"]
+[ext_resource type="Script" path="res://scenes/world/services/world_spawner.gd" id="7_spawner"]
+[ext_resource type="Script" path="res://scenes/world/services/world_awareness.gd" id="8_awareness"]
+[ext_resource type="Script" path="res://scenes/world/world_runtime.gd" id="9_runtime"]
+[ext_resource type="Script" path="res://scenes/world/match_controller.gd" id="10_match"]
+[ext_resource type="PackedScene" path="res://scenes/grid_lines/grid_lines.tscn" id="11_grid_lines"]
+[ext_resource type="PackedScene" path="res://scenes/cell_hover/cell_hover.tscn" id="12_cell_hover"]
+[ext_resource type="PackedScene" path="res://scenes/hud/hud.tscn" id="13_hud"]
+
+[node name="MatchWorld" type="Node2D"]
+y_sort_enabled = true
+
+[node name="Grid" type="Node" parent="."]
+script = ExtResource("1_grid")
+
+[node name="Registry" type="Node" parent="."]
+script = ExtResource("2_registry")
+
+[node name="PlayersService" type="Node" parent="."]
+script = ExtResource("3_players")
+
+[node name="Combat" type="Node" parent="."]
+script = ExtResource("4_combat")
+
+[node name="Network" type="Node" parent="."]
+script = ExtResource("5_network")
+
+[node name="TurnManager" type="Node" parent="."]
+script = ExtResource("6_turns")
+
+[node name="WorldSpawner" type="Node" parent="."]
+script = ExtResource("7_spawner")
+
+[node name="Awareness" type="Node" parent="."]
+script = ExtResource("8_awareness")
+
+[node name="WorldRuntime" type="Node" parent="."]
+script = ExtResource("9_runtime")
+
+[node name="MatchController" type="Node" parent="."]
+script = ExtResource("10_match")
+
+[node name="LevelContainer" type="Node2D" parent="."]
+
+[node name="Players" type="Node2D" parent="WorldRuntime"]
+
+[node name="GridLines" parent="." instance=ExtResource("11_grid_lines")]
+
+[node name="CellHover" parent="." instance=ExtResource("12_cell_hover")]
+
+[node name="Music" type="AudioStreamPlayer" parent="."]
+
+[node name="DeathSound" type="AudioStreamPlayer" parent="."]
+
+[node name="HUD" parent="." instance=ExtResource("13_hud")]
+
+[connection signal="end_game" from="HUD" to="MatchController" method="game_over"]

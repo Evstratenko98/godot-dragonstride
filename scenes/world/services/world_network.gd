@@ -1,14 +1,10 @@
 class_name WorldNetwork
 extends Node
 
+signal match_end_requested()
+
 var runtime: WorldRuntime = null
 var level: WorldLevel = null
-
-
-func _ready() -> void:
-	level = get_parent() as WorldLevel
-	if level != null:
-		runtime = level.get_runtime()
 
 
 func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void:
@@ -467,6 +463,4 @@ func _on_object_state_received(object_id: String, object_state: int) -> void:
 
 
 func _on_end_game_requested() -> void:
-	var match_controller: MatchController = level.get_match_controller()
-	if match_controller != null:
-		match_controller.game_over(false)
+	match_end_requested.emit()

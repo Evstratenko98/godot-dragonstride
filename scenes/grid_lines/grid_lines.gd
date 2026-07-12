@@ -1,3 +1,4 @@
+class_name GridLines
 extends Node2D
 
 @export var line_color: Color = Color(1.0, 1.0, 1.0, 0.8)
@@ -8,7 +9,6 @@ var level: WorldLevel = null
 
 
 func _ready() -> void:
-	_resolve_context()
 	_register_console_commands()
 	queue_redraw()
 
@@ -23,8 +23,6 @@ func _exit_tree() -> void:
 
 
 func _draw() -> void:
-	_resolve_context()
-
 	if level == null:
 		return
 
@@ -49,23 +47,10 @@ func hide_lines() -> void:
 	ConsoleOutput.print_console("Game grid lines: hidden")
 
 
-func _resolve_context() -> void:
-	level = _find_level()
-	if Engine.is_editor_hint() or level == null:
-		runtime = null
-		return
-
-	runtime = level.get_runtime()
-
-
-func _find_level() -> WorldLevel:
-	var node: Node = get_parent()
-	while node != null:
-		if node is WorldLevel:
-			return node as WorldLevel
-		node = node.get_parent()
-
-	return null
+func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void:
+	runtime = new_runtime
+	level = new_level
+	queue_redraw()
 
 
 func _get_world_grid_size() -> Vector2i:
@@ -73,7 +58,7 @@ func _get_world_grid_size() -> Vector2i:
 		return runtime.get_grid_size()
 
 	if level != null:
-		return level.grid_size
+		return level.get_grid_size()
 
 	return Vector2i(8, 8)
 
@@ -92,10 +77,10 @@ func _is_cell_walkable(cell: Vector2i) -> bool:
 	if level == null:
 		return false
 
-	if _is_cell_in_layers(cell, level.walkable_layer_names):
+	if _is_cell_in_layers(cell, level.get_walkable_layer_names()):
 		return true
 
-	return _is_cell_in_layers(cell, level.character_walkable_layer_names)
+	return _is_cell_in_layers(cell, level.get_character_walkable_layer_names())
 
 
 func _is_cell_in_layers(cell: Vector2i, layer_names: PackedStringArray) -> bool:

@@ -10,10 +10,6 @@ const CELL_SIZE := 64
 var level: WorldLevel = null
 
 
-func _ready() -> void:
-	level = get_parent() as WorldLevel
-
-
 func configure_context(_runtime: WorldRuntime, new_level: WorldLevel) -> void:
 	level = new_level
 
@@ -87,7 +83,4 @@ func _is_cell_in_layers(cell: Vector2i, layer_names: PackedStringArray) -> bool:
 
 
 func _get_level() -> WorldLevel:
-	if level != null:
-		return level
-
-	return get_parent() as WorldLevel
+	return level
