@@ -29,6 +29,22 @@ func start(
 	start_non_player_entity(start_position, new_entity_id, new_entity_name)
 
 
+func die() -> void:
+	var death_cell: Vector2i = current_cell
+	_on_died()
+	if runtime == null:
+		queue_free()
+		return
+	if not runtime.remove_defeated_non_player(self):
+		return
+
+	spawn_death_drop(death_cell)
+
+
+func spawn_death_drop(_death_cell: Vector2i) -> bool:
+	return false
+
+
 func behavior() -> void:
 	_finish_behavior()
 

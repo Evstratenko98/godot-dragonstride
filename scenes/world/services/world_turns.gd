@@ -18,6 +18,7 @@ const EVENT_PLAYER_TURN_SKIPPED := "player_turn_skipped"
 
 const MAX_STEPS_PER_TURN := 10
 const MAX_ATTACKS_PER_TURN := 1
+const MAX_INTERACTIONS_PER_TURN := 1
 
 var runtime: WorldRuntime = null
 var level: WorldLevel = null
@@ -30,6 +31,7 @@ var current_turn_index: int = -1
 var active_entity_id: String = ""
 var steps_left: int = 0
 var attacks_left: int = 0
+var interactions_left: int = 0
 var pending_end_turn: bool = false
 var pending_world_entity_ids: Dictionary = {}
 var is_starting_world_behaviors: bool = false
@@ -84,12 +86,13 @@ func print_turn_status() -> void:
 	if active_entity != null:
 		active_name = _get_entity_display_name(active_entity)
 
-	ConsoleOutput.print_console("Turn mode: enabled; state: %s; round: %d; active: %s; steps: %d; attack: %d" % [
+	ConsoleOutput.print_console("Turn mode: enabled; state: %s; round: %d; active: %s; steps: %d; attack: %d; interaction: %d" % [
 		state,
 		round_number,
 		active_name,
 		steps_left,
 		attacks_left,
+		interactions_left,
 	], runtime)
 
 
@@ -123,6 +126,24 @@ func can_entity_attack(entity: Node, target_cell: Vector2i) -> bool:
 	return true
 
 
+func can_entity_interact(entity: Node) -> bool:
+	if state == STATE_DISABLED:
+		return true
+
+	return (
+		state == STATE_PLAYER_TURN
+		and _is_active_entity(entity)
+		and interactions_left > 0
+	)
+
+
+func can_entity_use_item(entity: Node) -> bool:
+	if state == STATE_DISABLED:
+		return true
+
+	return state == STATE_PLAYER_TURN and _is_active_entity(entity)
+
+
 func can_entity_sync_state(entity: Node) -> bool:
 	if state == STATE_DISABLED:
 		return true
@@ -148,6 +169,16 @@ func notify_entity_attacked(entity: Node, target_cell: Vector2i) -> void:
 	if _attack_consumes_action(entity, target_cell) and attacks_left > 0:
 		attacks_left -= 1
 		_broadcast_snapshot()
+
+
+func notify_entity_interacted(entity: Node) -> void:
+	if not _is_authority() or state != STATE_PLAYER_TURN or not _is_active_entity(entity):
+		return
+	if interactions_left <= 0:
+		return
+
+	interactions_left -= 1
+	_broadcast_snapshot()
 
 
 func notify_entity_action_finished(entity: Node) -> void:
@@ -192,6 +223,7 @@ func apply_remote_snapshot(snapshot: Dictionary) -> void:
 	active_entity_id = str(snapshot.get("active_entity_id", ""))
 	steps_left = int(snapshot.get("steps_left", 0))
 	attacks_left = int(snapshot.get("attacks_left", 0))
+	interactions_left = int(snapshot.get("interactions_left", 0))
 	current_turn_index = int(snapshot.get("current_turn_index", -1))
 	pending_end_turn = bool(snapshot.get("pending_end_turn", false))
 
@@ -245,10 +277,15 @@ func _start_player_turn(player: Node) -> void:
 	active_entity_id = runtime.get_entity_id(player)
 	steps_left = MAX_STEPS_PER_TURN
 	attacks_left = MAX_ATTACKS_PER_TURN
+	interactions_left = MAX_INTERACTIONS_PER_TURN
 	pending_end_turn = false
 
 	var start_log: String = "Player turn started: %s" % _get_entity_display_name(player)
-	var resources_log: String = "Available: steps %d, attack %d" % [steps_left, attacks_left]
+	var resources_log: String = "Available: steps %d, attack %d, interaction %d" % [
+		steps_left,
+		attacks_left,
+		interactions_left,
+	]
 	ConsoleOutput.print_console(start_log, runtime)
 	ConsoleOutput.print_console(resources_log, runtime)
 	_broadcast_snapshot(EVENT_PLAYER_TURN_STARTED)
@@ -259,6 +296,7 @@ func _start_world_turn() -> void:
 	active_entity_id = ""
 	steps_left = 0
 	attacks_left = 0
+	interactions_left = 0
 	pending_end_turn = false
 	pending_world_entity_ids.clear()
 
@@ -359,6 +397,7 @@ func _finish_player_turn() -> void:
 	active_entity_id = ""
 	steps_left = 0
 	attacks_left = 0
+	interactions_left = 0
 	pending_end_turn = false
 	_broadcast_snapshot(EVENT_PLAYER_TURN_ENDED, {"entity_id": finished_entity_id})
 	_start_next_player_turn()
@@ -370,6 +409,7 @@ func _skip_active_player(reason: String) -> void:
 	active_entity_id = ""
 	steps_left = 0
 	attacks_left = 0
+	interactions_left = 0
 	pending_end_turn = false
 	_start_next_player_turn()
 
@@ -512,7 +552,11 @@ func _print_remote_turn_event(event: String, event_payload: Dictionary) -> void:
 		EVENT_PLAYER_TURN_STARTED:
 			var turn_entity: Node = _get_active_entity()
 			ConsoleOutput.print_console("Player turn started: %s" % _get_entity_display_name(turn_entity), runtime)
-			ConsoleOutput.print_console("Available: steps %d, attack %d" % [steps_left, attacks_left], runtime)
+			ConsoleOutput.print_console("Available: steps %d, attack %d, interaction %d" % [
+				steps_left,
+				attacks_left,
+				interactions_left,
+			], runtime)
 		EVENT_WORLD_TURN_STARTED:
 			ConsoleOutput.print_console("World turn started", runtime)
 		EVENT_WORLD_TURN_ENDED:
@@ -536,6 +580,7 @@ func _make_snapshot(event: String = EVENT_NONE, event_payload: Dictionary = {}) 
 		"active_entity_id": active_entity_id,
 		"steps_left": steps_left,
 		"attacks_left": attacks_left,
+		"interactions_left": interactions_left,
 		"current_turn_index": current_turn_index,
 		"pending_end_turn": pending_end_turn,
 		"turn_order": turn_order.duplicate(),
@@ -559,6 +604,7 @@ func _reset_turn_state() -> void:
 	active_entity_id = ""
 	steps_left = 0
 	attacks_left = 0
+	interactions_left = 0
 	pending_end_turn = false
 	pending_world_entity_ids.clear()
 	is_starting_world_behaviors = false

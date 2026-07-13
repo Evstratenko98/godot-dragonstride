@@ -46,7 +46,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-		character.request_attack_cell(character.runtime.world_to_cell(character.get_global_mouse_position()), true, true)
+		var target_cell: Vector2i = character.runtime.world_to_cell(character.get_global_mouse_position())
+		if character.action_mode == PlayerCharacter.ActionMode.INTERACT:
+			character.request_interaction_cell(target_cell)
+		else:
+			character.request_attack_cell(target_cell, true, true)
 
 
 func get_input_direction() -> Vector2i:

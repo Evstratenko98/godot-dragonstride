@@ -1,6 +1,7 @@
 extends "res://scenes/entities/non_player_entity/non_player_entity.gd"
 
 const SHEEP_MAX_HEALTH := 25
+const DEATH_DROP_TYPE := "meat"
 
 var move_direction: Vector2i = Vector2i.RIGHT
 
@@ -21,6 +22,13 @@ func start(
 ) -> void:
 	max_health = SHEEP_MAX_HEALTH
 	start_non_player_entity(start_position, new_entity_id, new_entity_name, EntityType.NEUTRAL)
+
+
+func spawn_death_drop(death_cell: Vector2i) -> bool:
+	if runtime == null:
+		return false
+
+	return runtime.spawn_world_object(DEATH_DROP_TYPE, death_cell)
 
 
 func behavior() -> void:

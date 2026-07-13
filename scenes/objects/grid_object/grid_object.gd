@@ -46,6 +46,10 @@ func take_damage() -> bool:
 	return true
 
 
+func interact(_interactor: PlayerCharacter, _world_runtime: WorldRuntime) -> bool:
+	return false
+
+
 func apply_network_state(network_state: int) -> void:
 	if network_state == ObjectState.DESTROYED:
 		set_destroyed()

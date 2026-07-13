@@ -129,6 +129,36 @@ func remove_world_object(target_object: GridObject) -> bool:
 	return true
 
 
+func remove_defeated_non_player(target_entity: NonPlayerEntity) -> bool:
+	if target_entity == null:
+		return false
+	if GameSession.is_multiplayer() and not GameSession.is_host():
+		return false
+
+	var removal_record: Dictionary = _remove_world_item(target_entity)
+	if removal_record.is_empty():
+		return false
+
+	if GameSession.is_multiplayer():
+		var removal_records: Array[Dictionary] = [removal_record]
+		NetworkManager.broadcast_world_items_removed(removal_records)
+
+	return true
+
+
+func spawn_world_object(type_key: String, cell: Vector2i) -> bool:
+	var normalized_type: String = _normalize_type_key(type_key)
+	if not CATALOG.has(normalized_type):
+		return false
+	var definition: Dictionary = CATALOG[normalized_type]
+	if str(definition.get("kind", "")) != SPAWN_KIND_OBJECT:
+		return false
+	if GameSession.is_multiplayer() and not GameSession.is_host():
+		return false
+
+	return _try_create_authoritative(normalized_type, cell, true, 0)
+
+
 func _try_create_authoritative(type_key: String, cell: Vector2i, should_broadcast: bool, requester_peer_id: int) -> bool:
 	if not CATALOG.has(type_key):
 		_report_spawn_error("Unknown create type: %s." % type_key, requester_peer_id)

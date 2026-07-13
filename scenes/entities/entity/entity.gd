@@ -119,6 +119,10 @@ func request_attack_cell(target_cell: Vector2i, should_apply: bool = true, shoul
 	return true
 
 
+func interact(_interactor: PlayerCharacter, _world_runtime: WorldRuntime) -> bool:
+	return false
+
+
 func take_damage(amount: int) -> int:
 	if amount <= 0 or health <= 0:
 		return 0
@@ -138,6 +142,20 @@ func set_health(new_health: int) -> void:
 	var previous_health: int = health
 	health = clampi(new_health, 0, max_health)
 	_on_health_changed(previous_health, health)
+
+
+func apply_health_capacity_bonus(maximum_health_increase: int, health_restore: int) -> bool:
+	if maximum_health_increase <= 0 or health_restore < 0 or health <= 0:
+		return false
+
+	max_health += maximum_health_increase
+	set_health(health + health_restore)
+	return true
+
+
+func apply_vitality_state(new_health: int, new_max_health: int) -> void:
+	max_health = maxi(new_max_health, 1)
+	set_health(new_health)
 
 
 func die() -> void:

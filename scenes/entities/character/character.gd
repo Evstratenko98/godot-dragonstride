@@ -1,13 +1,22 @@
 class_name PlayerCharacter
 extends "res://scenes/entities/entity/entity.gd"
 
+signal action_mode_changed(action_mode: ActionMode)
+
+enum ActionMode {
+	ATTACK,
+	INTERACT,
+}
+
 @onready var view: CharacterView = get_node("View") as CharacterView
 @onready var model: CharacterModel = get_node("Model") as CharacterModel
+@onready var character_inventory: CharacterInventory = get_node("CharacterInventory") as CharacterInventory
 
 var facing_left: bool = false
 var steam_id: int = 0
 var is_local_player: bool = true
 var can_receive_input: bool = true
+var action_mode: ActionMode = ActionMode.ATTACK
 
 
 func _ready() -> void:
@@ -32,13 +41,35 @@ func start(
 ) -> void:
 	can_receive_input = receive_input
 	is_local_player = receive_input
+	action_mode = ActionMode.ATTACK
 	start_entity(start_position, new_entity_id, new_entity_name, EntityType.CHARACTER)
+	character_inventory.configure_owner(entity_id)
 
 
 func set_warrior_color(color_name: String) -> void:
 	var character_view: CharacterView = _get_view()
 	if character_view != null:
 		character_view.set_warrior_color(color_name)
+
+
+func set_action_mode(new_action_mode: ActionMode) -> void:
+	if action_mode == new_action_mode:
+		return
+
+	action_mode = new_action_mode
+	action_mode_changed.emit(action_mode)
+
+
+func request_interaction_cell(target_cell: Vector2i) -> bool:
+	if runtime == null or not can_act():
+		return false
+
+	current_cell = runtime.world_to_cell(global_position)
+	if not can_attack_cell(target_cell):
+		return false
+
+	runtime.request_character_interaction(self, target_cell)
+	return true
 
 
 func apply_remote_state(
@@ -165,12 +196,12 @@ func _attack(
 		return
 
 	_play_target_incoming_attack_guard(target_cell, character_view.get_animation_length(animation_name))
+	if should_apply:
+		_apply_attack_to_world(should_broadcast)
+
 	await character_view.play_attack(animation_name, attack_facing_left, update_horizontal_facing)
 	if attack_generation != get_action_generation():
 		return
-
-	if should_apply:
-		_apply_attack_to_world(should_broadcast)
 
 	is_attacking = false
 	if runtime != null:

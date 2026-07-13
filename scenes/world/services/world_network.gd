@@ -28,6 +28,9 @@ func connect_signals() -> void:
 	if not NetworkManager.attack_received.is_connected(_on_attack_received):
 		NetworkManager.attack_received.connect(_on_attack_received)
 
+	if not NetworkManager.interaction_requested.is_connected(_on_interaction_requested):
+		NetworkManager.interaction_requested.connect(_on_interaction_requested)
+
 	if not NetworkManager.object_state_received.is_connected(_on_object_state_received):
 		NetworkManager.object_state_received.connect(_on_object_state_received)
 
@@ -52,6 +55,9 @@ func connect_signals() -> void:
 	if not NetworkManager.entity_health_received.is_connected(_on_entity_health_received):
 		NetworkManager.entity_health_received.connect(_on_entity_health_received)
 
+	if not NetworkManager.entity_vitality_received.is_connected(_on_entity_vitality_received):
+		NetworkManager.entity_vitality_received.connect(_on_entity_vitality_received)
+
 	if not NetworkManager.entity_ai_state_received.is_connected(_on_entity_ai_state_received):
 		NetworkManager.entity_ai_state_received.connect(_on_entity_ai_state_received)
 
@@ -60,6 +66,21 @@ func connect_signals() -> void:
 
 	if not NetworkManager.entity_removed_received.is_connected(_on_entity_removed_received):
 		NetworkManager.entity_removed_received.connect(_on_entity_removed_received)
+
+	if not NetworkManager.inventory_add_requested.is_connected(_on_inventory_add_requested):
+		NetworkManager.inventory_add_requested.connect(_on_inventory_add_requested)
+
+	if not NetworkManager.inventory_move_requested.is_connected(_on_inventory_move_requested):
+		NetworkManager.inventory_move_requested.connect(_on_inventory_move_requested)
+
+	if not NetworkManager.inventory_delete_requested.is_connected(_on_inventory_delete_requested):
+		NetworkManager.inventory_delete_requested.connect(_on_inventory_delete_requested)
+
+	if not NetworkManager.inventory_use_requested.is_connected(_on_inventory_use_requested):
+		NetworkManager.inventory_use_requested.connect(_on_inventory_use_requested)
+
+	if not NetworkManager.inventory_snapshot_received.is_connected(_on_inventory_snapshot_received):
+		NetworkManager.inventory_snapshot_received.connect(_on_inventory_snapshot_received)
 
 	if not NetworkManager.end_game_requested.is_connected(_on_end_game_requested):
 		NetworkManager.end_game_requested.connect(_on_end_game_requested)
@@ -80,6 +101,9 @@ func disconnect_signals() -> void:
 
 	if NetworkManager.attack_received.is_connected(_on_attack_received):
 		NetworkManager.attack_received.disconnect(_on_attack_received)
+
+	if NetworkManager.interaction_requested.is_connected(_on_interaction_requested):
+		NetworkManager.interaction_requested.disconnect(_on_interaction_requested)
 
 	if NetworkManager.object_state_received.is_connected(_on_object_state_received):
 		NetworkManager.object_state_received.disconnect(_on_object_state_received)
@@ -105,6 +129,9 @@ func disconnect_signals() -> void:
 	if NetworkManager.entity_health_received.is_connected(_on_entity_health_received):
 		NetworkManager.entity_health_received.disconnect(_on_entity_health_received)
 
+	if NetworkManager.entity_vitality_received.is_connected(_on_entity_vitality_received):
+		NetworkManager.entity_vitality_received.disconnect(_on_entity_vitality_received)
+
 	if NetworkManager.entity_ai_state_received.is_connected(_on_entity_ai_state_received):
 		NetworkManager.entity_ai_state_received.disconnect(_on_entity_ai_state_received)
 
@@ -113,6 +140,21 @@ func disconnect_signals() -> void:
 
 	if NetworkManager.entity_removed_received.is_connected(_on_entity_removed_received):
 		NetworkManager.entity_removed_received.disconnect(_on_entity_removed_received)
+
+	if NetworkManager.inventory_add_requested.is_connected(_on_inventory_add_requested):
+		NetworkManager.inventory_add_requested.disconnect(_on_inventory_add_requested)
+
+	if NetworkManager.inventory_move_requested.is_connected(_on_inventory_move_requested):
+		NetworkManager.inventory_move_requested.disconnect(_on_inventory_move_requested)
+
+	if NetworkManager.inventory_delete_requested.is_connected(_on_inventory_delete_requested):
+		NetworkManager.inventory_delete_requested.disconnect(_on_inventory_delete_requested)
+
+	if NetworkManager.inventory_use_requested.is_connected(_on_inventory_use_requested):
+		NetworkManager.inventory_use_requested.disconnect(_on_inventory_use_requested)
+
+	if NetworkManager.inventory_snapshot_received.is_connected(_on_inventory_snapshot_received):
+		NetworkManager.inventory_snapshot_received.disconnect(_on_inventory_snapshot_received)
 
 	if NetworkManager.end_game_requested.is_connected(_on_end_game_requested):
 		NetworkManager.end_game_requested.disconnect(_on_end_game_requested)
@@ -139,6 +181,18 @@ func apply_cached_entity_ai_states() -> void:
 		)
 
 
+func apply_cached_entity_vitality_states() -> void:
+	var cached_states: Dictionary = NetworkManager.get_entity_vitality_states()
+	for entity_id_variant: Variant in cached_states.keys():
+		var entity_id: String = str(entity_id_variant)
+		var state: Dictionary = cached_states[entity_id_variant]
+		_on_entity_vitality_received(
+			entity_id,
+			int(state.get("health", 0)),
+			int(state.get("max_health", 1))
+		)
+
+
 func request_entity_move_started(entity: Node, from_cell: Vector2i, target_cell: Vector2i, should_broadcast: bool = true) -> void:
 	if not should_broadcast or not GameSession.is_multiplayer():
 		return
@@ -159,6 +213,57 @@ func report_entity_move_completed(entity: Node, from_cell: Vector2i, target_cell
 		return
 
 	NetworkManager.report_entity_move_completed(id, from_cell, target_cell)
+
+
+func request_character_interaction(interactor: PlayerCharacter, target_cell: Vector2i) -> void:
+	if interactor == null or interactor != runtime.get_local_player():
+		return
+
+	if GameSession.is_singleplayer():
+		runtime.try_character_interaction(interactor, target_cell)
+		return
+
+	NetworkManager.request_interaction(target_cell)
+
+
+func request_inventory_add(item_id: String, amount: int) -> void:
+	if GameSession.is_singleplayer():
+		var local_player: PlayerCharacter = runtime.get_local_player()
+		if local_player != null:
+			local_player.character_inventory.try_add_item(item_id, amount)
+		return
+
+	NetworkManager.request_inventory_add(item_id, amount)
+
+
+func request_inventory_move(source_slot_index: int, target_slot_index: int) -> void:
+	if GameSession.is_singleplayer():
+		var local_player: PlayerCharacter = runtime.get_local_player()
+		if local_player != null:
+			local_player.character_inventory.try_move_stack(source_slot_index, target_slot_index)
+		return
+
+	NetworkManager.request_inventory_move(source_slot_index, target_slot_index)
+
+
+func request_inventory_delete(slot_index: int) -> void:
+	if GameSession.is_singleplayer():
+		var local_player: PlayerCharacter = runtime.get_local_player()
+		if local_player != null:
+			local_player.character_inventory.try_delete_stack(slot_index)
+		return
+
+	NetworkManager.request_inventory_delete(slot_index)
+
+
+func request_inventory_use(slot_index: int) -> void:
+	if GameSession.is_singleplayer():
+		var local_player: PlayerCharacter = runtime.get_local_player()
+		if local_player != null:
+			runtime.try_use_inventory_item(local_player, slot_index)
+		return
+
+	NetworkManager.request_inventory_use(slot_index)
 
 
 func broadcast_object_state(target_object: Node) -> void:
@@ -185,6 +290,9 @@ func broadcast_all_object_states() -> void:
 
 func _on_peer_map_updated() -> void:
 	runtime.update_player_authorities()
+	if GameSession.is_host():
+		_send_inventory_snapshots_to_owners()
+		_send_entity_vitality_states_to_mapped_peers()
 
 
 func _on_peer_connected(_peer_id: int) -> void:
@@ -192,6 +300,7 @@ func _on_peer_connected(_peer_id: int) -> void:
 		NetworkManager.send_world_spawns_to_peer(_peer_id)
 		NetworkManager.send_world_removals_to_peer(_peer_id)
 		NetworkManager.send_entity_ai_states_to_peer(_peer_id)
+		_send_entity_vitality_states_to_peer(_peer_id)
 		broadcast_all_object_states()
 
 
@@ -251,6 +360,17 @@ func _on_attack_received(steam_id: int, target_cell: Vector2i) -> void:
 		return
 
 	player.play_remote_attack(target_cell, false)
+
+
+func _on_interaction_requested(target_cell: Vector2i, requester_peer_id: int) -> void:
+	if not GameSession.is_host():
+		return
+
+	var player: PlayerCharacter = _get_requesting_player(requester_peer_id)
+	if player == null or not runtime.try_character_interaction(player, target_cell):
+		return
+
+	_send_inventory_snapshot(player, requester_peer_id)
 
 
 func _on_entity_move_received(entity_id: String, from_cell: Vector2i, target_cell: Vector2i) -> void:
@@ -427,6 +547,14 @@ func _on_entity_health_received(entity_id: String, new_health: int) -> void:
 	entity.set_health(new_health)
 
 
+func _on_entity_vitality_received(entity_id: String, new_health: int, new_max_health: int) -> void:
+	var player: PlayerCharacter = runtime.get_entity_by_id(entity_id) as PlayerCharacter
+	if player == null:
+		return
+
+	player.apply_vitality_state(new_health, new_max_health)
+
+
 func _on_entity_ai_state_received(entity_id: String, state: String, target_entity_id: String, reason: String) -> void:
 	var entity: NonPlayerEntity = runtime.get_entity_by_id(entity_id) as NonPlayerEntity
 	if entity == null:
@@ -452,6 +580,123 @@ func _on_entity_removed_received(entity_id: String) -> void:
 
 	runtime.unregister_entity(entity)
 	entity.queue_free()
+
+
+func _on_inventory_add_requested(item_id: String, amount: int, requester_peer_id: int) -> void:
+	if not GameSession.is_host():
+		return
+
+	var player: PlayerCharacter = _get_requesting_player(requester_peer_id)
+	if player == null or not player.character_inventory.try_add_item(item_id, amount):
+		return
+
+	_send_inventory_snapshot(player, requester_peer_id)
+
+
+func _on_inventory_move_requested(
+	source_slot_index: int,
+	target_slot_index: int,
+	requester_peer_id: int
+) -> void:
+	if not GameSession.is_host():
+		return
+
+	var player: PlayerCharacter = _get_requesting_player(requester_peer_id)
+	if player == null or not player.character_inventory.try_move_stack(source_slot_index, target_slot_index):
+		return
+
+	_send_inventory_snapshot(player, requester_peer_id)
+
+
+func _on_inventory_delete_requested(slot_index: int, requester_peer_id: int) -> void:
+	if not GameSession.is_host():
+		return
+
+	var player: PlayerCharacter = _get_requesting_player(requester_peer_id)
+	if player == null or not player.character_inventory.try_delete_stack(slot_index):
+		return
+
+	_send_inventory_snapshot(player, requester_peer_id)
+
+
+func _on_inventory_use_requested(slot_index: int, requester_peer_id: int) -> void:
+	if not GameSession.is_host():
+		return
+
+	var player: PlayerCharacter = _get_requesting_player(requester_peer_id)
+	if player == null or not runtime.try_use_inventory_item(player, slot_index):
+		return
+
+	_send_inventory_snapshot(player, requester_peer_id)
+	NetworkManager.broadcast_entity_vitality(player.entity_id, player.health, player.max_health)
+
+
+func _on_inventory_snapshot_received(snapshot: Dictionary) -> void:
+	if GameSession.is_host():
+		return
+
+	var entity_id: String = str(snapshot.get("entity_id", ""))
+	var player: PlayerCharacter = runtime.get_entity_by_id(entity_id) as PlayerCharacter
+	if player == null or not player.is_local_player:
+		return
+
+	player.character_inventory.apply_snapshot(snapshot)
+
+
+func _get_requesting_player(requester_peer_id: int) -> PlayerCharacter:
+	if requester_peer_id == 0:
+		return runtime.get_local_player()
+
+	var requester_steam_id: int = NetworkManager.get_steam_id_for_peer_id(requester_peer_id)
+	if requester_steam_id == 0:
+		return null
+
+	return runtime.get_player_by_steam_id(requester_steam_id)
+
+
+func _send_inventory_snapshot(player: PlayerCharacter, requester_peer_id: int) -> void:
+	if player == null or requester_peer_id == 0:
+		return
+
+	NetworkManager.send_inventory_snapshot(
+		requester_peer_id,
+		player.character_inventory.create_snapshot()
+	)
+
+
+func _send_inventory_snapshots_to_owners() -> void:
+	for entity_variant: Variant in runtime.get_registered_entities():
+		var player: PlayerCharacter = entity_variant as PlayerCharacter
+		if player == null or player.is_local_player or player.steam_id == 0:
+			continue
+		var peer_id: int = NetworkManager.get_peer_id_for_steam_id(player.steam_id)
+		if peer_id != 0:
+			_send_inventory_snapshot(player, peer_id)
+
+
+func _send_entity_vitality_states_to_peer(peer_id: int) -> void:
+	for entity_variant: Variant in runtime.get_registered_entities():
+		var player: PlayerCharacter = entity_variant as PlayerCharacter
+		if player == null:
+			continue
+
+		NetworkManager.send_entity_vitality_to_peer(
+			peer_id,
+			player.entity_id,
+			player.health,
+			player.max_health
+		)
+
+
+func _send_entity_vitality_states_to_mapped_peers() -> void:
+	for entity_variant: Variant in runtime.get_registered_entities():
+		var remote_player: PlayerCharacter = entity_variant as PlayerCharacter
+		if remote_player == null or remote_player.is_local_player or remote_player.steam_id == 0:
+			continue
+
+		var peer_id: int = NetworkManager.get_peer_id_for_steam_id(remote_player.steam_id)
+		if peer_id != 0:
+			_send_entity_vitality_states_to_peer(peer_id)
 
 
 func _on_object_state_received(object_id: String, object_state: int) -> void:

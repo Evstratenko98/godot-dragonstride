@@ -4,6 +4,10 @@
 [ext_resource type="Script" uid="uid://dtnqqg6ojrxle" path="res://scenes/entities/character/character.gd" id="2"]
 [ext_resource type="Script" uid="uid://cviewm4n2q8pa" path="res://scenes/entities/character/character_view.gd" id="3"]
 [ext_resource type="Script" uid="uid://cmodel9r7x2kb" path="res://scenes/entities/character/character_model.gd" id="4"]
+[ext_resource type="Script" path="res://scenes/inventory/character_inventory.gd" id="5_inventory"]
+[ext_resource type="Script" path="res://addons/gloot/core/inventory.gd" id="6_gloot_inventory"]
+[ext_resource type="Script" path="res://addons/gloot/core/constraints/grid_constraint.gd" id="7_grid_constraint"]
+[ext_resource type="JSON" path="res://scenes/inventory/item_prototypes.json" id="8_item_prototypes"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_1"]
 radius = 14.0
@@ -112,6 +116,17 @@ script = ExtResource("3")
 
 [node name="Model" type="Node" parent="." unique_id=3930656237]
 script = ExtResource("4")
+
+[node name="CharacterInventory" type="Node" parent="."]
+script = ExtResource("5_inventory")
+
+[node name="Inventory" type="Node" parent="CharacterInventory"]
+script = ExtResource("6_gloot_inventory")
+protoset = ExtResource("8_item_prototypes")
+
+[node name="GridConstraint" type="Node" parent="CharacterInventory/Inventory"]
+script = ExtResource("7_grid_constraint")
+size = Vector2i(5, 1)
 
 [node name="Sprite2D" type="Sprite2D" parent="." unique_id=238867697]
 position = Vector2(0, -8)

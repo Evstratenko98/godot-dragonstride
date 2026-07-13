@@ -11,6 +11,8 @@ signal match_end_requested()
 @export var turn_manager_path: NodePath = ^"../TurnManager"
 @export var spawner_path: NodePath = ^"../WorldSpawner"
 @export var awareness_path: NodePath = ^"../Awareness"
+@export var interaction_path: NodePath = ^"../Interaction"
+@export var item_usage_path: NodePath = ^"../ItemUsage"
 
 var level: WorldLevel = null
 var grid: WorldGrid = null
@@ -21,6 +23,8 @@ var network: WorldNetwork = null
 var turn_manager: WorldTurns = null
 var spawner: WorldSpawner = null
 var awareness: WorldAwareness = null
+var interaction: WorldInteraction = null
+var item_usage: WorldItemUsage = null
 
 
 func configure_for_level(new_level: WorldLevel) -> void:
@@ -42,6 +46,8 @@ func is_configured_for(target_level: WorldLevel) -> bool:
 		and turn_manager != null
 		and spawner != null
 		and awareness != null
+		and interaction != null
+		and item_usage != null
 	)
 
 
@@ -64,6 +70,7 @@ func start_game() -> void:
 	_register_world_entities()
 	spawner.apply_cached_world_removals()
 	network.apply_cached_entity_ai_states()
+	network.apply_cached_entity_vitality_states()
 
 
 func connect_signals() -> void:
@@ -94,6 +101,40 @@ func handle_character_attack(attacker: Node, target_cell: Vector2i) -> void:
 	handle_entity_attack(attacker, target_cell, true)
 
 
+func request_character_interaction(interactor: PlayerCharacter, target_cell: Vector2i) -> void:
+	network.request_character_interaction(interactor, target_cell)
+
+
+func try_character_interaction(interactor: PlayerCharacter, target_cell: Vector2i) -> bool:
+	if interaction == null:
+		return false
+
+	return interaction.try_interact(interactor, target_cell)
+
+
+func request_inventory_add(item_id: String, amount: int) -> void:
+	network.request_inventory_add(item_id, amount)
+
+
+func request_inventory_move(source_slot_index: int, target_slot_index: int) -> void:
+	network.request_inventory_move(source_slot_index, target_slot_index)
+
+
+func request_inventory_delete(slot_index: int) -> void:
+	network.request_inventory_delete(slot_index)
+
+
+func request_inventory_use(slot_index: int) -> void:
+	network.request_inventory_use(slot_index)
+
+
+func try_use_inventory_item(player: PlayerCharacter, slot_index: int) -> bool:
+	if item_usage == null:
+		return false
+
+	return item_usage.try_use_item(player, slot_index)
+
+
 func register_entity(entity: Node) -> void:
 	registry.register_entity(entity)
 	if awareness != null:
@@ -116,6 +157,14 @@ func unregister_object(target_object: Node) -> void:
 
 func remove_world_object(target_object: GridObject) -> bool:
 	return spawner.remove_world_object(target_object)
+
+
+func remove_defeated_non_player(target_entity: NonPlayerEntity) -> bool:
+	return spawner.remove_defeated_non_player(target_entity)
+
+
+func spawn_world_object(type_key: String, cell: Vector2i) -> bool:
+	return spawner.spawn_world_object(type_key, cell)
 
 
 func get_placement_error(spawn_node: Node, anchor_cell: Vector2i) -> String:
@@ -223,6 +272,20 @@ func can_entity_attack_in_turn(entity: Node, target_cell: Vector2i) -> bool:
 	return turn_manager.can_entity_attack(entity, target_cell)
 
 
+func can_entity_interact_in_turn(entity: Node) -> bool:
+	if turn_manager == null:
+		return true
+
+	return turn_manager.can_entity_interact(entity)
+
+
+func can_entity_use_item_in_turn(entity: Node) -> bool:
+	if turn_manager == null:
+		return true
+
+	return turn_manager.can_entity_use_item(entity)
+
+
 func can_entity_sync_state_in_turn(entity: Node) -> bool:
 	if turn_manager == null:
 		return true
@@ -238,6 +301,11 @@ func notify_entity_moved_in_turn(entity: Node, from_cell: Vector2i, target_cell:
 func notify_entity_attacked_in_turn(entity: Node, target_cell: Vector2i) -> void:
 	if turn_manager != null:
 		turn_manager.notify_entity_attacked(entity, target_cell)
+
+
+func notify_entity_interacted_in_turn(entity: Node) -> void:
+	if turn_manager != null:
+		turn_manager.notify_entity_interacted(entity)
 
 
 func notify_entity_action_finished_in_turn(entity: Node) -> void:
@@ -290,6 +358,9 @@ func get_player_by_steam_id(steam_id: int) -> PlayerCharacter:
 
 
 func get_local_player() -> PlayerCharacter:
+	if players_service == null:
+		return null
+
 	return players_service.get_local_player()
 
 
@@ -365,6 +436,8 @@ func _bind_services() -> void:
 	turn_manager = get_node_or_null(turn_manager_path) as WorldTurns
 	spawner = get_node_or_null(spawner_path) as WorldSpawner
 	awareness = get_node_or_null(awareness_path) as WorldAwareness
+	interaction = get_node_or_null(interaction_path) as WorldInteraction
+	item_usage = get_node_or_null(item_usage_path) as WorldItemUsage
 
 	if grid != null:
 		grid.configure_context(self, level)
@@ -384,6 +457,10 @@ func _bind_services() -> void:
 		spawner.configure_context(self, level)
 	if awareness != null:
 		awareness.configure_context(self, level)
+	if interaction != null:
+		interaction.configure_context(self, level)
+	if item_usage != null:
+		item_usage.configure_context(self, level)
 
 
 func _configure_services() -> void:

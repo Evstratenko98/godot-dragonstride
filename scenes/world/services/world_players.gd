@@ -4,6 +4,7 @@ extends Node
 const CHARACTER_SCENE := preload("res://scenes/entities/character/character.tscn")
 const CAMERA_SCENE := preload("res://scenes/camera/camera.tscn")
 const KILL_COMMAND_NAME := "game_character_kill"
+const INVENTORY_ADD_COMMAND_NAME := "game_inventory_add"
 const SINGLEPLAYER_WARRIOR_COLOR := "Purple"
 const MULTIPLAYER_WARRIOR_COLORS := ["Blue", "Purple", "Red", "Yellow"]
 
@@ -123,6 +124,28 @@ func console_kill_character() -> void:
 	_kill_and_respawn_player(local_player)
 
 
+func console_inventory_add(item_id: String, amount_text: String) -> void:
+	if local_player == null:
+		ConsoleOutput.print_console("ERROR: Local character is not ready.", runtime)
+		return
+	if not local_player.character_inventory.has_item_id(item_id):
+		ConsoleOutput.print_console("ERROR: Unknown inventory item: %s." % item_id, runtime)
+		return
+	if not amount_text.is_valid_int() or amount_text.to_int() <= 0:
+		ConsoleOutput.print_console(
+			"ERROR: Usage: %s <item_id> <positive_amount>." % INVENTORY_ADD_COMMAND_NAME,
+			runtime
+		)
+		return
+	if GameSession.is_multiplayer() and not NetworkManager.is_ready():
+		ConsoleOutput.print_console("ERROR: Cannot add inventory item: network is not ready.", runtime)
+		return
+
+	var amount: int = amount_text.to_int()
+	runtime.request_inventory_add(item_id, amount)
+	ConsoleOutput.print_console("Requested %d %s inventory item(s)." % [amount, item_id], runtime)
+
+
 func _kill_and_respawn_player(player: PlayerCharacter) -> void:
 	if player == null:
 		return
@@ -151,6 +174,19 @@ func _register_console_commands() -> void:
 		0,
 		"Kill and immediately respawn the local character."
 	)
+	console.add_command(
+		INVENTORY_ADD_COMMAND_NAME,
+		console_inventory_add,
+		["item_id", "amount"],
+		2,
+		"Add a complete item amount to the local character inventory."
+	)
+
+	if console.has_method("add_command_autocomplete_list"):
+		console.add_command_autocomplete_list(
+			INVENTORY_ADD_COMMAND_NAME,
+			CharacterInventory.KNOWN_ITEM_IDS
+		)
 
 
 func _unregister_console_commands() -> void:
@@ -159,6 +195,7 @@ func _unregister_console_commands() -> void:
 		return
 
 	console.remove_command(KILL_COMMAND_NAME)
+	console.remove_command(INVENTORY_ADD_COMMAND_NAME)
 
 
 func _connect_network_signals() -> void:

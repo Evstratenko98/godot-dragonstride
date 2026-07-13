@@ -17,6 +17,7 @@ signal character_state_received(
 )
 signal attack_requested(steam_id: int, target_cell: Vector2i)
 signal attack_received(steam_id: int, target_cell: Vector2i)
+signal interaction_requested(target_cell: Vector2i, requester_peer_id: int)
 signal object_state_received(object_id: String, object_state: int)
 signal entity_move_requested(
 	requester_steam_id: int,
@@ -56,6 +57,12 @@ signal world_clear_requested(type_key: String, requester_peer_id: int)
 signal world_items_removed_received(records: Array[Dictionary])
 signal character_kill_requested(requester_peer_id: int)
 signal world_spawn_failed_received(message: String)
+signal inventory_add_requested(item_id: String, amount: int, requester_peer_id: int)
+signal inventory_move_requested(source_slot_index: int, target_slot_index: int, requester_peer_id: int)
+signal inventory_delete_requested(slot_index: int, requester_peer_id: int)
+signal inventory_use_requested(slot_index: int, requester_peer_id: int)
+signal inventory_snapshot_received(snapshot: Dictionary)
+signal entity_vitality_received(entity_id: String, health: int, max_health: int)
 
 var peer: MultiplayerPeer = null
 var is_network_active := false
@@ -68,6 +75,7 @@ var steam_id_by_peer_id: Dictionary = {}
 var peer_id_by_steam_id: Dictionary = {}
 var object_states: Dictionary = {}
 var entity_ai_states: Dictionary = {}
+var entity_vitality_states: Dictionary = {}
 var world_spawn_records: Array[Dictionary] = []
 var removed_world_items: Array[Dictionary] = []
 var has_reported_ready := false
@@ -192,6 +200,7 @@ func stop_network() -> void:
 	peer_id_by_steam_id.clear()
 	object_states.clear()
 	entity_ai_states.clear()
+	entity_vitality_states.clear()
 	world_spawn_records.clear()
 	removed_world_items.clear()
 	has_reported_ready = false
@@ -299,6 +308,17 @@ func broadcast_attack(steam_id: int, target_cell: Vector2i) -> void:
 		return
 
 	rpc("_receive_attack", steam_id, target_cell)
+
+
+func request_interaction(target_cell: Vector2i) -> void:
+	if not GameSession.is_multiplayer() or not is_ready():
+		return
+
+	if is_host:
+		interaction_requested.emit(target_cell, 0)
+		return
+
+	rpc_id(1, "_submit_interaction", target_cell)
 
 
 func request_entity_move(entity_id: String, from_cell: Vector2i, target_cell: Vector2i) -> void:
@@ -445,6 +465,30 @@ func get_entity_ai_states() -> Dictionary:
 	return entity_ai_states.duplicate(true)
 
 
+func get_entity_vitality_states() -> Dictionary:
+	return entity_vitality_states.duplicate(true)
+
+
+func broadcast_entity_vitality(entity_id: String, health: int, max_health: int) -> void:
+	if not GameSession.is_multiplayer() or not is_host or not is_ready():
+		return
+
+	_cache_entity_vitality(entity_id, health, max_health)
+	rpc("_receive_entity_vitality", entity_id, health, max_health)
+
+
+func send_entity_vitality_to_peer(peer_id: int, entity_id: String, health: int, max_health: int) -> void:
+	if not GameSession.is_multiplayer() or not is_host or not is_ready() or peer_id == 0:
+		return
+
+	if peer_id == multiplayer.get_unique_id():
+		_cache_entity_vitality(entity_id, health, max_health)
+		entity_vitality_received.emit(entity_id, health, max_health)
+		return
+
+	rpc_id(peer_id, "_receive_entity_vitality", entity_id, health, max_health)
+
+
 func request_world_spawn(type_key: String, cell: Vector2i) -> void:
 	if not GameSession.is_multiplayer():
 		return
@@ -503,6 +547,61 @@ func request_character_kill() -> void:
 		return
 
 	rpc_id(1, "_submit_character_kill")
+
+
+func request_inventory_add(item_id: String, amount: int) -> void:
+	if not GameSession.is_multiplayer() or not is_ready():
+		return
+
+	if is_host:
+		inventory_add_requested.emit(item_id, amount, 0)
+		return
+
+	rpc_id(1, "_submit_inventory_add", item_id, amount)
+
+
+func request_inventory_move(source_slot_index: int, target_slot_index: int) -> void:
+	if not GameSession.is_multiplayer() or not is_ready():
+		return
+
+	if is_host:
+		inventory_move_requested.emit(source_slot_index, target_slot_index, 0)
+		return
+
+	rpc_id(1, "_submit_inventory_move", source_slot_index, target_slot_index)
+
+
+func request_inventory_delete(slot_index: int) -> void:
+	if not GameSession.is_multiplayer() or not is_ready():
+		return
+
+	if is_host:
+		inventory_delete_requested.emit(slot_index, 0)
+		return
+
+	rpc_id(1, "_submit_inventory_delete", slot_index)
+
+
+func request_inventory_use(slot_index: int) -> void:
+	if not GameSession.is_multiplayer() or not is_ready():
+		return
+
+	if is_host:
+		inventory_use_requested.emit(slot_index, 0)
+		return
+
+	rpc_id(1, "_submit_inventory_use", slot_index)
+
+
+func send_inventory_snapshot(peer_id: int, snapshot: Dictionary) -> void:
+	if not GameSession.is_multiplayer() or not is_host or not is_ready() or peer_id == 0:
+		return
+
+	if peer_id == multiplayer.get_unique_id():
+		inventory_snapshot_received.emit(snapshot)
+		return
+
+	rpc_id(peer_id, "_receive_inventory_snapshot", snapshot)
 
 
 func broadcast_world_spawn(record: Dictionary) -> void:
@@ -890,6 +989,18 @@ func _receive_attack(steam_id: int, target_cell: Vector2i) -> void:
 
 
 @rpc("any_peer", "reliable")
+func _submit_interaction(target_cell: Vector2i) -> void:
+	if not is_host:
+		return
+
+	var requester_peer_id: int = multiplayer.get_remote_sender_id()
+	if not has_steam_id_for_peer(requester_peer_id):
+		return
+
+	interaction_requested.emit(target_cell, requester_peer_id)
+
+
+@rpc("any_peer", "reliable")
 func _submit_entity_move(entity_id: String, from_cell: Vector2i, target_cell: Vector2i) -> void:
 	if not is_host:
 		return
@@ -1090,6 +1201,57 @@ func _submit_character_kill() -> void:
 	character_kill_requested.emit(multiplayer.get_remote_sender_id())
 
 
+@rpc("any_peer", "reliable")
+func _submit_inventory_add(item_id: String, amount: int) -> void:
+	if not is_host:
+		return
+
+	inventory_add_requested.emit(item_id, amount, multiplayer.get_remote_sender_id())
+
+
+@rpc("any_peer", "reliable")
+func _submit_inventory_move(source_slot_index: int, target_slot_index: int) -> void:
+	if not is_host:
+		return
+
+	inventory_move_requested.emit(
+		source_slot_index,
+		target_slot_index,
+		multiplayer.get_remote_sender_id()
+	)
+
+
+@rpc("any_peer", "reliable")
+func _submit_inventory_delete(slot_index: int) -> void:
+	if not is_host:
+		return
+
+	inventory_delete_requested.emit(slot_index, multiplayer.get_remote_sender_id())
+
+
+@rpc("any_peer", "reliable")
+func _submit_inventory_use(slot_index: int) -> void:
+	if not is_host:
+		return
+
+	var requester_peer_id: int = multiplayer.get_remote_sender_id()
+	if not has_steam_id_for_peer(requester_peer_id):
+		return
+
+	inventory_use_requested.emit(slot_index, requester_peer_id)
+
+
+@rpc("authority", "reliable")
+func _receive_inventory_snapshot(snapshot: Dictionary) -> void:
+	inventory_snapshot_received.emit(snapshot)
+
+
+@rpc("authority", "reliable")
+func _receive_entity_vitality(entity_id: String, health: int, max_health: int) -> void:
+	_cache_entity_vitality(entity_id, health, max_health)
+	entity_vitality_received.emit(entity_id, health, max_health)
+
+
 @rpc("authority", "reliable")
 func _receive_world_spawn(record: Dictionary) -> void:
 	_cache_world_spawn_record(record)
@@ -1212,6 +1374,7 @@ func _cache_world_item_removal(record: Dictionary) -> void:
 	var was_dynamic_spawn: bool = _erase_world_spawn_record(item_id)
 	object_states.erase(item_id)
 	entity_ai_states.erase(item_id)
+	entity_vitality_states.erase(item_id)
 	if was_dynamic_spawn:
 		return
 
@@ -1254,4 +1417,14 @@ func _cache_entity_ai_state(entity_id: String, state: String, target_entity_id: 
 		"state": state,
 		"target_entity_id": target_entity_id,
 		"reason": reason,
+	}
+
+
+func _cache_entity_vitality(entity_id: String, health: int, max_health: int) -> void:
+	if entity_id.is_empty() or max_health <= 0:
+		return
+
+	entity_vitality_states[entity_id] = {
+		"health": clampi(health, 0, max_health),
+		"max_health": max_health,
 	}
