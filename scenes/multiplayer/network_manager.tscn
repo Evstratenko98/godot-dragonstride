@@ -1,0 +1,42 @@
+[gd_scene load_steps=11 format=3]
+
+[ext_resource path="res://scenes/multiplayer/network_manager.gd" type="Script" id="1_manager"]
+[ext_resource path="res://scenes/multiplayer/channels/network_connection_channel.gd" type="Script" id="2_connection"]
+[ext_resource path="res://scenes/multiplayer/channels/network_character_channel.gd" type="Script" id="3_character"]
+[ext_resource path="res://scenes/multiplayer/channels/network_combat_channel.gd" type="Script" id="4_combat"]
+[ext_resource path="res://scenes/multiplayer/channels/network_entity_channel.gd" type="Script" id="5_entity"]
+[ext_resource path="res://scenes/multiplayer/channels/network_world_channel.gd" type="Script" id="6_world"]
+[ext_resource path="res://scenes/multiplayer/channels/network_inventory_channel.gd" type="Script" id="7_inventory"]
+[ext_resource path="res://scenes/multiplayer/channels/network_turn_channel.gd" type="Script" id="8_turns"]
+[ext_resource path="res://scenes/multiplayer/channels/network_match_channel.gd" type="Script" id="9_match"]
+[ext_resource path="res://scenes/multiplayer/channels/network_spell_channel.gd" type="Script" id="10_spells"]
+
+[node name="NetworkManager" type="Node"]
+script = ExtResource("1_manager")
+
+[node name="Connection" type="Node" parent="."]
+script = ExtResource("2_connection")
+
+[node name="Character" type="Node" parent="."]
+script = ExtResource("3_character")
+
+[node name="Combat" type="Node" parent="."]
+script = ExtResource("4_combat")
+
+[node name="Entity" type="Node" parent="."]
+script = ExtResource("5_entity")
+
+[node name="World" type="Node" parent="."]
+script = ExtResource("6_world")
+
+[node name="Inventory" type="Node" parent="."]
+script = ExtResource("7_inventory")
+
+[node name="Turns" type="Node" parent="."]
+script = ExtResource("8_turns")
+
+[node name="Spells" type="Node" parent="."]
+script = ExtResource("10_spells")
+
+[node name="Match" type="Node" parent="."]
+script = ExtResource("9_match")

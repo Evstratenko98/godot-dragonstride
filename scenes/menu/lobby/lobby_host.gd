@@ -7,7 +7,7 @@ extends Control
 func _ready() -> void:
 	SteamManager.lobby_members_updated.connect(_on_lobby_members_updated)
 	SteamManager.lobby_left.connect(_on_lobby_left)
-	NetworkManager.network_failed.connect(_on_network_failed)
+	NetworkManager.connection.network_failed.connect(_on_network_failed)
 
 	lobby_title_label.text = "Lobby ID: " + str(SteamManager.get_current_lobby_id())
 
@@ -23,8 +23,8 @@ func _exit_tree() -> void:
 	if SteamManager.lobby_left.is_connected(_on_lobby_left):
 		SteamManager.lobby_left.disconnect(_on_lobby_left)
 
-	if NetworkManager.network_failed.is_connected(_on_network_failed):
-		NetworkManager.network_failed.disconnect(_on_network_failed)
+	if NetworkManager.connection.network_failed.is_connected(_on_network_failed):
+		NetworkManager.connection.network_failed.disconnect(_on_network_failed)
 
 
 func _on_lobby_members_updated(members: Array) -> void:

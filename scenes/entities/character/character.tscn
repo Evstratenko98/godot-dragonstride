@@ -128,6 +128,14 @@ protoset = ExtResource("8_item_prototypes")
 script = ExtResource("7_grid_constraint")
 size = Vector2i(5, 1)
 
+[node name="SpellInventory" type="Node" parent="CharacterInventory"]
+script = ExtResource("6_gloot_inventory")
+protoset = ExtResource("8_item_prototypes")
+
+[node name="GridConstraint" type="Node" parent="CharacterInventory/SpellInventory"]
+script = ExtResource("7_grid_constraint")
+size = Vector2i(5, 1)
+
 [node name="Sprite2D" type="Sprite2D" parent="." unique_id=238867697]
 position = Vector2(0, -8)
 texture = ExtResource("1")

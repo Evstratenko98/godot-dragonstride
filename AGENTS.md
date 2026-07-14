@@ -47,7 +47,15 @@ WorldLevel                      данные и узлы конкретного 
 
 Entities / Objects --> WorldRuntime --> специализированные сервисы
 Views / HUD        --> визуализация и пользовательский ввод
-WorldNetwork       --> NetworkManager --> RPC / Steam transport
+WorldNetwork / профильные World-сервисы
+        |
+        v
+NetworkManager                 composition root сетевой подсистемы
+        |
+        +--> NetworkConnectionChannel   Steam transport и lifecycle соединения
+        +--> NetworkPeerRegistry        peer_id <-> steam_id
+        +--> NetworkReplicationStore    кэш авторитетного состояния для late join
+        +--> Network*Channel            RPC одного предметного протокола
 ```
 
 Допустимое направление зависимостей идёт сверху вниз или через объявленный контракт. Нижний слой не должен управлять жизненным циклом верхнего слоя.
@@ -111,11 +119,27 @@ WorldNetwork       --> NetworkManager --> RPC / Steam transport
 ### Session и transport
 
 - `GameSession` хранит режим, выбранный уровень, игроков и настройки, но не правила уровня.
-- `NetworkManager` владеет transport, peer mapping, `@rpc`, `rpc()` и `rpc_id()`.
+- `NetworkManager` является только composition root сетевой подсистемы. Он предоставляет типизированный доступ к connection, registry, replication store и предметным каналам, но не хранит gameplay payload, peer mapping или реализацию RPC.
+- `NetworkConnectionChannel` владеет созданием и закрытием `SteamMultiplayerPeer`, готовностью соединения, сетевыми lifecycle-сигналами и RPC регистрации peer. Он хранит только connection state и идентификаторы текущей Steam-сессии.
+- `NetworkPeerRegistry` владеет только двусторонним соответствием `peer_id <-> steam_id`. В нём запрещены gameplay state, transport lifecycle и RPC.
+- `NetworkReplicationStore` владеет только последним авторитетным состоянием, необходимым для late join/resync: object state, AI state, vitality, dynamic spawn records и removal tombstones. Он не применяет состояние к сцене и не принимает gameplay-решения.
+- Каждый `Network*Channel` владеет RPC, сигналами и транспортной валидацией только одного предметного протокола. Канал не реализует правила мира и не обращается к сущностям уровня.
 - `SteamManager` инкапсулирует Steam lobby API.
-- `WorldNetwork` адаптирует доменные события уровня к `NetworkManager`.
+- `WorldNetwork` адаптирует общие character/entity/combat/inventory события к runtime. `WorldSpawner`, `WorldTurns` и `WorldPlayers` связывают со своими каналами только принадлежащие им spawn, turn и player lifecycle операции.
 
-Gameplay-сущности, объекты, views и HUD не должны напрямую вызывать низкоуровневые RPC. Они обращаются к `WorldRuntime`, профильному сервису или отправляют сигнал владельцу соответствующей операции.
+Gameplay-сущности, объекты, views и HUD не должны обращаться к `NetworkManager` или каналам напрямую. Они обращаются к `WorldRuntime`, профильному сервису или отправляют сигнал владельцу соответствующей операции. World-сервис может вызывать только соответствующий своей ответственности публичный метод канала; прямые `rpc()`/`rpc_id()` вне каналов запрещены.
+
+### Сетевые каналы и владельцы данных
+
+- `NetworkCharacterChannel`: transient character state, interaction intent, player movement intent/result и character kill intent. Он не назначает итоговую клетку, health или результат действия.
+- `NetworkCombatChannel`: attack intent и авторитетные attack result, health и vitality. Клиент может отправлять только attack intent; damage, health и vitality отправляет только host.
+- `NetworkEntityChannel`: object state, AI state, entity respawn и removal. Эти состояния отправляет только host.
+- `NetworkWorldChannel`: spawn/fill/clear intents, авторитетные spawn records, removal records и безопасные доменные причины отказа. Клиент не создаёт итоговый spawn record.
+- `NetworkInventoryChannel`: add/move/delete/use intents и авторитетный inventory snapshot. Клиент не отправляет snapshot.
+- `NetworkTurnChannel`: turn-end intent и авторитетный turn snapshot. Клиент не отправляет snapshot и не завершает ход другого Steam-пользователя.
+- `NetworkMatchChannel`: завершение матча. Только host рассылает завершение всем участникам; выход клиента завершает лишь его локальную сессию и не останавливает матч host.
+
+Имена и пути узлов каналов в `network_manager.tscn` являются частью сетевого контракта Godot и обязаны совпадать у host и client. Переименование узла канала является изменением версии протокола. Старые и новые сборки не обязаны быть совместимы между собой: участники одного матча должны использовать одну версию.
 
 ### Entities, Models и Views
 
@@ -230,8 +254,10 @@ const MODE_SINGLEPLAYER := "singleplayer"
 - Для `@rpc("any_peer")` всегда проверять роль host и `multiplayer.get_remote_sender_id()` там, где запрос связан с конкретным игроком.
 - Не доверять клиентским `steam_id`, `entity_id`, клетке, урону или состоянию. Клиент не назначает итоговый урон, health, AI state, spawn record или turn snapshot.
 - Явно выбирать delivery mode: регулярно обновляемое устаревающее состояние может быть `unreliable`, одноразовая команда или результат — `reliable`.
-- RPC-методы и низкоуровневые вызовы `rpc()`/`rpc_id()` размещаются в `NetworkManager`. Доменные преобразования и привязка к объектам уровня размещаются в `WorldNetwork`.
-- Следовать существующему направлению имён: `_submit_*` для запроса клиента к host, `_relay_*` для приёма и ретрансляции host, `_receive_*` для авторитетного получения.
+- RPC-методы и низкоуровневые вызовы `rpc()`/`rpc_id()` размещаются только в соответствующем `Network*Channel`. `NetworkManager`, registry, replication store, gameplay-код и views не содержат RPC.
+- Следовать направлению имён: `_submit_*` для намерения клиента к host, `_receive_*` для авторитетного состояния от host. Клиентские `_relay_*`, принимающие готовый результат и ретранслирующие его как авторитетный, запрещены.
+- Общую проверку готовности, роли host и регистрации sender размещать в базовом контракте канала, но предметную валидацию entity/cell/action оставлять профильному World-сервису.
+- `@rpc("any_peer")` разрешён только для client intent. RPC авторитетного результата объявляется `@rpc("authority")` и не имеет клиентского relay-аналога.
 - Не скрывать отправку в setter/view/logger. Применение удалённого состояния не должно отправлять его повторно.
 
 ### Запрет передачи логов

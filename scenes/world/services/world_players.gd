@@ -88,7 +88,7 @@ func start_multiplayer() -> void:
 
 func update_player_authorities() -> void:
 	for steam_id in players_by_steam_id.keys():
-		var peer_id: int = NetworkManager.get_peer_id_for_steam_id(int(steam_id))
+		var peer_id: int = NetworkManager.peers.get_peer_id_for_steam_id(int(steam_id))
 
 		if peer_id == 0:
 			continue
@@ -113,12 +113,12 @@ func console_kill_character() -> void:
 	if local_player == null:
 		ConsoleOutput.print_console("ERROR: Local character is not ready.", runtime)
 		return
-	if GameSession.is_multiplayer() and not NetworkManager.is_ready():
+	if GameSession.is_multiplayer() and not NetworkManager.connection.is_ready():
 		ConsoleOutput.print_console("ERROR: Cannot kill character: network is not ready.", runtime)
 		return
 
 	if GameSession.is_multiplayer() and not GameSession.is_host():
-		NetworkManager.request_character_kill()
+		NetworkManager.character.request_character_kill()
 		return
 
 	_kill_and_respawn_player(local_player)
@@ -137,7 +137,7 @@ func console_inventory_add(item_id: String, amount_text: String) -> void:
 			runtime
 		)
 		return
-	if GameSession.is_multiplayer() and not NetworkManager.is_ready():
+	if GameSession.is_multiplayer() and not NetworkManager.connection.is_ready():
 		ConsoleOutput.print_console("ERROR: Cannot add inventory item: network is not ready.", runtime)
 		return
 
@@ -153,7 +153,7 @@ func _kill_and_respawn_player(player: PlayerCharacter) -> void:
 	player.die()
 	runtime.notify_entity_action_finished_in_turn(player)
 	if GameSession.is_multiplayer():
-		NetworkManager.broadcast_entity_respawn(
+		NetworkManager.entity.broadcast_entity_respawn(
 			player.entity_id,
 			player.spawn_cell,
 			player.health
@@ -199,13 +199,13 @@ func _unregister_console_commands() -> void:
 
 
 func _connect_network_signals() -> void:
-	if not NetworkManager.character_kill_requested.is_connected(_on_character_kill_requested):
-		NetworkManager.character_kill_requested.connect(_on_character_kill_requested)
+	if not NetworkManager.character.character_kill_requested.is_connected(_on_character_kill_requested):
+		NetworkManager.character.character_kill_requested.connect(_on_character_kill_requested)
 
 
 func _disconnect_network_signals() -> void:
-	if NetworkManager.character_kill_requested.is_connected(_on_character_kill_requested):
-		NetworkManager.character_kill_requested.disconnect(_on_character_kill_requested)
+	if NetworkManager.character.character_kill_requested.is_connected(_on_character_kill_requested):
+		NetworkManager.character.character_kill_requested.disconnect(_on_character_kill_requested)
 
 
 func _on_character_kill_requested(requester_peer_id: int) -> void:
@@ -214,7 +214,7 @@ func _on_character_kill_requested(requester_peer_id: int) -> void:
 
 	var target_player: PlayerCharacter = local_player
 	if requester_peer_id != 0:
-		var requester_steam_id: int = NetworkManager.get_steam_id_for_peer_id(requester_peer_id)
+		var requester_steam_id: int = NetworkManager.peers.get_steam_id_for_peer_id(requester_peer_id)
 		target_player = get_player_by_steam_id(requester_steam_id)
 
 	if target_player == null:

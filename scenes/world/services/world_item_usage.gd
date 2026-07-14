@@ -2,10 +2,12 @@ class_name WorldItemUsage
 extends Node
 
 const EFFECT_ID_MEAT_HEALTH := "meat_health"
+const EFFECT_ID_PRECISION_STONE_DAMAGE := "precision_stone_damage"
 
 var runtime: WorldRuntime = null
 var level: WorldLevel = null
 var meat_use_effect: MeatUseEffect = MeatUseEffect.new()
+var precision_stone_use_effect: PrecisionStoneUseEffect = PrecisionStoneUseEffect.new()
 
 
 func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void:
@@ -27,7 +29,7 @@ func try_use_item(player: PlayerCharacter, slot_index: int) -> bool:
 	var effect: ItemUseEffect = _get_effect(effect_id)
 	if effect == null or not effect.can_apply(player):
 		return false
-	if not character_inventory.try_consume_one(slot_index):
+	if not character_inventory.try_consume_one(CharacterInventory.INVENTORY_KIND_ITEM, slot_index):
 		return false
 
 	return effect.apply(player)
@@ -36,5 +38,7 @@ func try_use_item(player: PlayerCharacter, slot_index: int) -> bool:
 func _get_effect(effect_id: String) -> ItemUseEffect:
 	if effect_id == EFFECT_ID_MEAT_HEALTH:
 		return meat_use_effect
+	if effect_id == EFFECT_ID_PRECISION_STONE_DAMAGE:
+		return precision_stone_use_effect
 
 	return null

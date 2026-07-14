@@ -124,7 +124,9 @@ func send_network_state() -> void:
 	if character_view != null:
 		current_animation = character_view.get_current_animation()
 
-	NetworkManager.send_character_state(
+	if runtime == null:
+		return
+	runtime.send_character_state(
 		steam_id,
 		global_position,
 		str(current_animation),
@@ -195,9 +197,9 @@ func _attack(
 		is_attacking = false
 		return
 
-	_play_target_incoming_attack_guard(target_cell, character_view.get_animation_length(animation_name))
 	if should_apply:
 		_apply_attack_to_world(should_broadcast)
+	_play_target_incoming_attack_guard(target_cell, character_view.get_animation_length(animation_name))
 
 	await character_view.play_attack(animation_name, attack_facing_left, update_horizontal_facing)
 	if attack_generation != get_action_generation():

@@ -64,7 +64,12 @@ func start_entity(
 
 
 func can_act() -> bool:
-	return health > 0 and not is_moving and not is_attacking
+	return (
+		health > 0
+		and not is_moving
+		and not is_attacking
+		and (runtime == null or not runtime.is_entity_casting(self))
+	)
 
 
 func can_attack_cell(target_cell: Vector2i) -> bool:
@@ -78,7 +83,7 @@ func request_move(direction: Vector2i) -> bool:
 	if direction == Vector2i.ZERO or runtime == null:
 		return false
 
-	if is_moving or is_attacking:
+	if is_moving or is_attacking or runtime.is_entity_movement_blocked_by_spell(self):
 		return false
 
 	if not runtime.can_entity_move_in_turn(self):
@@ -104,7 +109,7 @@ func request_attack_cell(target_cell: Vector2i, should_apply: bool = true, shoul
 	if runtime == null:
 		return false
 
-	if is_moving or is_attacking or health <= 0:
+	if is_moving or is_attacking or health <= 0 or runtime.is_entity_casting(self):
 		return false
 
 	current_cell = runtime.world_to_cell(global_position)
@@ -151,6 +156,18 @@ func apply_health_capacity_bonus(maximum_health_increase: int, health_restore: i
 	max_health += maximum_health_increase
 	set_health(health + health_restore)
 	return true
+
+
+func apply_attack_damage_bonus(damage_increase: int) -> bool:
+	if damage_increase <= 0 or health <= 0:
+		return false
+
+	damage += damage_increase
+	return true
+
+
+func apply_attack_damage_state(new_damage: int) -> void:
+	damage = maxi(new_damage, 0)
 
 
 func apply_vitality_state(new_health: int, new_max_health: int) -> void:
@@ -254,12 +271,20 @@ func _attack_cell(target_cell: Vector2i, _direction: Vector2i, should_apply: boo
 		runtime.notify_entity_action_finished_in_turn(self)
 
 
-func _apply_attack_to_world(should_broadcast: bool = true) -> void:
+func _apply_attack_to_world(
+	should_broadcast: bool = true,
+	should_broadcast_action: bool = true
+) -> void:
 	if runtime == null:
 		return
 
 	runtime.notify_entity_attacked_in_turn(self, attack_target_cell)
-	runtime.handle_entity_attack(self, attack_target_cell, should_broadcast)
+	runtime.handle_entity_attack(
+		self,
+		attack_target_cell,
+		should_broadcast,
+		should_broadcast_action
+	)
 
 
 func _play_target_incoming_attack_guard(target_cell: Vector2i, duration: float) -> void:

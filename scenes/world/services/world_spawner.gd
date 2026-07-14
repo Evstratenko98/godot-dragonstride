@@ -12,6 +12,8 @@ const WARRIOR_SCENE := preload("res://scenes/entities/enemies/warrior/warrior.ts
 const TREE_SCENE := preload("res://scenes/objects/tree/tree.tscn")
 const HOUSE_SCENE := preload("res://scenes/objects/house/house.tscn")
 const MEAT_SCENE := preload("res://scenes/objects/meat/meat.tscn")
+const PRECISION_STONE_SCENE := preload("res://scenes/objects/precision_stone/precision_stone.tscn")
+const METEOR_SCROLL_SCENE := preload("res://scenes/objects/meteor_scroll/meteor_scroll.tscn")
 
 const CATALOG := {
 	"sheep": {
@@ -38,6 +40,16 @@ const CATALOG := {
 		"kind": SPAWN_KIND_OBJECT,
 		"scene": MEAT_SCENE,
 		"display_name": "Meat",
+	},
+	"precision_stone": {
+		"kind": SPAWN_KIND_OBJECT,
+		"scene": PRECISION_STONE_SCENE,
+		"display_name": "Precision Stone",
+	},
+	"meteor_scroll": {
+		"kind": SPAWN_KIND_OBJECT,
+		"scene": METEOR_SCROLL_SCENE,
+		"display_name": "Meteor Scroll",
 	},
 }
 
@@ -74,7 +86,7 @@ func console_create(type_key: String, x_text: String, y_text: String) -> void:
 
 	var cell: Vector2i = Vector2i(x_text.to_int(), y_text.to_int())
 	if GameSession.is_multiplayer() and not GameSession.is_host():
-		NetworkManager.request_world_spawn(normalized_type, cell)
+		NetworkManager.world.request_world_spawn(normalized_type, cell)
 		return
 
 	_try_create_authoritative(normalized_type, cell, true, 0)
@@ -85,12 +97,12 @@ func console_create_full(type_key: String) -> void:
 	if not CATALOG.has(normalized_type):
 		_print_spawn_error("Unknown create type: %s." % type_key)
 		return
-	if GameSession.is_multiplayer() and not NetworkManager.is_ready():
+	if GameSession.is_multiplayer() and not NetworkManager.connection.is_ready():
 		_print_spawn_error("Cannot fill world: network is not ready.")
 		return
 
 	if GameSession.is_multiplayer() and not GameSession.is_host():
-		NetworkManager.request_world_fill(normalized_type)
+		NetworkManager.world.request_world_fill(normalized_type)
 		return
 
 	_fill_authoritative(normalized_type, 0)
@@ -101,12 +113,12 @@ func console_clear_full(type_key: String = "") -> void:
 	if not normalized_type.is_empty() and not CATALOG.has(normalized_type):
 		_print_spawn_error("Unknown clear type: %s." % type_key)
 		return
-	if GameSession.is_multiplayer() and not NetworkManager.is_ready():
+	if GameSession.is_multiplayer() and not NetworkManager.connection.is_ready():
 		_print_spawn_error("Cannot clear world: network is not ready.")
 		return
 
 	if GameSession.is_multiplayer() and not GameSession.is_host():
-		NetworkManager.request_world_clear(normalized_type)
+		NetworkManager.world.request_world_clear(normalized_type)
 		return
 
 	_clear_authoritative(normalized_type, 0)
@@ -124,7 +136,7 @@ func remove_world_object(target_object: GridObject) -> bool:
 
 	if GameSession.is_multiplayer():
 		var removal_records: Array[Dictionary] = [removal_record]
-		NetworkManager.broadcast_world_items_removed(removal_records)
+		NetworkManager.world.broadcast_world_items_removed(removal_records)
 
 	return true
 
@@ -141,7 +153,7 @@ func remove_defeated_non_player(target_entity: NonPlayerEntity) -> bool:
 
 	if GameSession.is_multiplayer():
 		var removal_records: Array[Dictionary] = [removal_record]
-		NetworkManager.broadcast_world_items_removed(removal_records)
+		NetworkManager.world.broadcast_world_items_removed(removal_records)
 
 	return true
 
@@ -182,7 +194,7 @@ func _try_create_authoritative(type_key: String, cell: Vector2i, should_broadcas
 		return false
 
 	if should_broadcast and GameSession.is_multiplayer():
-		NetworkManager.broadcast_world_spawn(record)
+		NetworkManager.world.broadcast_world_spawn(record)
 
 	_print_created(record)
 	return true
@@ -206,7 +218,7 @@ func _fill_authoritative(type_key: String, requester_peer_id: int) -> void:
 				created_records.append(record)
 
 	if GameSession.is_multiplayer() and not created_records.is_empty():
-		NetworkManager.broadcast_world_spawns(created_records)
+		NetworkManager.world.broadcast_world_spawns(created_records)
 
 	ConsoleOutput.print_console("Created %d %s instance(s) on available cells." % [
 		created_records.size(),
@@ -249,7 +261,7 @@ func _clear_authoritative(type_key: String, requester_peer_id: int) -> void:
 				removal_records.append(object_removal)
 
 	if GameSession.is_multiplayer() and not removal_records.is_empty():
-		NetworkManager.broadcast_world_items_removed(removal_records)
+		NetworkManager.world.broadcast_world_items_removed(removal_records)
 
 	var cleared_type: String = type_key if not type_key.is_empty() else "all world items"
 	ConsoleOutput.print_console("Removed %d %s instance(s)." % [
@@ -370,7 +382,7 @@ func _apply_cached_object_state(instance: Node, spawn_id: String) -> void:
 	if not (instance is GridObject):
 		return
 
-	var cached_states: Dictionary = NetworkManager.get_object_states()
+	var cached_states: Dictionary = NetworkManager.store.get_object_states()
 	if not cached_states.has(spawn_id):
 		return
 
@@ -381,7 +393,7 @@ func _apply_cached_entity_ai_state(instance: Node, spawn_id: String) -> void:
 	if not (instance is NonPlayerEntity):
 		return
 
-	var cached_states: Dictionary = NetworkManager.get_entity_ai_states()
+	var cached_states: Dictionary = NetworkManager.store.get_entity_ai_states()
 	if not cached_states.has(spawn_id):
 		return
 
@@ -397,14 +409,14 @@ func apply_cached_world_removals() -> void:
 	if not GameSession.is_multiplayer() or GameSession.is_host():
 		return
 
-	_apply_world_removals(NetworkManager.get_removed_world_items())
+	_apply_world_removals(NetworkManager.store.get_removed_world_items())
 
 
 func _apply_cached_world_spawns() -> void:
 	if not GameSession.is_multiplayer() or GameSession.is_host():
 		return
 
-	var spawn_records: Array[Dictionary] = NetworkManager.get_world_spawn_records()
+	var spawn_records: Array[Dictionary] = NetworkManager.store.get_world_spawn_records()
 	_apply_world_spawns(spawn_records, "cached")
 
 
@@ -489,7 +501,7 @@ func _print_spawn_error(message: String) -> void:
 
 func _report_spawn_error(message: String, requester_peer_id: int) -> void:
 	if requester_peer_id != 0 and GameSession.is_multiplayer() and GameSession.is_host():
-		NetworkManager.send_world_spawn_failed(requester_peer_id, message)
+		NetworkManager.world.send_world_spawn_failed(requester_peer_id, message)
 		return
 
 	_print_spawn_error(message)
@@ -542,49 +554,49 @@ func _unregister_console_commands() -> void:
 
 
 func _connect_network_signals() -> void:
-	if not NetworkManager.world_spawn_requested.is_connected(_on_world_spawn_requested):
-		NetworkManager.world_spawn_requested.connect(_on_world_spawn_requested)
+	if not NetworkManager.world.world_spawn_requested.is_connected(_on_world_spawn_requested):
+		NetworkManager.world.world_spawn_requested.connect(_on_world_spawn_requested)
 
-	if not NetworkManager.world_spawn_received.is_connected(_on_world_spawn_received):
-		NetworkManager.world_spawn_received.connect(_on_world_spawn_received)
+	if not NetworkManager.world.world_spawn_received.is_connected(_on_world_spawn_received):
+		NetworkManager.world.world_spawn_received.connect(_on_world_spawn_received)
 
-	if not NetworkManager.world_spawns_received.is_connected(_on_world_spawns_received):
-		NetworkManager.world_spawns_received.connect(_on_world_spawns_received)
+	if not NetworkManager.world.world_spawns_received.is_connected(_on_world_spawns_received):
+		NetworkManager.world.world_spawns_received.connect(_on_world_spawns_received)
 
-	if not NetworkManager.world_fill_requested.is_connected(_on_world_fill_requested):
-		NetworkManager.world_fill_requested.connect(_on_world_fill_requested)
+	if not NetworkManager.world.world_fill_requested.is_connected(_on_world_fill_requested):
+		NetworkManager.world.world_fill_requested.connect(_on_world_fill_requested)
 
-	if not NetworkManager.world_clear_requested.is_connected(_on_world_clear_requested):
-		NetworkManager.world_clear_requested.connect(_on_world_clear_requested)
+	if not NetworkManager.world.world_clear_requested.is_connected(_on_world_clear_requested):
+		NetworkManager.world.world_clear_requested.connect(_on_world_clear_requested)
 
-	if not NetworkManager.world_items_removed_received.is_connected(_on_world_items_removed_received):
-		NetworkManager.world_items_removed_received.connect(_on_world_items_removed_received)
+	if not NetworkManager.world.world_items_removed_received.is_connected(_on_world_items_removed_received):
+		NetworkManager.world.world_items_removed_received.connect(_on_world_items_removed_received)
 
-	if not NetworkManager.world_spawn_failed_received.is_connected(_on_world_spawn_failed_received):
-		NetworkManager.world_spawn_failed_received.connect(_on_world_spawn_failed_received)
+	if not NetworkManager.world.world_spawn_failed_received.is_connected(_on_world_spawn_failed_received):
+		NetworkManager.world.world_spawn_failed_received.connect(_on_world_spawn_failed_received)
 
 
 func _disconnect_network_signals() -> void:
-	if NetworkManager.world_spawn_requested.is_connected(_on_world_spawn_requested):
-		NetworkManager.world_spawn_requested.disconnect(_on_world_spawn_requested)
+	if NetworkManager.world.world_spawn_requested.is_connected(_on_world_spawn_requested):
+		NetworkManager.world.world_spawn_requested.disconnect(_on_world_spawn_requested)
 
-	if NetworkManager.world_spawn_received.is_connected(_on_world_spawn_received):
-		NetworkManager.world_spawn_received.disconnect(_on_world_spawn_received)
+	if NetworkManager.world.world_spawn_received.is_connected(_on_world_spawn_received):
+		NetworkManager.world.world_spawn_received.disconnect(_on_world_spawn_received)
 
-	if NetworkManager.world_spawns_received.is_connected(_on_world_spawns_received):
-		NetworkManager.world_spawns_received.disconnect(_on_world_spawns_received)
+	if NetworkManager.world.world_spawns_received.is_connected(_on_world_spawns_received):
+		NetworkManager.world.world_spawns_received.disconnect(_on_world_spawns_received)
 
-	if NetworkManager.world_fill_requested.is_connected(_on_world_fill_requested):
-		NetworkManager.world_fill_requested.disconnect(_on_world_fill_requested)
+	if NetworkManager.world.world_fill_requested.is_connected(_on_world_fill_requested):
+		NetworkManager.world.world_fill_requested.disconnect(_on_world_fill_requested)
 
-	if NetworkManager.world_clear_requested.is_connected(_on_world_clear_requested):
-		NetworkManager.world_clear_requested.disconnect(_on_world_clear_requested)
+	if NetworkManager.world.world_clear_requested.is_connected(_on_world_clear_requested):
+		NetworkManager.world.world_clear_requested.disconnect(_on_world_clear_requested)
 
-	if NetworkManager.world_items_removed_received.is_connected(_on_world_items_removed_received):
-		NetworkManager.world_items_removed_received.disconnect(_on_world_items_removed_received)
+	if NetworkManager.world.world_items_removed_received.is_connected(_on_world_items_removed_received):
+		NetworkManager.world.world_items_removed_received.disconnect(_on_world_items_removed_received)
 
-	if NetworkManager.world_spawn_failed_received.is_connected(_on_world_spawn_failed_received):
-		NetworkManager.world_spawn_failed_received.disconnect(_on_world_spawn_failed_received)
+	if NetworkManager.world.world_spawn_failed_received.is_connected(_on_world_spawn_failed_received):
+		NetworkManager.world.world_spawn_failed_received.disconnect(_on_world_spawn_failed_received)
 
 
 func _on_world_spawn_requested(type_key: String, cell: Vector2i, requester_peer_id: int) -> void:

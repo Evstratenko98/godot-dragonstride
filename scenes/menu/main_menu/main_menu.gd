@@ -11,6 +11,6 @@ func _on_lobby_button_pressed() -> void:
 
 
 func _on_start_button_pressed() -> void:
-	NetworkManager.stop_network()
+	NetworkManager.connection.stop_network()
 	GameSession.start_singleplayer()
 	GameSession.go_to_selected_scene()

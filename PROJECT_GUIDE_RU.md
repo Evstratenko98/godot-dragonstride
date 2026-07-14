@@ -2,7 +2,7 @@
 
 Этот документ предназначен для разработчика, который впервые открыл проект. Он описывает не только целевую архитектуру из `AGENTS.md`, но и фактически реализованное поведение текущего кода.
 
-Актуальность описания: состояние рабочей копии на 12 июля 2026 года. Проект использует Godot 4.6 и GDScript.
+Актуальность описания: состояние рабочей копии на 14 июля 2026 года. Проект использует Godot 4.6 и GDScript.
 
 ## 1. Что это за проект
 
@@ -104,6 +104,9 @@ DragonStride сейчас представляет собой двухмерну
 ### 3.9. Управление персонажем и движение
 
 - Перемещение выполняется клавишами WASD по четырём ортогональным направлениям.
+- Режим атаки включается клавишей Q или кнопкой с мечом; это режим по умолчанию.
+- Режим взаимодействия включается клавишей E или кнопкой с открытой рукой.
+- Курсор локального игрока показывает текущий режим над миром и HUD: `tool_sword_a.svg` для атаки и `hand_open.svg` для взаимодействия. При выходе из матча возвращается системный курсор.
 - Сущность проверяет состояние, правила текущего хода и доступность целевой клетки.
 - Перед анимацией перемещения клетка резервируется.
 - Перемещение визуально выполняется Tween-анимацией.
@@ -155,7 +158,7 @@ DragonStride сейчас представляет собой двухмерну
 ### 3.13. Создание сущностей и объектов в runtime
 
 - Консольная команда `game_create <type> <x> <y>` создаёт разрешённый тип в указанной клетке.
-- Каталог сейчас содержит `sheep`, `warrior`, `tree` и `house`.
+- Каталог содержит `sheep`, `warrior`, `tree`, `house`, `meat`, `precision_stone` и `meteor_scroll`.
 - До создания проверяются границы, проходимость, занятость и резервации.
 - Созданным экземплярам назначается уникальный `spawn_id`.
 - В multiplayer клиент отправляет запрос, host выполняет проверку и рассылает результат.
@@ -175,8 +178,21 @@ DragonStride сейчас представляет собой двухмерну
 - Включение и выключение линий сетки через консоль.
 - Подсветка клетки под курсором, если она проходима или содержит объект/сущность.
 - Отдельные view-компоненты управляют спрайтами, направлением и анимациями игрока, овцы и воина.
-- HUD сейчас минимален и содержит кнопку завершения игры.
+- HUD содержит кнопку завершения игры, пять обычных слотов, кнопки атаки/взаимодействия с SVG-иконками, пять слотов заклинаний и корзину.
 - Локальные gameplay-сообщения выводятся через `ConsoleOutput` в подключённый console addon.
+
+### 3.16. Заклинания и свиток метеорита
+
+- `WorldSpells` владеет выбором заклинания, проверкой каста, лимитами применений и созданием временных визуальных эффектов.
+- Обычные предметы и заклинания хранятся в двух независимых контейнерах по пять слотов. Прототип с `inventory_kind = "spell"` не может попасть в обычный слот.
+- Свиток `meteor_scroll` содержит заклинание `meteor`, остаётся в инвентаре после применения и не складывается в стек: каждый экземпляр занимает отдельный spell-слот.
+- В пошаговом режиме каждый занятый spell-слот даёт одно независимое применение за ход. Индикатор `остаток/всего` конкретного слота отображается в его правом верхнем углу.
+- В свободном режиме свиток можно использовать повторно без расходования; один игрок не может запустить второй метеорит до завершения первого.
+- Во время полёта и взрыва метеорита двигаться могут все игроки, кроме персонажа, который в данный момент находится в целевой клетке эффекта.
+- Метеорит летит к центру выбранной клетки детерминированным `Tween`. Завершение движения является моментом удара; физические коллизии не используются.
+- При ударе host заново определяет содержимое клетки, наносит сущности 50 урона либо повреждает `GridObject` через `WorldCombat`.
+- `NetworkSpellChannel` принимает от клиента только индекс spell-слота и клетку. Host определяет заклинание по своему inventory snapshot и рассылает авторитетное событие каста до запуска локального VFX.
+- Узел канала называется `Spells`; его имя и путь в `network_manager.tscn` являются частью версии сетевого протокола.
 
 ## 4. Общая блок-схема проекта
 
@@ -388,26 +404,29 @@ stateDiagram-v2
 
 ```mermaid
 sequenceDiagram
-    participant ClientEntity as Entity клиента
-    participant ClientCombat as WorldCombat клиента
-    participant ClientNM as NetworkManager клиента
-    participant HostNM as NetworkManager host
+    participant ClientModel as CharacterModel клиента
+    participant ClientWN as WorldNetwork клиента
+    participant ClientNM as NetworkCombatChannel клиента
+    participant HostNM as NetworkCombatChannel host
     participant HostWN as WorldNetwork host
     participant HostCombat as WorldCombat host
-    participant OtherWN as WorldNetwork клиентов
+    participant Clients as WorldNetwork клиентов
 
-    ClientEntity->>ClientCombat: apply_attack_to_cell(...)
-    ClientCombat->>ClientNM: broadcast_entity_attack(entity_id, cell)
-    ClientNM->>HostNM: _relay_entity_attack (reliable RPC)
-    HostNM-->>HostWN: entity_attack_received
-    HostWN->>HostWN: найти Entity, проверить соседство и текущий ход
-    HostWN->>HostCombat: apply_attack_to_cell(...)
+    ClientModel->>ClientWN: request_character_attack(cell)
+    ClientWN->>ClientNM: request_attack(cell)
+    ClientNM->>HostNM: _submit_attack(cell) — reliable intent
+    HostNM-->>HostWN: attack_requested(cell, requester_peer_id)
+    HostWN->>HostWN: определить игрока по peer, проверить соседство и ход
+    HostWN->>HostNM: broadcast_entity_attack(entity_id, cell)
+    HostNM-->>Clients: authority RPC
+    Clients->>Clients: запустить принятую анимацию атаки
+    HostWN->>HostWN: запустить локальную анимацию после broadcast
+    HostWN->>HostCombat: применить авторитетный результат
     HostCombat->>HostNM: broadcast result / health / respawn / remove
-    HostNM-->>OtherWN: authority RPC
-    OtherWN->>OtherWN: применить визуал и авторитетный результат
+    HostNM-->>Clients: authority state
 ```
 
-Именно основной `entity_attack`-путь сейчас вызывается из gameplay. В `NetworkManager` также существует отдельный `request_attack → _submit_attack` путь с проверкой sender peer ↔ Steam ID, но прямых вызовов `request_attack()` из текущих gameplay-скриптов нет. Это важно не перепутать при отладке и усилении host authority.
+Клиентский attack intent содержит только целевую клетку. Host сам определяет персонажа по зарегистрированному `requester_peer_id`; клиентская анимация начинается только после получения `entity_attack` от host. Для взаимодействий сначала отправляется `interaction` intent и только затем host применяет действие. Для заклинаний host рассылает принятый cast result до запуска VFX. Один и тот же порядок «сеть, затем визуал» применяется также к авторитетным атакам NPC.
 
 Для непрерывного положения персонажей используется другой путь: клиент отправляет `character_state` в режиме `unreliable`, host проверяет соответствие отправителя Steam ID и допустимость синхронизации в текущем ходу, затем ретранслирует состояние.
 
@@ -479,6 +498,7 @@ flowchart TB
 | `WorldCombat` | `scenes/world/services/world_combat.gd` | Выбор цели в клетке, применение урона, повреждение объектов и формирование результата боя. |
 | `WorldTurns` | `scenes/world/services/world_turns.gd` | Состояние раунда/хода, порядок игроков, лимиты действий, мировой ход и сетевые snapshots. |
 | `WorldSpawner` | `scenes/world/services/world_spawner.gd` | Каталог разрешённых типов, проверку размещения, создание, ID и сетевую репликацию runtime-spawn. |
+| `WorldSpells` | `scenes/world/services/world_spells.gd` | Выбор и применение заклинаний, лимиты свитков за ход и orchestration временных spell-эффектов. |
 | `WorldAwareness` | `scenes/world/services/world_awareness.gd` | Уведомление NPC о появлении и изменении положения персонажей; решения конкретного AI остаются в NPC. |
 | `WorldNetwork` | `scenes/world/services/world_network.gd` | Перевод сетевых сигналов в операции текущего уровня и доменных событий в вызовы `NetworkManager`. |
 
@@ -649,7 +669,8 @@ View показывает спрайт, направление и анимаци
 | `game_turns_enable` | Включить пошаговый режим; в multiplayer доступно только host. |
 | `game_turns_disable` | Выключить пошаговый режим; в multiplayer доступно только host. |
 | `game_turns_status` | Показать состояние, раунд, активного игрока и оставшиеся действия. |
-| `game_create <type> <x> <y>` | Создать `sheep`, `warrior`, `tree` или `house` в клетке. |
+| `game_create <type> <x> <y>` | Создать разрешённую сущность или объект, включая `meteor_scroll`, в клетке. |
+| `game_inventory_add <item_id> <amount>` | Добавить обычный предмет или свиток, включая `meteor_scroll`, в соответствующий контейнер локального игрока. |
 | `game_camera_mode_follow` | Камера плавно следует за локальным персонажем. |
 | `game_camera_mode_free` | Камера двигается при приближении курсора к краям экрана. |
 | `game_grid_lines_show` | Показать линии проходимых клеток. |

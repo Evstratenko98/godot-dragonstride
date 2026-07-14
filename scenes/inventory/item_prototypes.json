@@ -2,8 +2,15 @@
 	"item": {
 		"max_stack_size": 10,
 		"size": "Vector2i(1, 1)",
+		"inventory_kind": "item",
 		"is_usable": false,
-		"use_effect_id": ""
+		"use_effect_id": "",
+		"spell_id": ""
+	},
+	"spell": {
+		"inherits": "item",
+		"inventory_kind": "spell",
+		"max_stack_size": 1
 	},
 	"meat": {
 		"inherits": "item",
@@ -11,5 +18,18 @@
 		"image": "res://art/Tiny Swords (Update 010)/Resources/Resources/M_Idle.png",
 		"is_usable": true,
 		"use_effect_id": "meat_health"
+	},
+	"precision_stone": {
+		"inherits": "item",
+		"name": "Precision Stone",
+		"image": "res://art/Tiny Swords (Update 010)/Resources/Resources/G_Idle_(NoShadow).png",
+		"is_usable": true,
+		"use_effect_id": "precision_stone_damage"
+	},
+	"meteor_scroll": {
+		"inherits": "spell",
+		"name": "Meteor Scroll",
+		"image": "res://art/spells/meteor_list.png",
+		"spell_id": "meteor"
 	}
 }

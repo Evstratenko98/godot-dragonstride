@@ -3,6 +3,7 @@ extends "res://scenes/entities/non_player_entity/non_player_entity.gd"
 const WARRIOR_MAX_HEALTH := 50
 const WARRIOR_DAMAGE := 10
 const WARRIOR_MOVE_TIME := 0.6
+const DEATH_DROP_TYPE := "precision_stone"
 const STATE_PASSIVE := "passive"
 const STATE_ACTIVE := "active"
 const REASON_NONE := ""
@@ -45,6 +46,13 @@ func start(
 ) -> void:
 	_apply_base_stats()
 	start_non_player_entity(start_position, new_entity_id, new_entity_name, EntityType.ENEMY)
+
+
+func spawn_death_drop(death_cell: Vector2i) -> bool:
+	if runtime == null:
+		return false
+
+	return runtime.spawn_world_object(DEATH_DROP_TYPE, death_cell)
 
 
 func behavior() -> void:
@@ -296,6 +304,14 @@ func _attack(
 	is_attacking = true
 	incoming_guard_token += 1
 	attack_target_cell = target_cell
+	var was_action_broadcast: bool = (
+		should_apply
+		and should_broadcast
+		and GameSession.is_multiplayer()
+		and _is_ai_authority()
+	)
+	if was_action_broadcast and runtime != null:
+		runtime.broadcast_entity_attack_action(self, target_cell)
 	_play_target_incoming_attack_guard(target_cell, _get_attack_duration())
 
 	if view != null:
@@ -309,7 +325,7 @@ func _attack(
 		)
 
 	if can_apply_attack:
-		_apply_attack_to_world(should_broadcast)
+		_apply_attack_to_world(should_broadcast, not was_action_broadcast)
 
 	pending_behavior_attack_target_id = ""
 	is_attacking = false
@@ -493,8 +509,14 @@ func _set_ai_state(new_state: String, new_target_entity_id: String, reason: Stri
 	target_entity_id = new_target_entity_id
 	_print_ai_state_log(previous_state, previous_target_entity_id, reason)
 
-	if should_broadcast and _is_ai_authority() and GameSession.is_multiplayer() and not entity_id.is_empty():
-		NetworkManager.broadcast_entity_ai_state(entity_id, ai_state, target_entity_id, reason)
+	if (
+		should_broadcast
+		and _is_ai_authority()
+		and GameSession.is_multiplayer()
+		and not entity_id.is_empty()
+		and runtime != null
+	):
+		runtime.broadcast_entity_ai_state(entity_id, ai_state, target_entity_id, reason)
 
 
 func _print_ai_state_log(previous_state: String, previous_target_entity_id: String, reason: String) -> void:

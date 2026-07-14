@@ -1,11 +1,12 @@
 [gd_scene format=4 uid="uid://dbpsjckioxl17"]
 
-[ext_resource type="Script" path="res://scenes/full_world/full_world_level.gd" id="1"]
+[ext_resource type="Script" uid="uid://c8xtq3hakydor" path="res://scenes/full_world/full_world_level.gd" id="1"]
 [ext_resource type="Texture2D" uid="uid://2l2pctwopuf1" path="res://art/Tiny Swords (Free Pack)/Terrain/Tileset/Tilemap_color3.png" id="4_fh5r6"]
 [ext_resource type="Texture2D" uid="uid://b0sr73cw4wvfi" path="res://art/Tiny Swords (Free Pack)/Terrain/Decorations/Clouds/Clouds_01.png" id="4_i73x7"]
 [ext_resource type="PackedScene" uid="uid://dxxhv77xcn8hc" path="res://scenes/objects/tree/tree.tscn" id="5"]
 [ext_resource type="Texture2D" uid="uid://38ifj4m00mc3" path="res://art/Tiny Swords (Free Pack)/Terrain/Tileset/Water Background color.png" id="6_dsd14"]
 [ext_resource type="PackedScene" uid="uid://ctajcg33susc6" path="res://scenes/objects/house/house.tscn" id="7_80wl1"]
+[ext_resource type="PackedScene" uid="uid://bie7ombabnhor" path="res://scenes/objects/meteor_scroll/meteor_scroll.tscn" id="10_3emkg"]
 [ext_resource type="PackedScene" path="res://scenes/entities/sheep/sheep.tscn" id="10_sheep"]
 [ext_resource type="Texture2D" uid="uid://b5blnrd4g1rqe" path="res://art/Tiny Swords (Update 010)/Terrain/Ground/Tilemap_Flat.png" id="13_qcyxm"]
 [ext_resource type="Texture2D" uid="uid://1nkuwf8grh3o" path="res://art/Tiny Swords (Update 010)/Terrain/Bridge/Bridge_All.png" id="15_ditf4"]
@@ -310,7 +311,10 @@ position = Vector2(287, 350)
 [node name="Warrior" parent="WorldEntities" unique_id=1935981393 instance=ExtResource("21_hswqa")]
 position = Vector2(94, 340)
 
-[node name="SpawnedObjects" type="Node2D" parent="."]
+[node name="MeteorScroll" parent="WorldEntities" unique_id=740941564 instance=ExtResource("10_3emkg")]
+position = Vector2(92, 987)
+
+[node name="SpawnedObjects" type="Node2D" parent="." unique_id=1900879963]
 
 [node name="Clouds" type="TileMapLayer" parent="." unique_id=847400242]
 tile_map_data = PackedByteArray("AAD+////AAAAAAAAAAD/////AAABAAAAAAABAP//AAAAAAAAAAACAP//AAABAAAAAAAFAAAAAAAAAAAAAAAGAAAAAAABAAAAAAD9/wEAAAAAAAAAAAD+/wEAAAABAAAAAAAEAAUAAAAAAAAAAAAFAAUAAAABAAAAAAD//wQAAAAAAAAAAAAAAAQAAAABAAAAAAAEAAIAAAAAAAAAAAAFAAIAAAABAAAAAAA=")

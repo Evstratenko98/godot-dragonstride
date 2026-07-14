@@ -3,13 +3,24 @@ extends Node
 
 signal inventory_changed()
 
-const SLOT_COUNT := 5
+const ITEM_SLOT_COUNT := 5
+const SPELL_SLOT_COUNT := 5
 const DEFAULT_MAX_STACK_SIZE := 10
+const INVENTORY_KIND_ITEM := "item"
+const INVENTORY_KIND_SPELL := "spell"
 const ITEM_ID_MEAT := "meat"
-const KNOWN_ITEM_IDS: PackedStringArray = [ITEM_ID_MEAT]
+const ITEM_ID_PRECISION_STONE := "precision_stone"
+const ITEM_ID_METEOR_SCROLL := "meteor_scroll"
+const KNOWN_ITEM_IDS: PackedStringArray = [
+	ITEM_ID_MEAT,
+	ITEM_ID_PRECISION_STONE,
+	ITEM_ID_METEOR_SCROLL,
+]
 
-@onready var inventory: Inventory = get_node("Inventory") as Inventory
-@onready var grid_constraint: GridConstraint = get_node("Inventory/GridConstraint") as GridConstraint
+@onready var item_inventory: Inventory = get_node("Inventory") as Inventory
+@onready var item_grid_constraint: GridConstraint = get_node("Inventory/GridConstraint") as GridConstraint
+@onready var spell_inventory: Inventory = get_node("SpellInventory") as Inventory
+@onready var spell_grid_constraint: GridConstraint = get_node("SpellInventory/GridConstraint") as GridConstraint
 
 var revision: int = 0
 var owner_entity_id: String = ""
@@ -23,15 +34,29 @@ func has_item_id(item_id: String) -> bool:
 	return item_id in KNOWN_ITEM_IDS
 
 
+func get_inventory_kind_for_item_id(item_id: String) -> String:
+	if not has_item_id(item_id):
+		return ""
+
+	var prototype_item: InventoryItem = InventoryItem.new(item_inventory.protoset, item_id)
+	return str(prototype_item.get_property("inventory_kind", INVENTORY_KIND_ITEM))
+
+
 func try_add_item(item_id: String, amount: int) -> bool:
 	if not has_item_id(item_id) or amount <= 0:
+		return false
+
+	var inventory_kind: String = get_inventory_kind_for_item_id(item_id)
+	var target_inventory: Inventory = _get_inventory(inventory_kind)
+	var target_grid: GridConstraint = _get_grid_constraint(inventory_kind)
+	if target_inventory == null or target_grid == null:
 		return false
 	if get_available_capacity(item_id) < amount:
 		return false
 
 	var remaining_amount: int = amount
-	for target_item in inventory.get_items_with_prototype_id(item_id):
-		var inventory_item: InventoryItem = target_item as InventoryItem
+	for target_item_variant: Variant in target_inventory.get_items_with_prototype_id(item_id):
+		var inventory_item: InventoryItem = target_item_variant as InventoryItem
 		if inventory_item == null:
 			continue
 		var added_amount: int = mini(inventory_item.get_free_stack_space(), remaining_amount)
@@ -43,14 +68,14 @@ func try_add_item(item_id: String, amount: int) -> bool:
 			break
 
 	while remaining_amount > 0:
-		var free_slot_index: int = _find_free_slot_index()
+		var free_slot_index: int = _find_free_slot_index(inventory_kind)
 		if free_slot_index < 0:
 			return false
-		var new_stack: InventoryItem = InventoryItem.new(inventory.protoset, item_id)
+		var new_stack: InventoryItem = InventoryItem.new(target_inventory.protoset, item_id)
 		var stack_amount: int = mini(new_stack.get_max_stack_size(), remaining_amount)
 		if not new_stack.set_stack_size(stack_amount):
 			return false
-		if not grid_constraint.add_item_at(new_stack, Vector2i(free_slot_index, 0)):
+		if not target_grid.add_item_at(new_stack, Vector2i(free_slot_index, 0)):
 			return false
 		remaining_amount -= stack_amount
 
@@ -58,17 +83,20 @@ func try_add_item(item_id: String, amount: int) -> bool:
 	return true
 
 
-func try_move_stack(source_slot_index: int, target_slot_index: int) -> bool:
-	if not _is_valid_slot_index(source_slot_index) or not _is_valid_slot_index(target_slot_index):
+func try_move_stack(inventory_kind: String, source_slot_index: int, target_slot_index: int) -> bool:
+	if not _is_valid_slot_index(inventory_kind, source_slot_index):
+		return false
+	if not _is_valid_slot_index(inventory_kind, target_slot_index):
 		return false
 	if source_slot_index == target_slot_index:
 		return false
 
-	var source_item: InventoryItem = get_item_at_slot(source_slot_index)
+	var source_item: InventoryItem = get_item_at_slot(inventory_kind, source_slot_index)
 	if source_item == null:
 		return false
 
-	var target_item: InventoryItem = get_item_at_slot(target_slot_index)
+	var target_item: InventoryItem = get_item_at_slot(inventory_kind, target_slot_index)
+	var grid_constraint: GridConstraint = _get_grid_constraint(inventory_kind)
 	var was_changed: bool = false
 	if target_item == null:
 		was_changed = grid_constraint.move_item_to(source_item, Vector2i(target_slot_index, 0))
@@ -84,31 +112,33 @@ func try_move_stack(source_slot_index: int, target_slot_index: int) -> bool:
 	return true
 
 
-func try_delete_stack(slot_index: int) -> bool:
-	if not _is_valid_slot_index(slot_index):
+func try_delete_stack(inventory_kind: String, slot_index: int) -> bool:
+	if not _is_valid_slot_index(inventory_kind, slot_index):
 		return false
 
-	var target_item: InventoryItem = get_item_at_slot(slot_index)
-	if target_item == null or not inventory.remove_item(target_item):
+	var target_item: InventoryItem = get_item_at_slot(inventory_kind, slot_index)
+	var target_inventory: Inventory = _get_inventory(inventory_kind)
+	if target_item == null or target_inventory == null or not target_inventory.remove_item(target_item):
 		return false
 
 	_commit_change()
 	return true
 
 
-func try_consume_one(slot_index: int) -> bool:
-	if not _is_valid_slot_index(slot_index):
+func try_consume_one(inventory_kind: String, slot_index: int) -> bool:
+	if not _is_valid_slot_index(inventory_kind, slot_index):
 		return false
 
-	var target_item: InventoryItem = get_item_at_slot(slot_index)
-	if target_item == null:
+	var target_item: InventoryItem = get_item_at_slot(inventory_kind, slot_index)
+	var target_inventory: Inventory = _get_inventory(inventory_kind)
+	if target_item == null or target_inventory == null:
 		return false
 
 	var stack_size: int = target_item.get_stack_size()
 	if stack_size <= 0:
 		return false
 	if stack_size == 1:
-		if not inventory.remove_item(target_item):
+		if not target_inventory.remove_item(target_item):
 			return false
 	elif not target_item.set_stack_size(stack_size - 1):
 		return false
@@ -117,19 +147,20 @@ func try_consume_one(slot_index: int) -> bool:
 	return true
 
 
-func get_item_at_slot(slot_index: int) -> InventoryItem:
-	if not _is_valid_slot_index(slot_index):
+func get_item_at_slot(inventory_kind: String, slot_index: int) -> InventoryItem:
+	if not _is_valid_slot_index(inventory_kind, slot_index):
 		return null
 
+	var grid_constraint: GridConstraint = _get_grid_constraint(inventory_kind)
 	return grid_constraint.get_item_at(Vector2i(slot_index, 0))
 
 
-func get_item_id_at_slot(slot_index: int) -> String:
-	return _get_item_id(get_item_at_slot(slot_index))
+func get_item_id_at_slot(inventory_kind: String, slot_index: int) -> String:
+	return _get_item_id(get_item_at_slot(inventory_kind, slot_index))
 
 
 func is_item_usable(slot_index: int) -> bool:
-	var target_item: InventoryItem = get_item_at_slot(slot_index)
+	var target_item: InventoryItem = get_item_at_slot(INVENTORY_KIND_ITEM, slot_index)
 	if target_item == null:
 		return false
 
@@ -137,22 +168,50 @@ func is_item_usable(slot_index: int) -> bool:
 
 
 func get_item_use_effect_id(slot_index: int) -> String:
-	var target_item: InventoryItem = get_item_at_slot(slot_index)
+	var target_item: InventoryItem = get_item_at_slot(INVENTORY_KIND_ITEM, slot_index)
 	if target_item == null:
 		return ""
 
 	return str(target_item.get_property("use_effect_id", ""))
 
 
+func get_spell_id_at_slot(slot_index: int) -> String:
+	var target_item: InventoryItem = get_item_at_slot(INVENTORY_KIND_SPELL, slot_index)
+	if target_item == null:
+		return ""
+
+	return str(target_item.get_property("spell_id", ""))
+
+
+func get_spell_count(spell_id: String) -> int:
+	if spell_id.is_empty():
+		return 0
+
+	var total_count: int = 0
+	for item_variant: Variant in spell_inventory.get_items():
+		var inventory_item: InventoryItem = item_variant as InventoryItem
+		if inventory_item == null:
+			continue
+		if str(inventory_item.get_property("spell_id", "")) == spell_id:
+			total_count += inventory_item.get_stack_size()
+
+	return total_count
+
+
 func get_available_capacity(item_id: String) -> int:
 	if not has_item_id(item_id):
 		return 0
 
-	var prototype_item: InventoryItem = InventoryItem.new(inventory.protoset, item_id)
+	var inventory_kind: String = get_inventory_kind_for_item_id(item_id)
+	var target_inventory: Inventory = _get_inventory(inventory_kind)
+	if target_inventory == null:
+		return 0
+
+	var prototype_item: InventoryItem = InventoryItem.new(target_inventory.protoset, item_id)
 	var maximum_stack_size: int = prototype_item.get_max_stack_size()
 	var capacity: int = 0
-	for slot_index in range(SLOT_COUNT):
-		var target_item: InventoryItem = get_item_at_slot(slot_index)
+	for slot_index: int in range(_get_slot_count(inventory_kind)):
+		var target_item: InventoryItem = get_item_at_slot(inventory_kind, slot_index)
 		if target_item == null:
 			capacity += maximum_stack_size
 		elif _get_item_id(target_item) == item_id:
@@ -162,21 +221,11 @@ func get_available_capacity(item_id: String) -> int:
 
 
 func create_snapshot() -> Dictionary:
-	var slots: Array[Dictionary] = []
-	for slot_index in range(SLOT_COUNT):
-		var target_item: InventoryItem = get_item_at_slot(slot_index)
-		if target_item == null:
-			continue
-		slots.append({
-			"slot_index": slot_index,
-			"item_id": _get_item_id(target_item),
-			"quantity": target_item.get_stack_size(),
-		})
-
 	return {
 		"entity_id": owner_entity_id,
 		"revision": revision,
-		"slots": slots,
+		"item_slots": _create_slot_records(INVENTORY_KIND_ITEM),
+		"spell_slots": _create_slot_records(INVENTORY_KIND_SPELL),
 	}
 
 
@@ -185,23 +234,21 @@ func apply_snapshot(snapshot: Dictionary) -> bool:
 	if snapshot_revision <= revision:
 		return false
 
-	var slot_records: Array = snapshot.get("slots", []) as Array
-	if not _is_valid_snapshot(slot_records):
+	var item_slot_records: Array = snapshot.get("item_slots", []) as Array
+	var spell_slot_records: Array = snapshot.get("spell_slots", []) as Array
+	if not _is_valid_snapshot(item_slot_records, INVENTORY_KIND_ITEM):
+		return false
+	if not _is_valid_snapshot(spell_slot_records, INVENTORY_KIND_SPELL):
 		return false
 
-	inventory.clear()
-	for record_variant: Variant in slot_records:
-		var record: Dictionary = record_variant as Dictionary
-		var item_id: String = str(record.get("item_id", ""))
-		var quantity: int = int(record.get("quantity", 0))
-		var slot_index: int = int(record.get("slot_index", -1))
-		var target_item: InventoryItem = InventoryItem.new(inventory.protoset, item_id)
-		if not target_item.set_stack_size(quantity):
-			inventory.clear()
-			return false
-		if not grid_constraint.add_item_at(target_item, Vector2i(slot_index, 0)):
-			inventory.clear()
-			return false
+	item_inventory.clear()
+	spell_inventory.clear()
+	if not _apply_slot_records(item_slot_records, INVENTORY_KIND_ITEM):
+		_clear_inventories()
+		return false
+	if not _apply_slot_records(spell_slot_records, INVENTORY_KIND_SPELL):
+		_clear_inventories()
+		return false
 
 	revision = snapshot_revision
 	inventory_changed.emit()
@@ -213,16 +260,48 @@ func _commit_change() -> void:
 	inventory_changed.emit()
 
 
-func _find_free_slot_index() -> int:
-	for slot_index in range(SLOT_COUNT):
-		if get_item_at_slot(slot_index) == null:
+func _create_slot_records(inventory_kind: String) -> Array[Dictionary]:
+	var records: Array[Dictionary] = []
+	for slot_index: int in range(_get_slot_count(inventory_kind)):
+		var target_item: InventoryItem = get_item_at_slot(inventory_kind, slot_index)
+		if target_item == null:
+			continue
+		records.append({
+			"slot_index": slot_index,
+			"item_id": _get_item_id(target_item),
+			"quantity": target_item.get_stack_size(),
+		})
+
+	return records
+
+
+func _apply_slot_records(slot_records: Array, inventory_kind: String) -> bool:
+	var target_inventory: Inventory = _get_inventory(inventory_kind)
+	var target_grid: GridConstraint = _get_grid_constraint(inventory_kind)
+	for record_variant: Variant in slot_records:
+		var record: Dictionary = record_variant as Dictionary
+		var item_id: String = str(record.get("item_id", ""))
+		var quantity: int = int(record.get("quantity", 0))
+		var slot_index: int = int(record.get("slot_index", -1))
+		var target_item: InventoryItem = InventoryItem.new(target_inventory.protoset, item_id)
+		if not target_item.set_stack_size(quantity):
+			return false
+		if not target_grid.add_item_at(target_item, Vector2i(slot_index, 0)):
+			return false
+
+	return true
+
+
+func _find_free_slot_index(inventory_kind: String) -> int:
+	for slot_index: int in range(_get_slot_count(inventory_kind)):
+		if get_item_at_slot(inventory_kind, slot_index) == null:
 			return slot_index
 
 	return -1
 
 
-func _is_valid_slot_index(slot_index: int) -> bool:
-	return slot_index >= 0 and slot_index < SLOT_COUNT
+func _is_valid_slot_index(inventory_kind: String, slot_index: int) -> bool:
+	return slot_index >= 0 and slot_index < _get_slot_count(inventory_kind)
 
 
 func _get_item_id(target_item: InventoryItem) -> String:
@@ -232,7 +311,7 @@ func _get_item_id(target_item: InventoryItem) -> String:
 	return target_item.get_prototype().get_prototype_id()
 
 
-func _is_valid_snapshot(slot_records: Array) -> bool:
+func _is_valid_snapshot(slot_records: Array, inventory_kind: String) -> bool:
 	var occupied_slot_indices: Dictionary = {}
 	for record_variant: Variant in slot_records:
 		if not (record_variant is Dictionary):
@@ -241,9 +320,13 @@ func _is_valid_snapshot(slot_records: Array) -> bool:
 		var slot_index: int = int(record.get("slot_index", -1))
 		var item_id: String = str(record.get("item_id", ""))
 		var quantity: int = int(record.get("quantity", 0))
-		if not _is_valid_slot_index(slot_index) or occupied_slot_indices.has(slot_index):
+		if not _is_valid_slot_index(inventory_kind, slot_index):
 			return false
-		if not has_item_id(item_id) or quantity <= 0 or quantity > _get_max_stack_size(item_id):
+		if occupied_slot_indices.has(slot_index):
+			return false
+		if not has_item_id(item_id) or get_inventory_kind_for_item_id(item_id) != inventory_kind:
+			return false
+		if quantity <= 0 or quantity > _get_max_stack_size(item_id):
 			return false
 		occupied_slot_indices[slot_index] = true
 
@@ -254,5 +337,38 @@ func _get_max_stack_size(item_id: String) -> int:
 	if not has_item_id(item_id):
 		return DEFAULT_MAX_STACK_SIZE
 
-	var prototype_item: InventoryItem = InventoryItem.new(inventory.protoset, item_id)
+	var target_inventory: Inventory = _get_inventory(get_inventory_kind_for_item_id(item_id))
+	var prototype_item: InventoryItem = InventoryItem.new(target_inventory.protoset, item_id)
 	return prototype_item.get_max_stack_size()
+
+
+func _get_inventory(inventory_kind: String) -> Inventory:
+	if inventory_kind == INVENTORY_KIND_ITEM:
+		return item_inventory
+	if inventory_kind == INVENTORY_KIND_SPELL:
+		return spell_inventory
+
+	return null
+
+
+func _get_grid_constraint(inventory_kind: String) -> GridConstraint:
+	if inventory_kind == INVENTORY_KIND_ITEM:
+		return item_grid_constraint
+	if inventory_kind == INVENTORY_KIND_SPELL:
+		return spell_grid_constraint
+
+	return null
+
+
+func _get_slot_count(inventory_kind: String) -> int:
+	if inventory_kind == INVENTORY_KIND_ITEM:
+		return ITEM_SLOT_COUNT
+	if inventory_kind == INVENTORY_KIND_SPELL:
+		return SPELL_SLOT_COUNT
+
+	return 0
+
+
+func _clear_inventories() -> void:
+	item_inventory.clear()
+	spell_inventory.clear()

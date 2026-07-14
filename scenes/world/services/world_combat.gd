@@ -16,12 +16,54 @@ func apply_attack_to_cell(
 	should_broadcast: bool = true,
 	should_broadcast_action: bool = true
 ) -> void:
-	if should_broadcast_action and should_broadcast and GameSession.is_multiplayer() and attacker.get("entity_id") != null:
-		NetworkManager.broadcast_entity_attack(str(attacker.get("entity_id")), cell)
+	if should_broadcast_action and should_broadcast:
+		broadcast_attack_action(attacker, cell)
+
+	var damage_amount: int = 25
+	if attacker != null and attacker.get("damage") != null:
+		damage_amount = int(attacker.get("damage"))
+	_apply_damage_to_cell(attacker, cell, damage_amount, should_broadcast, false)
+
+
+func broadcast_attack_action(attacker: Node, cell: Vector2i) -> void:
+	if (
+		not GameSession.is_multiplayer()
+		or not GameSession.is_host()
+		or attacker == null
+		or attacker.get("entity_id") == null
+	):
+		return
+
+	var attacker_entity_id: String = str(attacker.get("entity_id"))
+	if attacker_entity_id.is_empty():
+		return
+
+	NetworkManager.combat.broadcast_entity_attack(attacker_entity_id, cell)
+
+
+func apply_spell_damage_to_cell(
+	caster: Node,
+	cell: Vector2i,
+	damage_amount: int,
+	should_broadcast: bool = true
+) -> void:
+	if damage_amount <= 0:
+		return
+
+	_apply_damage_to_cell(caster, cell, damage_amount, should_broadcast, true)
+
+
+func _apply_damage_to_cell(
+	damage_source: Node,
+	cell: Vector2i,
+	damage_amount: int,
+	should_broadcast: bool,
+	can_damage_source: bool
+) -> void:
 
 	var target_entity: Node = runtime.get_entity_at_cell(cell)
-	if target_entity != null and target_entity != attacker:
-		_apply_entity_attack(attacker, target_entity, should_broadcast)
+	if target_entity != null and (target_entity != damage_source or can_damage_source):
+		_apply_entity_damage(damage_source, target_entity, damage_amount, should_broadcast)
 		return
 
 	var target_object: GridObject = runtime.get_object_at_cell(cell) as GridObject
@@ -29,14 +71,14 @@ func apply_attack_to_cell(
 		var was_damaged: bool = target_object.take_damage()
 		if not was_damaged:
 			return
-		print_non_entity_attack_result(attacker, cell)
+		print_non_entity_attack_result(damage_source, cell)
 		if target_object is ItemObject:
 			runtime.remove_world_object(target_object)
 			return
 		runtime.broadcast_object_state(target_object)
 		return
 
-	print_non_entity_attack_result(attacker, cell)
+	print_non_entity_attack_result(damage_source, cell)
 
 
 func get_entity_id(entity: Node) -> String:
@@ -78,11 +120,12 @@ func print_entity_attack_result(
 	])
 
 
-func _apply_entity_attack(attacker: Node, target_entity: Node, should_broadcast: bool) -> void:
-	var damage_amount: int = 25
-	if attacker.get("damage") != null:
-		damage_amount = int(attacker.get("damage"))
-
+func _apply_entity_damage(
+	damage_source: Node,
+	target_entity: Node,
+	damage_amount: int,
+	should_broadcast: bool
+) -> void:
 	var previous_health: int = 0
 	if target_entity.get("health") != null:
 		previous_health = int(target_entity.get("health"))
@@ -98,7 +141,7 @@ func _apply_entity_attack(attacker: Node, target_entity: Node, should_broadcast:
 	if target_entity.get("max_health") != null:
 		target_max_health = int(target_entity.get("max_health"))
 
-	var attacker_id: String = get_entity_id(attacker)
+	var attacker_id: String = get_entity_id(damage_source)
 	var target_id: String = get_entity_id(target_entity)
 	print_entity_attack_result(
 		attacker_id,
@@ -110,7 +153,7 @@ func _apply_entity_attack(attacker: Node, target_entity: Node, should_broadcast:
 
 	if should_broadcast:
 		if not attacker_id.is_empty() and not target_id.is_empty():
-			NetworkManager.broadcast_entity_attack_result(
+			NetworkManager.combat.broadcast_entity_attack_result(
 				attacker_id,
 				target_id,
 				damage_amount,
@@ -136,12 +179,12 @@ func _broadcast_entity_damage_result(target_entity: Node, was_lethal: bool) -> v
 		var target_type: int = int(target_entity.get("entity_type"))
 		if target_type == Entity.EntityType.CHARACTER:
 			var target_cell: Vector2i = target_entity.get("current_cell")
-			NetworkManager.broadcast_entity_respawn(target_id, target_cell, target_health)
+			NetworkManager.entity.broadcast_entity_respawn(target_id, target_cell, target_health)
 		elif not (target_entity is NonPlayerEntity):
-			NetworkManager.broadcast_entity_removed(target_id)
+			NetworkManager.entity.broadcast_entity_removed(target_id)
 		return
 
-	NetworkManager.broadcast_entity_health(target_id, target_health)
+	NetworkManager.combat.broadcast_entity_health(target_id, target_health)
 
 
 func print_non_entity_attack_result(attacker: Node, cell: Vector2i) -> void:

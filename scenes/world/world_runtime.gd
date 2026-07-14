@@ -13,6 +13,7 @@ signal match_end_requested()
 @export var awareness_path: NodePath = ^"../Awareness"
 @export var interaction_path: NodePath = ^"../Interaction"
 @export var item_usage_path: NodePath = ^"../ItemUsage"
+@export var spells_path: NodePath = ^"../Spells"
 
 var level: WorldLevel = null
 var grid: WorldGrid = null
@@ -25,6 +26,7 @@ var spawner: WorldSpawner = null
 var awareness: WorldAwareness = null
 var interaction: WorldInteraction = null
 var item_usage: WorldItemUsage = null
+var spells: WorldSpells = null
 
 
 func configure_for_level(new_level: WorldLevel) -> void:
@@ -48,6 +50,7 @@ func is_configured_for(target_level: WorldLevel) -> bool:
 		and awareness != null
 		and interaction != null
 		and item_usage != null
+		and spells != null
 	)
 
 
@@ -60,8 +63,11 @@ func start_game() -> void:
 	if GameSession.is_singleplayer():
 		players_service.start_singleplayer()
 	elif GameSession.is_multiplayer():
-		if not NetworkManager.is_ready():
-			push_warning("Multiplayer session started before network became ready: " + NetworkManager.last_error)
+		if not NetworkManager.connection.is_ready():
+			push_warning(
+				"Multiplayer session started before network became ready: "
+				+ NetworkManager.connection.last_error
+			)
 		players_service.start_multiplayer()
 	else:
 		push_warning("Unknown game session mode: " + str(GameSession.mode))
@@ -83,8 +89,17 @@ func disconnect_signals() -> void:
 		network.disconnect_signals()
 
 
-func handle_entity_attack(attacker: Node, target_cell: Vector2i, should_broadcast: bool = true) -> void:
-	apply_attack_to_cell(attacker, target_cell, should_broadcast)
+func handle_entity_attack(
+	attacker: Node,
+	target_cell: Vector2i,
+	should_broadcast: bool = true,
+	should_broadcast_action: bool = true
+) -> void:
+	apply_attack_to_cell(attacker, target_cell, should_broadcast, should_broadcast_action)
+
+
+func broadcast_entity_attack_action(attacker: Node, target_cell: Vector2i) -> void:
+	combat.broadcast_attack_action(attacker, target_cell)
 
 
 func handle_entity_move_started(entity: Node, from_cell: Vector2i, target_cell: Vector2i, should_broadcast: bool = true) -> void:
@@ -99,6 +114,10 @@ func handle_entity_move_completed(entity: Node, from_cell: Vector2i, target_cell
 
 func handle_character_attack(attacker: Node, target_cell: Vector2i) -> void:
 	handle_entity_attack(attacker, target_cell, true)
+
+
+func request_character_attack(attacker: PlayerCharacter, target_cell: Vector2i) -> bool:
+	return network.request_character_attack(attacker, target_cell)
 
 
 func request_character_interaction(interactor: PlayerCharacter, target_cell: Vector2i) -> void:
@@ -116,16 +135,35 @@ func request_inventory_add(item_id: String, amount: int) -> void:
 	network.request_inventory_add(item_id, amount)
 
 
-func request_inventory_move(source_slot_index: int, target_slot_index: int) -> void:
-	network.request_inventory_move(source_slot_index, target_slot_index)
+func request_inventory_move(inventory_kind: String, source_slot_index: int, target_slot_index: int) -> void:
+	network.request_inventory_move(inventory_kind, source_slot_index, target_slot_index)
 
 
-func request_inventory_delete(slot_index: int) -> void:
-	network.request_inventory_delete(slot_index)
+func request_inventory_delete(inventory_kind: String, slot_index: int) -> void:
+	network.request_inventory_delete(inventory_kind, slot_index)
 
 
 func request_inventory_use(slot_index: int) -> void:
 	network.request_inventory_use(slot_index)
+
+
+func send_character_state(
+	steam_id: int,
+	player_position: Vector2,
+	animation: String,
+	is_moving: bool,
+	facing_left: bool
+) -> void:
+	network.send_character_state(steam_id, player_position, animation, is_moving, facing_left)
+
+
+func broadcast_entity_ai_state(
+	entity_id: String,
+	state: String,
+	target_entity_id: String,
+	reason: String
+) -> void:
+	network.broadcast_entity_ai_state(entity_id, state, target_entity_id, reason)
 
 
 func try_use_inventory_item(player: PlayerCharacter, slot_index: int) -> bool:
@@ -133,6 +171,49 @@ func try_use_inventory_item(player: PlayerCharacter, slot_index: int) -> bool:
 		return false
 
 	return item_usage.try_use_item(player, slot_index)
+
+
+func toggle_spell_targeting(player: PlayerCharacter, spell_slot_index: int) -> bool:
+	return spells != null and spells.toggle_spell_targeting(player, spell_slot_index)
+
+
+func cancel_spell_targeting(player: PlayerCharacter) -> bool:
+	return spells != null and spells.cancel_spell_targeting(player)
+
+
+func has_selected_spell(player: PlayerCharacter) -> bool:
+	return spells != null and spells.has_selected_spell(player)
+
+
+func get_selected_spell_slot_index(player: PlayerCharacter) -> int:
+	if spells == null:
+		return -1
+
+	return spells.get_selected_spell_slot_index(player)
+
+
+func request_selected_spell_cast(player: PlayerCharacter, target_cell: Vector2i) -> bool:
+	return spells != null and spells.request_selected_spell_cast(player, target_cell)
+
+
+func is_entity_casting(entity: Node) -> bool:
+	return spells != null and spells.is_entity_casting(entity)
+
+
+func is_entity_movement_blocked_by_spell(entity: Node) -> bool:
+	return spells != null and spells.is_entity_movement_blocked(entity)
+
+
+func get_remaining_spell_slot_uses(player: PlayerCharacter, spell_slot_index: int) -> int:
+	if spells == null:
+		return 0
+
+	return spells.get_remaining_spell_slot_uses(player, spell_slot_index)
+
+
+func apply_spell_damage_to_cell(caster: Node, target_cell: Vector2i, damage_amount: int) -> void:
+	if combat != null:
+		combat.apply_spell_damage_to_cell(caster, target_cell, damage_amount)
 
 
 func register_entity(entity: Node) -> void:
@@ -284,6 +365,13 @@ func can_entity_use_item_in_turn(entity: Node) -> bool:
 		return true
 
 	return turn_manager.can_entity_use_item(entity)
+
+
+func can_entity_cast_spell_in_turn(entity: Node) -> bool:
+	if turn_manager == null:
+		return true
+
+	return turn_manager.can_entity_cast_spell(entity)
 
 
 func can_entity_sync_state_in_turn(entity: Node) -> bool:
@@ -438,6 +526,7 @@ func _bind_services() -> void:
 	awareness = get_node_or_null(awareness_path) as WorldAwareness
 	interaction = get_node_or_null(interaction_path) as WorldInteraction
 	item_usage = get_node_or_null(item_usage_path) as WorldItemUsage
+	spells = get_node_or_null(spells_path) as WorldSpells
 
 	if grid != null:
 		grid.configure_context(self, level)
@@ -461,6 +550,8 @@ func _bind_services() -> void:
 		interaction.configure_context(self, level)
 	if item_usage != null:
 		item_usage.configure_context(self, level)
+	if spells != null:
+		spells.configure_context(self, level)
 
 
 func _configure_services() -> void:

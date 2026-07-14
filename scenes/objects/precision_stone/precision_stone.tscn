@@ -1,0 +1,18 @@
+[gd_scene format=3 uid="uid://boas3d7uwhath"]
+
+[ext_resource type="Texture2D" uid="uid://cki5jpjnjwi7u" path="res://art/Tiny Swords (Update 010)/Resources/Resources/G_Idle_(NoShadow).png" id="1_j7de0"]
+[ext_resource type="Script" uid="uid://ctb07nqrqtsc0" path="res://scenes/objects/precision_stone/precision_stone.gd" id="1_r52kn"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_r52kn"]
+radius = 18.0
+
+[node name="PrecisionStone" type="StaticBody2D" unique_id=441456171]
+script = ExtResource("1_r52kn")
+
+[node name="Sprite2D" type="Sprite2D" parent="." unique_id=240663710]
+position = Vector2(-2, -17)
+texture = ExtResource("1_j7de0")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=708624650]
+position = Vector2(2, -3)
+shape = SubResource("CircleShape2D_r52kn")

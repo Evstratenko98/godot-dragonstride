@@ -50,7 +50,7 @@ func game_over(should_broadcast: bool = true) -> void:
 		return
 
 	if should_broadcast and GameSession.is_multiplayer():
-		NetworkManager.request_end_game()
+		NetworkManager.match_channel.request_end_game()
 		return
 
 	is_ending_game = true
@@ -118,7 +118,7 @@ func _leave_active_multiplayer_session() -> void:
 		SteamManager.leave_lobby()
 		return
 
-	NetworkManager.stop_network()
+	NetworkManager.connection.stop_network()
 
 
 func _on_runtime_match_end_requested() -> void:

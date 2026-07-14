@@ -37,20 +37,29 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not character.can_receive_input or character.runtime == null or _is_console_open():
 		return
 
+	if event.is_action_pressed("ui_cancel") and character.runtime.has_selected_spell(character):
+		character.runtime.cancel_spell_targeting(character)
+		get_viewport().set_input_as_handled()
+		return
+
 	if event.is_action_pressed("end_turn"):
+		character.runtime.cancel_spell_targeting(character)
 		character.runtime.request_end_turn(character)
 		get_viewport().set_input_as_handled()
 		return
 
-	if character.is_moving or character.is_attacking:
+	if character.is_moving or character.is_attacking or character.runtime.is_entity_casting(character):
 		return
 
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		var target_cell: Vector2i = character.runtime.world_to_cell(character.get_global_mouse_position())
+		if character.runtime.request_selected_spell_cast(character, target_cell):
+			get_viewport().set_input_as_handled()
+			return
 		if character.action_mode == PlayerCharacter.ActionMode.INTERACT:
 			character.request_interaction_cell(target_cell)
 		else:
-			character.request_attack_cell(target_cell, true, true)
+			character.runtime.request_character_attack(character, target_cell)
 
 
 func get_input_direction() -> Vector2i:
@@ -83,7 +92,12 @@ func try_continue_moving() -> bool:
 
 
 func _can_read_movement_input() -> bool:
-	if not character.can_receive_input or character.is_attacking or _is_console_open():
+	if (
+		not character.can_receive_input
+		or character.is_attacking
+		or character.runtime != null and character.runtime.is_entity_movement_blocked_by_spell(character)
+		or _is_console_open()
+	):
 		return false
 
 	if character.runtime != null:

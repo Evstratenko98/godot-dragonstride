@@ -1,4 +1,4 @@
-[gd_scene load_steps=16 format=3]
+[gd_scene load_steps=17 format=3]
 
 [ext_resource type="Script" path="res://scenes/world/services/world_grid.gd" id="1_grid"]
 [ext_resource type="Script" path="res://scenes/world/services/world_registry.gd" id="2_registry"]
@@ -10,6 +10,7 @@
 [ext_resource type="Script" path="res://scenes/world/services/world_awareness.gd" id="8_awareness"]
 [ext_resource type="Script" path="res://scenes/world/services/world_interaction.gd" id="9_interaction"]
 [ext_resource type="Script" path="res://scenes/world/services/world_item_usage.gd" id="9_item_usage"]
+[ext_resource type="Script" path="res://scenes/world/services/world_spells.gd" id="9_spells"]
 [ext_resource type="Script" path="res://scenes/world/world_runtime.gd" id="9_runtime"]
 [ext_resource type="Script" path="res://scenes/world/match_controller.gd" id="10_match"]
 [ext_resource type="PackedScene" path="res://scenes/grid_lines/grid_lines.tscn" id="11_grid_lines"]
@@ -49,6 +50,9 @@ script = ExtResource("9_interaction")
 [node name="ItemUsage" type="Node" parent="."]
 script = ExtResource("9_item_usage")
 
+[node name="Spells" type="Node" parent="."]
+script = ExtResource("9_spells")
+
 [node name="WorldRuntime" type="Node" parent="."]
 script = ExtResource("9_runtime")
 
@@ -58,6 +62,8 @@ script = ExtResource("10_match")
 [node name="LevelContainer" type="Node2D" parent="."]
 
 [node name="Players" type="Node2D" parent="WorldRuntime"]
+
+[node name="SpellEffects" type="Node2D" parent="WorldRuntime"]
 
 [node name="GridLines" parent="." instance=ExtResource("11_grid_lines")]
 

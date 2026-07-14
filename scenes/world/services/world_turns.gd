@@ -1,6 +1,9 @@
 class_name WorldTurns
 extends Node
 
+signal player_turn_started(entity_id: String)
+signal turn_mode_changed(is_enabled: bool)
+
 const STATE_DISABLED := "disabled"
 const STATE_PLAYER_TURN := "player_turn"
 const STATE_WORLD_TURN := "world_turn"
@@ -61,6 +64,7 @@ func enable_turn_mode() -> void:
 	state = STATE_PLAYER_TURN
 	round_number = 1
 	_build_player_turn_order()
+	turn_mode_changed.emit(true)
 	ConsoleOutput.print_console("Turn mode enabled", runtime)
 	_broadcast_snapshot(EVENT_TURN_MODE_ENABLED)
 	_start_round()
@@ -72,6 +76,7 @@ func disable_turn_mode() -> void:
 		return
 
 	_reset_turn_state()
+	turn_mode_changed.emit(false)
 	ConsoleOutput.print_console("Turn mode disabled", runtime)
 	_broadcast_snapshot(EVENT_TURN_MODE_DISABLED)
 
@@ -101,6 +106,8 @@ func is_turn_mode_enabled() -> bool:
 
 
 func can_entity_move(entity: Node) -> bool:
+	if runtime != null and runtime.is_entity_movement_blocked_by_spell(entity):
+		return false
 	if state == STATE_DISABLED:
 		return true
 
@@ -111,6 +118,8 @@ func can_entity_move(entity: Node) -> bool:
 
 
 func can_entity_attack(entity: Node, target_cell: Vector2i) -> bool:
+	if runtime != null and runtime.is_entity_casting(entity):
+		return false
 	if state == STATE_DISABLED:
 		return true
 
@@ -127,6 +136,8 @@ func can_entity_attack(entity: Node, target_cell: Vector2i) -> bool:
 
 
 func can_entity_interact(entity: Node) -> bool:
+	if runtime != null and runtime.is_entity_casting(entity):
+		return false
 	if state == STATE_DISABLED:
 		return true
 
@@ -138,6 +149,17 @@ func can_entity_interact(entity: Node) -> bool:
 
 
 func can_entity_use_item(entity: Node) -> bool:
+	if runtime != null and runtime.is_entity_casting(entity):
+		return false
+	if state == STATE_DISABLED:
+		return true
+
+	return state == STATE_PLAYER_TURN and _is_active_entity(entity)
+
+
+func can_entity_cast_spell(entity: Node) -> bool:
+	if runtime != null and runtime.is_entity_casting(entity):
+		return false
 	if state == STATE_DISABLED:
 		return true
 
@@ -211,7 +233,7 @@ func request_end_turn(entity: Node) -> void:
 
 	if GameSession.is_multiplayer() and not GameSession.is_host():
 		var steam_id: int = _get_entity_steam_id(entity)
-		NetworkManager.request_turn_end(steam_id)
+		NetworkManager.turns.request_turn_end(steam_id)
 		return
 
 	_request_end_turn_for_entity(entity)
@@ -236,7 +258,14 @@ func apply_remote_snapshot(snapshot: Dictionary) -> void:
 	if snapshot_payload is Dictionary:
 		event_payload = snapshot_payload
 
-	_print_remote_turn_event(str(snapshot.get("event", EVENT_NONE)), event_payload)
+	var event: String = str(snapshot.get("event", EVENT_NONE))
+	_print_remote_turn_event(event, event_payload)
+	if event == EVENT_TURN_MODE_ENABLED:
+		turn_mode_changed.emit(true)
+	elif event == EVENT_TURN_MODE_DISABLED:
+		turn_mode_changed.emit(false)
+	elif event == EVENT_PLAYER_TURN_STARTED:
+		player_turn_started.emit(active_entity_id)
 
 
 func _start_round() -> void:
@@ -279,6 +308,7 @@ func _start_player_turn(player: Node) -> void:
 	attacks_left = MAX_ATTACKS_PER_TURN
 	interactions_left = MAX_INTERACTIONS_PER_TURN
 	pending_end_turn = false
+	player_turn_started.emit(active_entity_id)
 
 	var start_log: String = "Player turn started: %s" % _get_entity_display_name(player)
 	var resources_log: String = "Available: steps %d, attack %d, interaction %d" % [
@@ -464,7 +494,7 @@ func _add_player_to_turn_order(player: Node, steam_id: int) -> void:
 func _get_player_skip_reason(entity_id: String, player: Node) -> String:
 	var steam_id: int = int(turn_order_steam_ids.get(entity_id, 0))
 	if GameSession.is_multiplayer() and steam_id != 0 and steam_id != GameSession.local_steam_id:
-		if not NetworkManager.has_peer_for_steam_id(steam_id):
+		if not NetworkManager.peers.has_peer_for_steam_id(steam_id):
 			return "disconnected"
 
 	if player == null:
@@ -510,7 +540,7 @@ func _is_entity_busy(entity: Node) -> bool:
 
 	var moving: Variant = entity.get("is_moving")
 	var attacking: Variant = entity.get("is_attacking")
-	return bool(moving) or bool(attacking)
+	return bool(moving) or bool(attacking) or runtime.is_entity_casting(entity)
 
 
 func _get_entity_steam_id(entity: Node) -> int:
@@ -591,7 +621,7 @@ func _make_snapshot(event: String = EVENT_NONE, event_payload: Dictionary = {}) 
 
 func _broadcast_snapshot(event: String = EVENT_NONE, event_payload: Dictionary = {}) -> void:
 	if GameSession.is_multiplayer() and GameSession.is_host():
-		NetworkManager.broadcast_turn_state(_make_snapshot(event, event_payload))
+		NetworkManager.turns.broadcast_turn_state(_make_snapshot(event, event_payload))
 
 
 func _reset_turn_state() -> void:
@@ -650,25 +680,25 @@ func _is_world_turn_entity_available(entity: Node) -> bool:
 
 
 func _connect_network_signals() -> void:
-	if not NetworkManager.turn_state_received.is_connected(_on_turn_state_received):
-		NetworkManager.turn_state_received.connect(_on_turn_state_received)
+	if not NetworkManager.turns.turn_state_received.is_connected(_on_turn_state_received):
+		NetworkManager.turns.turn_state_received.connect(_on_turn_state_received)
 
-	if not NetworkManager.turn_end_requested.is_connected(_on_turn_end_requested):
-		NetworkManager.turn_end_requested.connect(_on_turn_end_requested)
+	if not NetworkManager.turns.turn_end_requested.is_connected(_on_turn_end_requested):
+		NetworkManager.turns.turn_end_requested.connect(_on_turn_end_requested)
 
-	if not NetworkManager.steam_peer_disconnected.is_connected(_on_steam_peer_disconnected):
-		NetworkManager.steam_peer_disconnected.connect(_on_steam_peer_disconnected)
+	if not NetworkManager.connection.steam_peer_disconnected.is_connected(_on_steam_peer_disconnected):
+		NetworkManager.connection.steam_peer_disconnected.connect(_on_steam_peer_disconnected)
 
 
 func _disconnect_network_signals() -> void:
-	if NetworkManager.turn_state_received.is_connected(_on_turn_state_received):
-		NetworkManager.turn_state_received.disconnect(_on_turn_state_received)
+	if NetworkManager.turns.turn_state_received.is_connected(_on_turn_state_received):
+		NetworkManager.turns.turn_state_received.disconnect(_on_turn_state_received)
 
-	if NetworkManager.turn_end_requested.is_connected(_on_turn_end_requested):
-		NetworkManager.turn_end_requested.disconnect(_on_turn_end_requested)
+	if NetworkManager.turns.turn_end_requested.is_connected(_on_turn_end_requested):
+		NetworkManager.turns.turn_end_requested.disconnect(_on_turn_end_requested)
 
-	if NetworkManager.steam_peer_disconnected.is_connected(_on_steam_peer_disconnected):
-		NetworkManager.steam_peer_disconnected.disconnect(_on_steam_peer_disconnected)
+	if NetworkManager.connection.steam_peer_disconnected.is_connected(_on_steam_peer_disconnected):
+		NetworkManager.connection.steam_peer_disconnected.disconnect(_on_steam_peer_disconnected)
 
 
 func _on_turn_state_received(snapshot: Dictionary) -> void:

@@ -174,7 +174,7 @@ func leave_lobby() -> void:
 
 	Steam.leaveLobby(lobby_id)
 
-	NetworkManager.stop_network()
+	NetworkManager.connection.stop_network()
 	lobby_id = 0
 	is_starting_game_from_lobby = false
 	is_waiting_for_host_network = false
@@ -316,7 +316,7 @@ func start_game_from_lobby() -> void:
 
 	update_lobby_members()
 	GameSession.start_multiplayer_from_lobby()
-	var network_result := NetworkManager.start_from_session()
+	var network_result: int = NetworkManager.connection.start_from_session()
 
 	if network_result != OK:
 		is_starting_game_from_lobby = false
@@ -324,13 +324,13 @@ func start_game_from_lobby() -> void:
 		GameSession.clear()
 		return
 
-	if NetworkManager.is_ready():
+	if NetworkManager.connection.is_ready():
 		is_waiting_for_host_network = false
 		GameSession.go_to_selected_scene()
 		return
 
-	if not NetworkManager.network_started.is_connected(_on_network_started_for_game):
-		NetworkManager.network_started.connect(_on_network_started_for_game, CONNECT_ONE_SHOT)
+	if not NetworkManager.connection.network_started.is_connected(_on_network_started_for_game):
+		NetworkManager.connection.network_started.connect(_on_network_started_for_game, CONNECT_ONE_SHOT)
 
 
 func wait_for_host_network_from_lobby() -> void:

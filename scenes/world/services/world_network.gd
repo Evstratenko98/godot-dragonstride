@@ -13,155 +13,149 @@ func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void
 
 
 func connect_signals() -> void:
-	if not NetworkManager.peer_map_updated.is_connected(_on_peer_map_updated):
-		NetworkManager.peer_map_updated.connect(_on_peer_map_updated)
+	if not NetworkManager.peers.peer_map_updated.is_connected(_on_peer_map_updated):
+		NetworkManager.peers.peer_map_updated.connect(_on_peer_map_updated)
 
-	if not NetworkManager.peer_connected.is_connected(_on_peer_connected):
-		NetworkManager.peer_connected.connect(_on_peer_connected)
+	if not NetworkManager.connection.peer_connected.is_connected(_on_peer_connected):
+		NetworkManager.connection.peer_connected.connect(_on_peer_connected)
 
-	if not NetworkManager.character_state_received.is_connected(_on_character_state_received):
-		NetworkManager.character_state_received.connect(_on_character_state_received)
+	if not NetworkManager.character.character_state_received.is_connected(_on_character_state_received):
+		NetworkManager.character.character_state_received.connect(_on_character_state_received)
 
-	if not NetworkManager.attack_requested.is_connected(_on_attack_requested):
-		NetworkManager.attack_requested.connect(_on_attack_requested)
+	if not NetworkManager.combat.attack_requested.is_connected(_on_attack_requested):
+		NetworkManager.combat.attack_requested.connect(_on_attack_requested)
 
-	if not NetworkManager.attack_received.is_connected(_on_attack_received):
-		NetworkManager.attack_received.connect(_on_attack_received)
+	if not NetworkManager.character.interaction_requested.is_connected(_on_interaction_requested):
+		NetworkManager.character.interaction_requested.connect(_on_interaction_requested)
 
-	if not NetworkManager.interaction_requested.is_connected(_on_interaction_requested):
-		NetworkManager.interaction_requested.connect(_on_interaction_requested)
+	if not NetworkManager.entity.object_state_received.is_connected(_on_object_state_received):
+		NetworkManager.entity.object_state_received.connect(_on_object_state_received)
 
-	if not NetworkManager.object_state_received.is_connected(_on_object_state_received):
-		NetworkManager.object_state_received.connect(_on_object_state_received)
+	if not NetworkManager.character.entity_move_received.is_connected(_on_entity_move_received):
+		NetworkManager.character.entity_move_received.connect(_on_entity_move_received)
 
-	if not NetworkManager.entity_move_received.is_connected(_on_entity_move_received):
-		NetworkManager.entity_move_received.connect(_on_entity_move_received)
+	if not NetworkManager.character.entity_move_requested.is_connected(_on_entity_move_requested):
+		NetworkManager.character.entity_move_requested.connect(_on_entity_move_requested)
 
-	if not NetworkManager.entity_move_requested.is_connected(_on_entity_move_requested):
-		NetworkManager.entity_move_requested.connect(_on_entity_move_requested)
+	if not NetworkManager.character.entity_move_completed_requested.is_connected(_on_entity_move_completed_requested):
+		NetworkManager.character.entity_move_completed_requested.connect(_on_entity_move_completed_requested)
 
-	if not NetworkManager.entity_move_completed_requested.is_connected(_on_entity_move_completed_requested):
-		NetworkManager.entity_move_completed_requested.connect(_on_entity_move_completed_requested)
+	if not NetworkManager.character.entity_move_completed_received.is_connected(_on_entity_move_completed_received):
+		NetworkManager.character.entity_move_completed_received.connect(_on_entity_move_completed_received)
 
-	if not NetworkManager.entity_move_completed_received.is_connected(_on_entity_move_completed_received):
-		NetworkManager.entity_move_completed_received.connect(_on_entity_move_completed_received)
+	if not NetworkManager.combat.entity_attack_received.is_connected(_on_entity_attack_received):
+		NetworkManager.combat.entity_attack_received.connect(_on_entity_attack_received)
 
-	if not NetworkManager.entity_attack_received.is_connected(_on_entity_attack_received):
-		NetworkManager.entity_attack_received.connect(_on_entity_attack_received)
+	if not NetworkManager.combat.entity_attack_result_received.is_connected(_on_entity_attack_result_received):
+		NetworkManager.combat.entity_attack_result_received.connect(_on_entity_attack_result_received)
 
-	if not NetworkManager.entity_attack_result_received.is_connected(_on_entity_attack_result_received):
-		NetworkManager.entity_attack_result_received.connect(_on_entity_attack_result_received)
+	if not NetworkManager.combat.entity_health_received.is_connected(_on_entity_health_received):
+		NetworkManager.combat.entity_health_received.connect(_on_entity_health_received)
 
-	if not NetworkManager.entity_health_received.is_connected(_on_entity_health_received):
-		NetworkManager.entity_health_received.connect(_on_entity_health_received)
+	if not NetworkManager.combat.entity_vitality_received.is_connected(_on_entity_vitality_received):
+		NetworkManager.combat.entity_vitality_received.connect(_on_entity_vitality_received)
 
-	if not NetworkManager.entity_vitality_received.is_connected(_on_entity_vitality_received):
-		NetworkManager.entity_vitality_received.connect(_on_entity_vitality_received)
+	if not NetworkManager.entity.entity_ai_state_received.is_connected(_on_entity_ai_state_received):
+		NetworkManager.entity.entity_ai_state_received.connect(_on_entity_ai_state_received)
 
-	if not NetworkManager.entity_ai_state_received.is_connected(_on_entity_ai_state_received):
-		NetworkManager.entity_ai_state_received.connect(_on_entity_ai_state_received)
+	if not NetworkManager.entity.entity_respawn_received.is_connected(_on_entity_respawn_received):
+		NetworkManager.entity.entity_respawn_received.connect(_on_entity_respawn_received)
 
-	if not NetworkManager.entity_respawn_received.is_connected(_on_entity_respawn_received):
-		NetworkManager.entity_respawn_received.connect(_on_entity_respawn_received)
+	if not NetworkManager.entity.entity_removed_received.is_connected(_on_entity_removed_received):
+		NetworkManager.entity.entity_removed_received.connect(_on_entity_removed_received)
 
-	if not NetworkManager.entity_removed_received.is_connected(_on_entity_removed_received):
-		NetworkManager.entity_removed_received.connect(_on_entity_removed_received)
+	if not NetworkManager.inventory.inventory_add_requested.is_connected(_on_inventory_add_requested):
+		NetworkManager.inventory.inventory_add_requested.connect(_on_inventory_add_requested)
 
-	if not NetworkManager.inventory_add_requested.is_connected(_on_inventory_add_requested):
-		NetworkManager.inventory_add_requested.connect(_on_inventory_add_requested)
+	if not NetworkManager.inventory.inventory_move_requested.is_connected(_on_inventory_move_requested):
+		NetworkManager.inventory.inventory_move_requested.connect(_on_inventory_move_requested)
 
-	if not NetworkManager.inventory_move_requested.is_connected(_on_inventory_move_requested):
-		NetworkManager.inventory_move_requested.connect(_on_inventory_move_requested)
+	if not NetworkManager.inventory.inventory_delete_requested.is_connected(_on_inventory_delete_requested):
+		NetworkManager.inventory.inventory_delete_requested.connect(_on_inventory_delete_requested)
 
-	if not NetworkManager.inventory_delete_requested.is_connected(_on_inventory_delete_requested):
-		NetworkManager.inventory_delete_requested.connect(_on_inventory_delete_requested)
+	if not NetworkManager.inventory.inventory_use_requested.is_connected(_on_inventory_use_requested):
+		NetworkManager.inventory.inventory_use_requested.connect(_on_inventory_use_requested)
 
-	if not NetworkManager.inventory_use_requested.is_connected(_on_inventory_use_requested):
-		NetworkManager.inventory_use_requested.connect(_on_inventory_use_requested)
+	if not NetworkManager.inventory.inventory_snapshot_received.is_connected(_on_inventory_snapshot_received):
+		NetworkManager.inventory.inventory_snapshot_received.connect(_on_inventory_snapshot_received)
 
-	if not NetworkManager.inventory_snapshot_received.is_connected(_on_inventory_snapshot_received):
-		NetworkManager.inventory_snapshot_received.connect(_on_inventory_snapshot_received)
-
-	if not NetworkManager.end_game_requested.is_connected(_on_end_game_requested):
-		NetworkManager.end_game_requested.connect(_on_end_game_requested)
+	if not NetworkManager.match_channel.match_end_requested.is_connected(_on_end_game_requested):
+		NetworkManager.match_channel.match_end_requested.connect(_on_end_game_requested)
 
 
 func disconnect_signals() -> void:
-	if NetworkManager.peer_map_updated.is_connected(_on_peer_map_updated):
-		NetworkManager.peer_map_updated.disconnect(_on_peer_map_updated)
+	if NetworkManager.peers.peer_map_updated.is_connected(_on_peer_map_updated):
+		NetworkManager.peers.peer_map_updated.disconnect(_on_peer_map_updated)
 
-	if NetworkManager.peer_connected.is_connected(_on_peer_connected):
-		NetworkManager.peer_connected.disconnect(_on_peer_connected)
+	if NetworkManager.connection.peer_connected.is_connected(_on_peer_connected):
+		NetworkManager.connection.peer_connected.disconnect(_on_peer_connected)
 
-	if NetworkManager.character_state_received.is_connected(_on_character_state_received):
-		NetworkManager.character_state_received.disconnect(_on_character_state_received)
+	if NetworkManager.character.character_state_received.is_connected(_on_character_state_received):
+		NetworkManager.character.character_state_received.disconnect(_on_character_state_received)
 
-	if NetworkManager.attack_requested.is_connected(_on_attack_requested):
-		NetworkManager.attack_requested.disconnect(_on_attack_requested)
+	if NetworkManager.combat.attack_requested.is_connected(_on_attack_requested):
+		NetworkManager.combat.attack_requested.disconnect(_on_attack_requested)
 
-	if NetworkManager.attack_received.is_connected(_on_attack_received):
-		NetworkManager.attack_received.disconnect(_on_attack_received)
+	if NetworkManager.character.interaction_requested.is_connected(_on_interaction_requested):
+		NetworkManager.character.interaction_requested.disconnect(_on_interaction_requested)
 
-	if NetworkManager.interaction_requested.is_connected(_on_interaction_requested):
-		NetworkManager.interaction_requested.disconnect(_on_interaction_requested)
+	if NetworkManager.entity.object_state_received.is_connected(_on_object_state_received):
+		NetworkManager.entity.object_state_received.disconnect(_on_object_state_received)
 
-	if NetworkManager.object_state_received.is_connected(_on_object_state_received):
-		NetworkManager.object_state_received.disconnect(_on_object_state_received)
+	if NetworkManager.character.entity_move_received.is_connected(_on_entity_move_received):
+		NetworkManager.character.entity_move_received.disconnect(_on_entity_move_received)
 
-	if NetworkManager.entity_move_received.is_connected(_on_entity_move_received):
-		NetworkManager.entity_move_received.disconnect(_on_entity_move_received)
+	if NetworkManager.character.entity_move_requested.is_connected(_on_entity_move_requested):
+		NetworkManager.character.entity_move_requested.disconnect(_on_entity_move_requested)
 
-	if NetworkManager.entity_move_requested.is_connected(_on_entity_move_requested):
-		NetworkManager.entity_move_requested.disconnect(_on_entity_move_requested)
+	if NetworkManager.character.entity_move_completed_requested.is_connected(_on_entity_move_completed_requested):
+		NetworkManager.character.entity_move_completed_requested.disconnect(_on_entity_move_completed_requested)
 
-	if NetworkManager.entity_move_completed_requested.is_connected(_on_entity_move_completed_requested):
-		NetworkManager.entity_move_completed_requested.disconnect(_on_entity_move_completed_requested)
+	if NetworkManager.character.entity_move_completed_received.is_connected(_on_entity_move_completed_received):
+		NetworkManager.character.entity_move_completed_received.disconnect(_on_entity_move_completed_received)
 
-	if NetworkManager.entity_move_completed_received.is_connected(_on_entity_move_completed_received):
-		NetworkManager.entity_move_completed_received.disconnect(_on_entity_move_completed_received)
+	if NetworkManager.combat.entity_attack_received.is_connected(_on_entity_attack_received):
+		NetworkManager.combat.entity_attack_received.disconnect(_on_entity_attack_received)
 
-	if NetworkManager.entity_attack_received.is_connected(_on_entity_attack_received):
-		NetworkManager.entity_attack_received.disconnect(_on_entity_attack_received)
+	if NetworkManager.combat.entity_attack_result_received.is_connected(_on_entity_attack_result_received):
+		NetworkManager.combat.entity_attack_result_received.disconnect(_on_entity_attack_result_received)
 
-	if NetworkManager.entity_attack_result_received.is_connected(_on_entity_attack_result_received):
-		NetworkManager.entity_attack_result_received.disconnect(_on_entity_attack_result_received)
+	if NetworkManager.combat.entity_health_received.is_connected(_on_entity_health_received):
+		NetworkManager.combat.entity_health_received.disconnect(_on_entity_health_received)
 
-	if NetworkManager.entity_health_received.is_connected(_on_entity_health_received):
-		NetworkManager.entity_health_received.disconnect(_on_entity_health_received)
+	if NetworkManager.combat.entity_vitality_received.is_connected(_on_entity_vitality_received):
+		NetworkManager.combat.entity_vitality_received.disconnect(_on_entity_vitality_received)
 
-	if NetworkManager.entity_vitality_received.is_connected(_on_entity_vitality_received):
-		NetworkManager.entity_vitality_received.disconnect(_on_entity_vitality_received)
+	if NetworkManager.entity.entity_ai_state_received.is_connected(_on_entity_ai_state_received):
+		NetworkManager.entity.entity_ai_state_received.disconnect(_on_entity_ai_state_received)
 
-	if NetworkManager.entity_ai_state_received.is_connected(_on_entity_ai_state_received):
-		NetworkManager.entity_ai_state_received.disconnect(_on_entity_ai_state_received)
+	if NetworkManager.entity.entity_respawn_received.is_connected(_on_entity_respawn_received):
+		NetworkManager.entity.entity_respawn_received.disconnect(_on_entity_respawn_received)
 
-	if NetworkManager.entity_respawn_received.is_connected(_on_entity_respawn_received):
-		NetworkManager.entity_respawn_received.disconnect(_on_entity_respawn_received)
+	if NetworkManager.entity.entity_removed_received.is_connected(_on_entity_removed_received):
+		NetworkManager.entity.entity_removed_received.disconnect(_on_entity_removed_received)
 
-	if NetworkManager.entity_removed_received.is_connected(_on_entity_removed_received):
-		NetworkManager.entity_removed_received.disconnect(_on_entity_removed_received)
+	if NetworkManager.inventory.inventory_add_requested.is_connected(_on_inventory_add_requested):
+		NetworkManager.inventory.inventory_add_requested.disconnect(_on_inventory_add_requested)
 
-	if NetworkManager.inventory_add_requested.is_connected(_on_inventory_add_requested):
-		NetworkManager.inventory_add_requested.disconnect(_on_inventory_add_requested)
+	if NetworkManager.inventory.inventory_move_requested.is_connected(_on_inventory_move_requested):
+		NetworkManager.inventory.inventory_move_requested.disconnect(_on_inventory_move_requested)
 
-	if NetworkManager.inventory_move_requested.is_connected(_on_inventory_move_requested):
-		NetworkManager.inventory_move_requested.disconnect(_on_inventory_move_requested)
+	if NetworkManager.inventory.inventory_delete_requested.is_connected(_on_inventory_delete_requested):
+		NetworkManager.inventory.inventory_delete_requested.disconnect(_on_inventory_delete_requested)
 
-	if NetworkManager.inventory_delete_requested.is_connected(_on_inventory_delete_requested):
-		NetworkManager.inventory_delete_requested.disconnect(_on_inventory_delete_requested)
+	if NetworkManager.inventory.inventory_use_requested.is_connected(_on_inventory_use_requested):
+		NetworkManager.inventory.inventory_use_requested.disconnect(_on_inventory_use_requested)
 
-	if NetworkManager.inventory_use_requested.is_connected(_on_inventory_use_requested):
-		NetworkManager.inventory_use_requested.disconnect(_on_inventory_use_requested)
+	if NetworkManager.inventory.inventory_snapshot_received.is_connected(_on_inventory_snapshot_received):
+		NetworkManager.inventory.inventory_snapshot_received.disconnect(_on_inventory_snapshot_received)
 
-	if NetworkManager.inventory_snapshot_received.is_connected(_on_inventory_snapshot_received):
-		NetworkManager.inventory_snapshot_received.disconnect(_on_inventory_snapshot_received)
-
-	if NetworkManager.end_game_requested.is_connected(_on_end_game_requested):
-		NetworkManager.end_game_requested.disconnect(_on_end_game_requested)
+	if NetworkManager.match_channel.match_end_requested.is_connected(_on_end_game_requested):
+		NetworkManager.match_channel.match_end_requested.disconnect(_on_end_game_requested)
 
 
 func apply_cached_object_states() -> void:
-	var cached_states: Dictionary = NetworkManager.get_object_states()
+	var cached_states: Dictionary = NetworkManager.store.get_object_states()
 	for object_id in cached_states.keys():
 		_on_object_state_received(
 			str(object_id),
@@ -170,7 +164,7 @@ func apply_cached_object_states() -> void:
 
 
 func apply_cached_entity_ai_states() -> void:
-	var cached_states: Dictionary = NetworkManager.get_entity_ai_states()
+	var cached_states: Dictionary = NetworkManager.store.get_entity_ai_states()
 	for entity_id in cached_states.keys():
 		var state: Dictionary = cached_states[entity_id]
 		_on_entity_ai_state_received(
@@ -182,14 +176,15 @@ func apply_cached_entity_ai_states() -> void:
 
 
 func apply_cached_entity_vitality_states() -> void:
-	var cached_states: Dictionary = NetworkManager.get_entity_vitality_states()
+	var cached_states: Dictionary = NetworkManager.store.get_entity_vitality_states()
 	for entity_id_variant: Variant in cached_states.keys():
 		var entity_id: String = str(entity_id_variant)
 		var state: Dictionary = cached_states[entity_id_variant]
 		_on_entity_vitality_received(
 			entity_id,
 			int(state.get("health", 0)),
-			int(state.get("max_health", 1))
+			int(state.get("max_health", 1)),
+			int(state.get("damage", 0))
 		)
 
 
@@ -201,7 +196,32 @@ func request_entity_move_started(entity: Node, from_cell: Vector2i, target_cell:
 	if id.is_empty():
 		return
 
-	NetworkManager.request_entity_move(id, from_cell, target_cell)
+	NetworkManager.character.request_entity_move(id, from_cell, target_cell)
+
+
+func send_character_state(
+	steam_id: int,
+	player_position: Vector2,
+	animation: String,
+	is_moving: bool,
+	facing_left: bool
+) -> void:
+	NetworkManager.character.send_character_state(
+		steam_id,
+		player_position,
+		animation,
+		is_moving,
+		facing_left
+	)
+
+
+func broadcast_entity_ai_state(
+	entity_id: String,
+	state: String,
+	target_entity_id: String,
+	reason: String
+) -> void:
+	NetworkManager.entity.broadcast_entity_ai_state(entity_id, state, target_entity_id, reason)
 
 
 func report_entity_move_completed(entity: Node, from_cell: Vector2i, target_cell: Vector2i, should_broadcast: bool = true) -> void:
@@ -212,7 +232,7 @@ func report_entity_move_completed(entity: Node, from_cell: Vector2i, target_cell
 	if id.is_empty():
 		return
 
-	NetworkManager.report_entity_move_completed(id, from_cell, target_cell)
+	NetworkManager.character.report_entity_move_completed(id, from_cell, target_cell)
 
 
 func request_character_interaction(interactor: PlayerCharacter, target_cell: Vector2i) -> void:
@@ -223,7 +243,30 @@ func request_character_interaction(interactor: PlayerCharacter, target_cell: Vec
 		runtime.try_character_interaction(interactor, target_cell)
 		return
 
-	NetworkManager.request_interaction(target_cell)
+	NetworkManager.character.request_interaction(target_cell)
+
+
+func request_character_attack(attacker: PlayerCharacter, target_cell: Vector2i) -> bool:
+	if attacker == null or attacker != runtime.get_local_player():
+		return false
+	if attacker.is_moving or attacker.is_attacking or attacker.health <= 0:
+		return false
+	if runtime.is_entity_casting(attacker):
+		return false
+
+	attacker.current_cell = runtime.world_to_cell(attacker.global_position)
+	if not attacker.can_attack_cell(target_cell):
+		return false
+	if not runtime.can_entity_attack_in_turn(attacker, target_cell):
+		return false
+
+	if GameSession.is_singleplayer():
+		return attacker.request_attack_cell(target_cell, true, true)
+	if not NetworkManager.connection.is_ready():
+		return false
+
+	NetworkManager.combat.request_attack(target_cell)
+	return true
 
 
 func request_inventory_add(item_id: String, amount: int) -> void:
@@ -233,27 +276,31 @@ func request_inventory_add(item_id: String, amount: int) -> void:
 			local_player.character_inventory.try_add_item(item_id, amount)
 		return
 
-	NetworkManager.request_inventory_add(item_id, amount)
+	NetworkManager.inventory.request_inventory_add(item_id, amount)
 
 
-func request_inventory_move(source_slot_index: int, target_slot_index: int) -> void:
+func request_inventory_move(inventory_kind: String, source_slot_index: int, target_slot_index: int) -> void:
 	if GameSession.is_singleplayer():
 		var local_player: PlayerCharacter = runtime.get_local_player()
 		if local_player != null:
-			local_player.character_inventory.try_move_stack(source_slot_index, target_slot_index)
+			local_player.character_inventory.try_move_stack(
+				inventory_kind,
+				source_slot_index,
+				target_slot_index
+			)
 		return
 
-	NetworkManager.request_inventory_move(source_slot_index, target_slot_index)
+	NetworkManager.inventory.request_inventory_move(inventory_kind, source_slot_index, target_slot_index)
 
 
-func request_inventory_delete(slot_index: int) -> void:
+func request_inventory_delete(inventory_kind: String, slot_index: int) -> void:
 	if GameSession.is_singleplayer():
 		var local_player: PlayerCharacter = runtime.get_local_player()
 		if local_player != null:
-			local_player.character_inventory.try_delete_stack(slot_index)
+			local_player.character_inventory.try_delete_stack(inventory_kind, slot_index)
 		return
 
-	NetworkManager.request_inventory_delete(slot_index)
+	NetworkManager.inventory.request_inventory_delete(inventory_kind, slot_index)
 
 
 func request_inventory_use(slot_index: int) -> void:
@@ -263,7 +310,7 @@ func request_inventory_use(slot_index: int) -> void:
 			runtime.try_use_inventory_item(local_player, slot_index)
 		return
 
-	NetworkManager.request_inventory_use(slot_index)
+	NetworkManager.inventory.request_inventory_use(slot_index)
 
 
 func broadcast_object_state(target_object: Node) -> void:
@@ -274,7 +321,7 @@ func broadcast_object_state(target_object: Node) -> void:
 	if grid_object == null or grid_object.object_id.is_empty():
 		return
 
-	NetworkManager.broadcast_object_state(
+	NetworkManager.entity.broadcast_object_state(
 		grid_object.object_id,
 		int(grid_object.object_state)
 	)
@@ -297,9 +344,9 @@ func _on_peer_map_updated() -> void:
 
 func _on_peer_connected(_peer_id: int) -> void:
 	if GameSession.is_host():
-		NetworkManager.send_world_spawns_to_peer(_peer_id)
-		NetworkManager.send_world_removals_to_peer(_peer_id)
-		NetworkManager.send_entity_ai_states_to_peer(_peer_id)
+		NetworkManager.world.send_world_spawns_to_peer(_peer_id)
+		NetworkManager.world.send_world_removals_to_peer(_peer_id)
+		NetworkManager.entity.send_entity_ai_states_to_peer(_peer_id)
 		_send_entity_vitality_states_to_peer(_peer_id)
 		broadcast_all_object_states()
 
@@ -331,35 +378,27 @@ func _on_character_state_received(
 	)
 
 
-func _on_attack_requested(steam_id: int, target_cell: Vector2i) -> void:
+func _on_attack_requested(target_cell: Vector2i, requester_peer_id: int) -> void:
 	if not GameSession.is_host():
 		return
 
-	var player: PlayerCharacter = runtime.get_player_by_steam_id(steam_id)
-	if player == null:
+	var player: PlayerCharacter = _get_requesting_player(requester_peer_id)
+	if player == null or player.is_moving or player.is_attacking or player.health <= 0:
+		return
+	if runtime.is_entity_casting(player):
 		return
 
+	player.current_cell = runtime.world_to_cell(player.global_position)
 	if not player.can_attack_cell(target_cell):
 		return
 
 	if not runtime.can_entity_attack_in_turn(player, target_cell):
 		return
 
+	NetworkManager.combat.broadcast_entity_attack(player.entity_id, target_cell)
 	runtime.notify_entity_attacked_in_turn(player, target_cell)
 	player.play_remote_attack(target_cell, false)
-	NetworkManager.broadcast_attack(steam_id, target_cell)
-	runtime.apply_attack_to_cell(player, target_cell, false)
-
-
-func _on_attack_received(steam_id: int, target_cell: Vector2i) -> void:
-	var player: PlayerCharacter = runtime.get_player_by_steam_id(steam_id)
-	if player == null:
-		return
-
-	if bool(player.get("is_local_player")):
-		return
-
-	player.play_remote_attack(target_cell, false)
+	runtime.apply_attack_to_cell(player, target_cell, true, false)
 
 
 func _on_interaction_requested(target_cell: Vector2i, requester_peer_id: int) -> void:
@@ -398,7 +437,7 @@ func _on_entity_move_requested(
 	if not runtime.reserve_entity_cell(player, from_cell, target_cell):
 		return
 
-	NetworkManager.broadcast_entity_move(entity_id, from_cell, target_cell)
+	NetworkManager.character.broadcast_entity_move(entity_id, from_cell, target_cell)
 
 
 func _on_entity_move_completed_requested(
@@ -413,7 +452,7 @@ func _on_entity_move_completed_requested(
 
 	_apply_confirmed_player_move(player, from_cell, target_cell)
 	runtime.notify_entity_moved_in_turn(player, from_cell, target_cell)
-	NetworkManager.broadcast_entity_move_completed(entity_id, from_cell, target_cell)
+	NetworkManager.character.broadcast_entity_move_completed(entity_id, from_cell, target_cell)
 
 
 func _on_entity_move_completed_received(entity_id: String, from_cell: Vector2i, target_cell: Vector2i) -> void:
@@ -495,9 +534,6 @@ func _on_entity_attack_received(entity_id: String, target_cell: Vector2i) -> voi
 	if attacker == null:
 		return
 
-	if attacker == runtime.get_local_player():
-		return
-
 	if GameSession.is_host() and not attacker.can_attack_cell(target_cell):
 		return
 
@@ -547,12 +583,18 @@ func _on_entity_health_received(entity_id: String, new_health: int) -> void:
 	entity.set_health(new_health)
 
 
-func _on_entity_vitality_received(entity_id: String, new_health: int, new_max_health: int) -> void:
+func _on_entity_vitality_received(
+	entity_id: String,
+	new_health: int,
+	new_max_health: int,
+	new_damage: int
+) -> void:
 	var player: PlayerCharacter = runtime.get_entity_by_id(entity_id) as PlayerCharacter
 	if player == null:
 		return
 
 	player.apply_vitality_state(new_health, new_max_health)
+	player.apply_attack_damage_state(new_damage)
 
 
 func _on_entity_ai_state_received(entity_id: String, state: String, target_entity_id: String, reason: String) -> void:
@@ -594,6 +636,7 @@ func _on_inventory_add_requested(item_id: String, amount: int, requester_peer_id
 
 
 func _on_inventory_move_requested(
+	inventory_kind: String,
 	source_slot_index: int,
 	target_slot_index: int,
 	requester_peer_id: int
@@ -602,18 +645,26 @@ func _on_inventory_move_requested(
 		return
 
 	var player: PlayerCharacter = _get_requesting_player(requester_peer_id)
-	if player == null or not player.character_inventory.try_move_stack(source_slot_index, target_slot_index):
+	if player == null or not player.character_inventory.try_move_stack(
+		inventory_kind,
+		source_slot_index,
+		target_slot_index
+	):
 		return
 
 	_send_inventory_snapshot(player, requester_peer_id)
 
 
-func _on_inventory_delete_requested(slot_index: int, requester_peer_id: int) -> void:
+func _on_inventory_delete_requested(
+	inventory_kind: String,
+	slot_index: int,
+	requester_peer_id: int
+) -> void:
 	if not GameSession.is_host():
 		return
 
 	var player: PlayerCharacter = _get_requesting_player(requester_peer_id)
-	if player == null or not player.character_inventory.try_delete_stack(slot_index):
+	if player == null or not player.character_inventory.try_delete_stack(inventory_kind, slot_index):
 		return
 
 	_send_inventory_snapshot(player, requester_peer_id)
@@ -628,7 +679,12 @@ func _on_inventory_use_requested(slot_index: int, requester_peer_id: int) -> voi
 		return
 
 	_send_inventory_snapshot(player, requester_peer_id)
-	NetworkManager.broadcast_entity_vitality(player.entity_id, player.health, player.max_health)
+	NetworkManager.combat.broadcast_entity_vitality(
+		player.entity_id,
+		player.health,
+		player.max_health,
+		player.damage
+	)
 
 
 func _on_inventory_snapshot_received(snapshot: Dictionary) -> void:
@@ -647,7 +703,7 @@ func _get_requesting_player(requester_peer_id: int) -> PlayerCharacter:
 	if requester_peer_id == 0:
 		return runtime.get_local_player()
 
-	var requester_steam_id: int = NetworkManager.get_steam_id_for_peer_id(requester_peer_id)
+	var requester_steam_id: int = NetworkManager.peers.get_steam_id_for_peer_id(requester_peer_id)
 	if requester_steam_id == 0:
 		return null
 
@@ -658,7 +714,7 @@ func _send_inventory_snapshot(player: PlayerCharacter, requester_peer_id: int) -
 	if player == null or requester_peer_id == 0:
 		return
 
-	NetworkManager.send_inventory_snapshot(
+	NetworkManager.inventory.send_inventory_snapshot(
 		requester_peer_id,
 		player.character_inventory.create_snapshot()
 	)
@@ -669,7 +725,7 @@ func _send_inventory_snapshots_to_owners() -> void:
 		var player: PlayerCharacter = entity_variant as PlayerCharacter
 		if player == null or player.is_local_player or player.steam_id == 0:
 			continue
-		var peer_id: int = NetworkManager.get_peer_id_for_steam_id(player.steam_id)
+		var peer_id: int = NetworkManager.peers.get_peer_id_for_steam_id(player.steam_id)
 		if peer_id != 0:
 			_send_inventory_snapshot(player, peer_id)
 
@@ -680,11 +736,12 @@ func _send_entity_vitality_states_to_peer(peer_id: int) -> void:
 		if player == null:
 			continue
 
-		NetworkManager.send_entity_vitality_to_peer(
+		NetworkManager.combat.send_entity_vitality_to_peer(
 			peer_id,
 			player.entity_id,
 			player.health,
-			player.max_health
+			player.max_health,
+			player.damage
 		)
 
 
@@ -694,7 +751,7 @@ func _send_entity_vitality_states_to_mapped_peers() -> void:
 		if remote_player == null or remote_player.is_local_player or remote_player.steam_id == 0:
 			continue
 
-		var peer_id: int = NetworkManager.get_peer_id_for_steam_id(remote_player.steam_id)
+		var peer_id: int = NetworkManager.peers.get_peer_id_for_steam_id(remote_player.steam_id)
 		if peer_id != 0:
 			_send_entity_vitality_states_to_peer(peer_id)
 
