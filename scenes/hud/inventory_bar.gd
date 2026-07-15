@@ -182,7 +182,7 @@ func _refresh_spell_states() -> void:
 
 func _create_action_button(
 	icon_texture: Texture2D,
-	tooltip_text: String,
+	button_tooltip_text: String,
 	action_mode: int
 ) -> Button:
 	var action_button: Button = Button.new()
@@ -190,7 +190,7 @@ func _create_action_button(
 	action_button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	action_button.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
 	action_button.expand_icon = false
-	action_button.tooltip_text = tooltip_text
+	action_button.tooltip_text = button_tooltip_text
 	action_button.custom_minimum_size = SLOT_SIZE
 	action_button.focus_mode = Control.FOCUS_NONE
 	action_button.mouse_filter = Control.MOUSE_FILTER_STOP

@@ -1,6 +1,9 @@
 class_name Entity
 extends CharacterBody2D
 
+signal movement_finished(from_cell: Vector2i, target_cell: Vector2i)
+signal attack_finished(target_cell: Vector2i)
+
 enum EntityType {
 	CHARACTER,
 	NPC,
@@ -80,6 +83,10 @@ func can_attack_cell(target_cell: Vector2i) -> bool:
 
 
 func request_move(direction: Vector2i) -> bool:
+	return execute_move(direction, true)
+
+
+func execute_move(direction: Vector2i, should_broadcast: bool) -> bool:
 	if direction == Vector2i.ZERO or runtime == null:
 		return false
 
@@ -101,7 +108,7 @@ func request_move(direction: Vector2i) -> bool:
 		_on_move_blocked(direction, target_cell)
 		return false
 
-	_move_to_cell(target_cell)
+	_move_to_cell(target_cell, should_broadcast)
 	return true
 
 
@@ -201,6 +208,29 @@ func respawn() -> void:
 	_on_respawned()
 
 
+func force_cancel_movement(from_cell: Vector2i) -> void:
+	action_generation += 1
+	if movement_tween != null and movement_tween.is_valid():
+		movement_tween.kill()
+	movement_tween = null
+	is_moving = false
+	current_cell = from_cell
+	if runtime != null:
+		global_position = runtime.cell_to_world(from_cell)
+		runtime.sync_entity_cell(self, from_cell)
+	_on_move_stopped()
+
+
+func force_finish_attack_presentation() -> void:
+	action_generation += 1
+	is_attacking = false
+	_on_attack_presentation_forced()
+
+
+func get_expected_attack_duration(_target_cell: Vector2i) -> float:
+	return 0.0
+
+
 func get_display_name() -> String:
 	if not entity_name.is_empty():
 		return entity_name
@@ -251,7 +281,8 @@ func _move_to_cell(target_cell: Vector2i, should_broadcast: bool = true) -> void
 		is_moving = false
 
 		if runtime != null:
-			runtime.handle_entity_move_completed(self, from_cell, target_cell, should_broadcast)
+			runtime.handle_entity_move_completed(self, from_cell, target_cell)
+		movement_finished.emit(from_cell, target_cell)
 
 		_on_move_finished(target_cell)
 		if _try_continue_moving():
@@ -269,6 +300,7 @@ func _attack_cell(target_cell: Vector2i, _direction: Vector2i, should_apply: boo
 	is_attacking = false
 	if runtime != null:
 		runtime.notify_entity_action_finished_in_turn(self)
+	attack_finished.emit(target_cell)
 
 
 func _apply_attack_to_world(
@@ -285,6 +317,10 @@ func _apply_attack_to_world(
 		should_broadcast,
 		should_broadcast_action
 	)
+
+
+func _on_attack_presentation_forced() -> void:
+	pass
 
 
 func _play_target_incoming_attack_guard(target_cell: Vector2i, duration: float) -> void:
@@ -380,9 +416,9 @@ func _find_runtime() -> WorldRuntime:
 		if node is WorldRuntime:
 			return node as WorldRuntime
 		if node is WorldLevel:
-			var runtime: WorldRuntime = (node as WorldLevel).get_runtime()
-			if runtime != null:
-				return runtime
+			var found_runtime: WorldRuntime = (node as WorldLevel).get_runtime()
+			if found_runtime != null:
+				return found_runtime
 		node = node.get_parent()
 
 	return null

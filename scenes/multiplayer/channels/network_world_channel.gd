@@ -6,7 +6,7 @@ signal world_spawn_received(record: Dictionary)
 signal world_spawns_received(records: Array[Dictionary])
 signal world_fill_requested(type_key: String, requester_peer_id: int)
 signal world_clear_requested(type_key: String, requester_peer_id: int)
-signal world_items_removed_received(records: Array[Dictionary])
+signal world_items_removed_received(sequence_id: int, records: Array[Dictionary])
 signal world_spawn_failed_received(message: String)
 
 
@@ -60,11 +60,11 @@ func broadcast_world_spawns(records: Array[Dictionary]) -> void:
 	rpc("_receive_world_spawns", records)
 
 
-func broadcast_world_items_removed(records: Array[Dictionary]) -> void:
+func broadcast_world_items_removed(records: Array[Dictionary], sequence_id: int = 0) -> void:
 	if not _can_host_send() or records.is_empty():
 		return
 	store.cache_world_item_removals(records)
-	rpc("_receive_world_items_removed", records)
+	rpc("_receive_world_items_removed", sequence_id, records)
 
 
 func send_world_spawn_failed(peer_id: int, message: String) -> void:
@@ -86,7 +86,7 @@ func send_world_spawns_to_peer(peer_id: int) -> void:
 func send_world_removals_to_peer(peer_id: int) -> void:
 	var records: Array[Dictionary] = store.get_removed_world_items()
 	if _can_host_send() and peer_id != 0 and not records.is_empty():
-		rpc_id(peer_id, "_receive_world_items_removed", records)
+		rpc_id(peer_id, "_receive_world_items_removed", 0, records)
 
 
 @rpc("any_peer", "reliable")
@@ -122,10 +122,10 @@ func _receive_world_spawns(records: Array[Dictionary]) -> void:
 	world_spawns_received.emit(records)
 
 
-@rpc("authority", "reliable")
-func _receive_world_items_removed(records: Array[Dictionary]) -> void:
+@rpc("authority", "call_remote", "reliable", 1)
+func _receive_world_items_removed(sequence_id: int, records: Array[Dictionary]) -> void:
 	store.cache_world_item_removals(records)
-	world_items_removed_received.emit(records)
+	world_items_removed_received.emit(sequence_id, records)
 
 
 @rpc("authority", "reliable")

@@ -6,6 +6,8 @@ const CHARACTER_SCENE := preload("res://scenes/entities/character/character.tscn
 var match_world: Node2D = null
 var runtime: WorldRuntime = null
 var player: PlayerCharacter = null
+var observed_started_action_types: Array[int] = []
+var observed_started_sequence_ids: Array[int] = []
 
 
 func _ready() -> void:
@@ -18,6 +20,8 @@ func _run_tests() -> void:
 	await _test_action_mode_hud()
 	await _test_meteor_damage_and_lifecycle()
 	await _test_cell_target_resolution()
+	await _test_attack_action_lifecycle()
+	await _test_action_stream_deduplication_and_limit()
 	_test_grid_object_damage()
 	await _test_turn_spell_uses()
 	print("SPELL_FEATURE_TESTS_PASSED")
@@ -42,6 +46,8 @@ func _start_match() -> void:
 
 	assert(runtime != null)
 	assert(player != null)
+	if not runtime.action_stream.action_started.is_connected(_on_action_started):
+		runtime.action_stream.action_started.connect(_on_action_started)
 
 
 func _test_inventory_storage_and_snapshot() -> void:
@@ -175,6 +181,7 @@ func _test_meteor_damage_and_lifecycle() -> void:
 	await get_tree().create_timer(0.9).timeout
 	assert(not runtime.is_entity_casting(player))
 	assert(runtime.spells.effects_root.get_child_count() == 0)
+	assert(runtime.action_stream.is_idle())
 
 
 func _test_cell_target_resolution() -> void:
@@ -184,14 +191,23 @@ func _test_cell_target_resolution() -> void:
 	var original_cell: Vector2i = movement_pair[0]
 	var movement_cell: Vector2i = movement_pair[1]
 	_move_player_for_test(original_cell)
+	observed_started_action_types.clear()
+	observed_started_sequence_ids.clear()
 
 	assert(runtime.toggle_spell_targeting(player, 0))
 	assert(runtime.request_selected_spell_cast(player, original_cell))
 	assert(runtime.is_entity_movement_blocked_by_spell(player))
-	assert(not player.request_move(movement_cell - original_cell))
+	assert(player.request_move(movement_cell - original_cell))
+	assert(player.current_cell == original_cell)
+	assert(observed_started_action_types == [int(WorldActionRecord.ActionType.SPELL_CAST)])
 	await get_tree().create_timer(0.9).timeout
 	assert(player.health == player.max_health - WorldSpells.METEOR_DAMAGE)
-	await get_tree().create_timer(0.9).timeout
+	assert(player.current_cell == original_cell)
+	await get_tree().create_timer(1.0).timeout
+	assert(player.current_cell == movement_cell)
+	assert(observed_started_action_types.size() == 2)
+	assert(observed_started_action_types[1] == int(WorldActionRecord.ActionType.MOVE))
+	assert(observed_started_sequence_ids[1] == observed_started_sequence_ids[0] + 1)
 
 	player.set_health(player.max_health)
 	var target_cell: Vector2i = _find_empty_target_cell([original_cell, movement_cell])
@@ -199,13 +215,66 @@ func _test_cell_target_resolution() -> void:
 	assert(runtime.toggle_spell_targeting(player, 0))
 	assert(runtime.request_selected_spell_cast(player, target_cell))
 	assert(not runtime.is_entity_movement_blocked_by_spell(player))
-	assert(player.request_move(movement_cell - original_cell))
+	assert(player.request_move(original_cell - movement_cell))
 	await get_tree().create_timer(0.25).timeout
 	assert(player.current_cell == movement_cell)
 	assert(runtime.is_entity_casting(player))
 	await get_tree().create_timer(0.65).timeout
 	assert(player.health == player.max_health)
-	await get_tree().create_timer(0.9).timeout
+	assert(player.current_cell == movement_cell)
+	await get_tree().create_timer(1.0).timeout
+	assert(player.current_cell == original_cell)
+
+
+func _test_action_stream_deduplication_and_limit() -> void:
+	var request_id: int = runtime.create_action_request_id()
+	var first_sequence_id: int = runtime.action_stream.get_next_sequence_id()
+	var invalid_action: WorldActionRecord = WorldActionRecord.create(
+		request_id,
+		player.steam_id,
+		player.entity_id,
+		WorldActionRecord.ActionType.ATTACK,
+		runtime.turn_manager.get_turn_epoch(),
+		{"target_cell": player.current_cell}
+	)
+	assert(runtime.action_stream.enqueue_external_action(invalid_action, 0))
+	assert(runtime.action_stream.get_next_sequence_id() == first_sequence_id + 1)
+	var duplicate_action: WorldActionRecord = WorldActionRecord.create(
+		request_id,
+		player.steam_id,
+		player.entity_id,
+		WorldActionRecord.ActionType.ATTACK,
+		runtime.turn_manager.get_turn_epoch(),
+		{"target_cell": player.current_cell}
+	)
+	assert(not runtime.action_stream.enqueue_external_action(duplicate_action, 0))
+	assert(runtime.action_stream.get_next_sequence_id() == first_sequence_id + 1)
+
+	assert(runtime.enqueue_system_action(
+		WorldActionRecord.ActionType.BLOCKING_EVENT,
+		{"duration_seconds": 0.1}
+	))
+	for queue_index: int in range(WorldActionStream.MAX_QUEUED_ACTIONS):
+		var queued_action: WorldActionRecord = WorldActionRecord.create(
+			runtime.create_action_request_id(),
+			player.steam_id,
+			player.entity_id,
+			WorldActionRecord.ActionType.ATTACK,
+			runtime.turn_manager.get_turn_epoch(),
+			{"target_cell": player.current_cell}
+		)
+		assert(runtime.action_stream.enqueue_external_action(queued_action, 0))
+	var overflow_action: WorldActionRecord = WorldActionRecord.create(
+		runtime.create_action_request_id(),
+		player.steam_id,
+		player.entity_id,
+		WorldActionRecord.ActionType.ATTACK,
+		runtime.turn_manager.get_turn_epoch(),
+		{"target_cell": player.current_cell}
+	)
+	assert(not runtime.action_stream.enqueue_external_action(overflow_action, 0))
+	while not runtime.action_stream.is_idle():
+		await get_tree().process_frame
 
 
 func _test_grid_object_damage() -> void:
@@ -221,6 +290,24 @@ func _test_grid_object_damage() -> void:
 	assert(runtime.get_object_at_cell(scroll_cell) is MeteorScroll)
 	runtime.apply_spell_damage_to_cell(player, scroll_cell, WorldSpells.METEOR_DAMAGE)
 	assert(runtime.get_object_at_cell(scroll_cell) == null)
+
+
+func _test_attack_action_lifecycle() -> void:
+	var attack_pair: Array[Vector2i] = _find_empty_walkable_pair()
+	assert(attack_pair.size() == 2)
+	var attacker_cell: Vector2i = attack_pair[0]
+	var target_cell: Vector2i = attack_pair[1]
+	_move_player_for_test(attacker_cell)
+	assert(runtime.spawn_world_object("tree", target_cell))
+	var target_tree: GridObject = runtime.get_object_at_cell(target_cell) as GridObject
+	assert(target_tree != null)
+	assert(runtime.request_character_attack(player, target_cell))
+	assert(player.is_attacking)
+	assert(not runtime.action_stream.is_idle())
+	assert(target_tree.object_state == GridObject.ObjectState.DESTROYED)
+	while not runtime.action_stream.is_idle():
+		await get_tree().process_frame
+	assert(not player.is_attacking)
 
 
 func _test_turn_spell_uses() -> void:
@@ -244,6 +331,15 @@ func _test_turn_spell_uses() -> void:
 	for spell_slot_index: int in range(CharacterInventory.SPELL_SLOT_COUNT):
 		assert(not runtime.toggle_spell_targeting(player, spell_slot_index))
 	assert(player.character_inventory.get_spell_count(WorldSpells.SPELL_ID_METEOR) == 5)
+	runtime.request_end_turn(player)
+	var round_deadline_msec: int = Time.get_ticks_msec() + 15000
+	while runtime.turn_manager.round_number < 2 and Time.get_ticks_msec() < round_deadline_msec:
+		await get_tree().process_frame
+	assert(runtime.turn_manager.round_number == 2)
+	assert(runtime.turn_manager.active_entity_id == player.entity_id)
+	assert(runtime.action_stream.is_idle())
+	for spell_slot_index: int in range(CharacterInventory.SPELL_SLOT_COUNT):
+		assert(runtime.get_remaining_spell_slot_uses(player, spell_slot_index) == 1)
 	runtime.turn_manager.disable_turn_mode()
 	for spell_slot_index: int in range(CharacterInventory.SPELL_SLOT_COUNT):
 		assert(runtime.get_remaining_spell_slot_uses(player, spell_slot_index) == 1)
@@ -310,3 +406,8 @@ func _finish_tests() -> void:
 	await get_tree().process_frame
 	GameSession.clear()
 	get_tree().quit()
+
+
+func _on_action_started(action: WorldActionRecord) -> void:
+	observed_started_action_types.append(int(action.action_type))
+	observed_started_sequence_ids.append(action.sequence_id)

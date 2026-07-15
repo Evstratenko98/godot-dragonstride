@@ -38,7 +38,12 @@ func broadcast_attack_action(attacker: Node, cell: Vector2i) -> void:
 	if attacker_entity_id.is_empty():
 		return
 
-	NetworkManager.combat.broadcast_entity_attack(attacker_entity_id, cell)
+	NetworkManager.combat.broadcast_entity_attack(
+		runtime.get_current_action_sequence_id(),
+		runtime.claim_current_action_subsequence_id(),
+		attacker_entity_id,
+		cell
+	)
 
 
 func apply_spell_damage_to_cell(
@@ -154,6 +159,7 @@ func _apply_entity_damage(
 	if should_broadcast:
 		if not attacker_id.is_empty() and not target_id.is_empty():
 			NetworkManager.combat.broadcast_entity_attack_result(
+				runtime.get_current_action_sequence_id(),
 				attacker_id,
 				target_id,
 				damage_amount,
@@ -179,12 +185,24 @@ func _broadcast_entity_damage_result(target_entity: Node, was_lethal: bool) -> v
 		var target_type: int = int(target_entity.get("entity_type"))
 		if target_type == Entity.EntityType.CHARACTER:
 			var target_cell: Vector2i = target_entity.get("current_cell")
-			NetworkManager.entity.broadcast_entity_respawn(target_id, target_cell, target_health)
+			NetworkManager.entity.broadcast_entity_respawn(
+				target_id,
+				target_cell,
+				target_health,
+				runtime.get_current_action_sequence_id()
+			)
 		elif not (target_entity is NonPlayerEntity):
-			NetworkManager.entity.broadcast_entity_removed(target_id)
+			NetworkManager.entity.broadcast_entity_removed(
+				target_id,
+				runtime.get_current_action_sequence_id()
+			)
 		return
 
-	NetworkManager.combat.broadcast_entity_health(target_id, target_health)
+	NetworkManager.combat.broadcast_entity_health(
+		runtime.get_current_action_sequence_id(),
+		target_id,
+		target_health
+	)
 
 
 func print_non_entity_attack_result(attacker: Node, cell: Vector2i) -> void:

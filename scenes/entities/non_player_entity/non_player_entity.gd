@@ -92,6 +92,13 @@ func request_behavior_move(direction: Vector2i) -> bool:
 	return request_move(direction)
 
 
+func cancel_behavior() -> void:
+	if is_moving:
+		force_cancel_movement(current_cell)
+	if is_attacking:
+		force_finish_attack_presentation()
+
+
 func can_behavior_move(direction: Vector2i) -> bool:
 	if direction == Vector2i.ZERO or runtime == null:
 		return false
@@ -111,6 +118,12 @@ func _on_move_started(_target_cell: Vector2i) -> void:
 
 
 func _on_move_stopped() -> void:
+	if view != null:
+		view.play_idle()
+	_finish_behavior()
+
+
+func _on_attack_presentation_forced() -> void:
 	if view != null:
 		view.play_idle()
 	_finish_behavior()

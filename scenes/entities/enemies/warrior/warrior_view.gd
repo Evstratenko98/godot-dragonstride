@@ -1,3 +1,4 @@
+class_name WarriorView
 extends "res://scenes/entities/non_player_entity/non_player_view.gd"
 
 @export var sprite_path: NodePath = ^"../Sprite2D"

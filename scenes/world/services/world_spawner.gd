@@ -56,6 +56,7 @@ const CATALOG := {
 var runtime: WorldRuntime = null
 var level: WorldLevel = null
 var spawned_counter: int = 0
+var pending_remote_removals: Dictionary[int, Array] = {}
 
 
 func _ready() -> void:
@@ -66,12 +67,16 @@ func _ready() -> void:
 func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void:
 	runtime = new_runtime
 	level = new_level
+	if runtime.action_stream != null and not runtime.action_stream.action_started.is_connected(_on_stream_action_started):
+		runtime.action_stream.action_started.connect(_on_stream_action_started)
 	call_deferred("_apply_cached_world_spawns")
 
 
 func _exit_tree() -> void:
 	_unregister_console_commands()
 	_disconnect_network_signals()
+	if runtime != null and runtime.action_stream != null and runtime.action_stream.action_started.is_connected(_on_stream_action_started):
+		runtime.action_stream.action_started.disconnect(_on_stream_action_started)
 
 
 func console_create(type_key: String, x_text: String, y_text: String) -> void:
@@ -136,7 +141,10 @@ func remove_world_object(target_object: GridObject) -> bool:
 
 	if GameSession.is_multiplayer():
 		var removal_records: Array[Dictionary] = [removal_record]
-		NetworkManager.world.broadcast_world_items_removed(removal_records)
+		NetworkManager.world.broadcast_world_items_removed(
+			removal_records,
+			runtime.get_current_action_sequence_id()
+		)
 
 	return true
 
@@ -153,7 +161,10 @@ func remove_defeated_non_player(target_entity: NonPlayerEntity) -> bool:
 
 	if GameSession.is_multiplayer():
 		var removal_records: Array[Dictionary] = [removal_record]
-		NetworkManager.world.broadcast_world_items_removed(removal_records)
+		NetworkManager.world.broadcast_world_items_removed(
+			removal_records,
+			runtime.get_current_action_sequence_id()
+		)
 
 	return true
 
@@ -261,7 +272,10 @@ func _clear_authoritative(type_key: String, requester_peer_id: int) -> void:
 				removal_records.append(object_removal)
 
 	if GameSession.is_multiplayer() and not removal_records.is_empty():
-		NetworkManager.world.broadcast_world_items_removed(removal_records)
+		NetworkManager.world.broadcast_world_items_removed(
+			removal_records,
+			runtime.get_current_action_sequence_id()
+		)
 
 	var cleared_type: String = type_key if not type_key.is_empty() else "all world items"
 	ConsoleOutput.print_console("Removed %d %s instance(s)." % [
@@ -642,11 +656,24 @@ func _on_world_clear_requested(type_key: String, requester_peer_id: int) -> void
 	_clear_authoritative(_normalize_type_key(type_key), requester_peer_id)
 
 
-func _on_world_items_removed_received(records: Array[Dictionary]) -> void:
+func _on_world_items_removed_received(sequence_id: int, records: Array[Dictionary]) -> void:
 	if GameSession.is_host():
 		return
-
+	if sequence_id > 0 and runtime.get_current_action_sequence_id() != sequence_id:
+		pending_remote_removals[sequence_id] = records.duplicate(true)
+		return
 	_apply_world_removals(records)
+
+
+func _on_stream_action_started(action: WorldActionRecord) -> void:
+	if action != null and pending_remote_removals.has(action.sequence_id):
+		var records: Array = pending_remote_removals[action.sequence_id]
+		pending_remote_removals.erase(action.sequence_id)
+		var typed_records: Array[Dictionary] = []
+		for record_value: Variant in records:
+			if record_value is Dictionary:
+				typed_records.append(record_value as Dictionary)
+		_apply_world_removals(typed_records)
 
 
 func _on_world_spawn_failed_received(message: String) -> void:

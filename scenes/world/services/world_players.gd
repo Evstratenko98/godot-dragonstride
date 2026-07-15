@@ -117,11 +117,24 @@ func console_kill_character() -> void:
 		ConsoleOutput.print_console("ERROR: Cannot kill character: network is not ready.", runtime)
 		return
 
+	var request_id: int = runtime.create_action_request_id()
 	if GameSession.is_multiplayer() and not GameSession.is_host():
-		NetworkManager.character.request_character_kill()
+		NetworkManager.character.request_character_kill(request_id)
 		return
+	runtime.enqueue_player_action(
+		WorldActionRecord.ActionType.CHARACTER_KILL,
+		local_player,
+		{},
+		request_id,
+		0
+	)
 
-	_kill_and_respawn_player(local_player)
+
+func execute_character_kill_action(player: PlayerCharacter) -> bool:
+	if player == null:
+		return false
+	_kill_and_respawn_player(player)
+	return true
 
 
 func console_inventory_add(item_id: String, amount_text: String) -> void:
@@ -156,7 +169,8 @@ func _kill_and_respawn_player(player: PlayerCharacter) -> void:
 		NetworkManager.entity.broadcast_entity_respawn(
 			player.entity_id,
 			player.spawn_cell,
-			player.health
+			player.health,
+			runtime.get_current_action_sequence_id()
 		)
 
 	ConsoleOutput.print_console("Character killed and respawned at %s." % str(player.spawn_cell), runtime)
@@ -208,7 +222,7 @@ func _disconnect_network_signals() -> void:
 		NetworkManager.character.character_kill_requested.disconnect(_on_character_kill_requested)
 
 
-func _on_character_kill_requested(requester_peer_id: int) -> void:
+func _on_character_kill_requested(request_id: int, requester_peer_id: int) -> void:
 	if not GameSession.is_host():
 		return
 
@@ -220,7 +234,13 @@ func _on_character_kill_requested(requester_peer_id: int) -> void:
 	if target_player == null:
 		return
 
-	_kill_and_respawn_player(target_player)
+	runtime.enqueue_player_action(
+		WorldActionRecord.ActionType.CHARACTER_KILL,
+		target_player,
+		{},
+		request_id,
+		requester_peer_id
+	)
 
 
 func _spawn_player(

@@ -123,6 +123,8 @@ func behavior() -> void:
 			return
 
 		await _wait_until_ready_for_next_action()
+		if not is_running_behavior_turn:
+			return
 		_sync_current_cell()
 
 		target = _get_current_target()
@@ -206,15 +208,18 @@ func play_remote_attack(target_cell: Vector2i, should_apply: bool = true) -> voi
 
 
 func play_incoming_attack_guard(duration: float) -> void:
-	if duration <= 0.0 or is_moving or is_attacking or health <= 0:
+	if duration <= 0.0 or is_moving or is_attacking or health <= 0 or not is_inside_tree():
 		return
 
+	var scene_tree: SceneTree = get_tree()
 	incoming_guard_token += 1
 	var guard_token: int = incoming_guard_token
 	if view != null:
 		view.play_guard()
 
-	await get_tree().create_timer(duration).timeout
+	await scene_tree.create_timer(duration).timeout
+	if not is_inside_tree():
+		return
 
 	if incoming_guard_token != guard_token:
 		return
@@ -227,13 +232,16 @@ func play_incoming_attack_guard(duration: float) -> void:
 
 
 func _process_remote_action_queue() -> void:
-	if is_processing_remote_actions:
+	if is_processing_remote_actions or not is_inside_tree():
 		return
 
+	var scene_tree: SceneTree = get_tree()
 	is_processing_remote_actions = true
 	while not remote_action_queue.is_empty():
 		if is_moving or is_attacking:
-			await get_tree().process_frame
+			await scene_tree.process_frame
+			if not is_inside_tree():
+				return
 			continue
 
 		var action: Dictionary = remote_action_queue.pop_front()
@@ -302,6 +310,7 @@ func _attack(
 	should_broadcast: bool
 ) -> void:
 	is_attacking = true
+	var attack_generation: int = get_action_generation()
 	incoming_guard_token += 1
 	attack_target_cell = target_cell
 	var was_action_broadcast: bool = (
@@ -314,8 +323,11 @@ func _attack(
 		runtime.broadcast_entity_attack_action(self, target_cell)
 	_play_target_incoming_attack_guard(target_cell, _get_attack_duration())
 
-	if view != null:
-		await view.play_attack(attack_facing_left, update_horizontal_facing)
+	var warrior_view: WarriorView = view as WarriorView
+	if warrior_view != null:
+		await warrior_view.play_attack(attack_facing_left, update_horizontal_facing)
+	if attack_generation != get_action_generation():
+		return
 
 	var can_apply_attack: bool = should_apply
 	if not pending_behavior_attack_target_id.is_empty():
@@ -359,6 +371,12 @@ func _perform_behavior_attack(target: Node) -> bool:
 	return true
 
 
+func cancel_behavior() -> void:
+	is_running_behavior_turn = false
+	pending_behavior_attack_target_id = ""
+	super.cancel_behavior()
+
+
 func _on_move_started(target_cell: Vector2i) -> void:
 	incoming_guard_token += 1
 	super._on_move_started(target_cell)
@@ -380,8 +398,13 @@ func _end_behavior_turn() -> void:
 
 
 func _wait_until_ready_for_next_action() -> void:
+	if not is_inside_tree():
+		return
+	var scene_tree: SceneTree = get_tree()
 	while is_moving or is_attacking:
-		await get_tree().process_frame
+		await scene_tree.process_frame
+		if not is_inside_tree():
+			return
 
 
 func _can_trigger_on_character(character: Node) -> bool:

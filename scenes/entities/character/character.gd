@@ -61,7 +61,7 @@ func set_action_mode(new_action_mode: ActionMode) -> void:
 
 
 func request_interaction_cell(target_cell: Vector2i) -> bool:
-	if runtime == null or not can_act():
+	if runtime == null or health <= 0:
 		return false
 
 	current_cell = runtime.world_to_cell(global_position)
@@ -72,38 +72,53 @@ func request_interaction_cell(target_cell: Vector2i) -> bool:
 	return true
 
 
-func apply_remote_state(
-	remote_position: Vector2,
-	animation: String,
-	moving: bool,
-	remote_facing_left: bool,
-	should_sync_cell: bool = true
-) -> void:
-	if is_attacking:
-		return
+func request_move(direction: Vector2i) -> bool:
+	if runtime == null or direction == Vector2i.ZERO:
+		return false
+	return runtime.request_character_move(self, direction)
 
-	global_position = remote_position
-	is_moving = moving
-	facing_left = remote_facing_left
-	var character_view: CharacterView = _get_view()
-	if character_view != null:
-		character_view.apply_remote_visual_state(animation, remote_facing_left)
 
-	if runtime != null and should_sync_cell:
-		current_cell = runtime.world_to_cell(global_position)
-		if not moving:
-			runtime.sync_entity_cell(self, current_cell)
+func execute_authoritative_move(direction: Vector2i) -> bool:
+	return super.execute_move(direction, false)
+
+
+func play_remote_move(from_cell: Vector2i, target_cell: Vector2i) -> bool:
+	if runtime == null or is_moving or is_attacking:
+		return false
+	current_cell = from_cell
+	global_position = runtime.cell_to_world(from_cell)
+	if not runtime.reserve_entity_cell(self, from_cell, target_cell):
+		return false
+	_move_to_cell(target_cell, false)
+	return true
 
 
 func play_remote_attack(target_cell: Vector2i, should_apply: bool = true) -> void:
 	if runtime == null:
 		runtime = _find_runtime()
 
-	if runtime == null or is_attacking:
+	if runtime == null or is_attacking or health <= 0:
 		return
 
 	current_cell = runtime.world_to_cell(global_position)
-	request_attack_cell(target_cell, should_apply, false)
+	var direction: Vector2i = _get_attack_direction_to_cell(target_cell)
+	if direction == Vector2i.ZERO:
+		return
+	_attack_cell(target_cell, direction, should_apply, false)
+
+
+func get_expected_attack_duration(target_cell: Vector2i) -> float:
+	var character_view: CharacterView = _get_view()
+	if character_view == null:
+		return 0.0
+	var direction: Vector2i = _get_attack_direction_to_cell(target_cell)
+	if direction == Vector2i.RIGHT or direction == Vector2i.LEFT:
+		return character_view.get_animation_length(&"attack_right")
+	if direction == Vector2i.DOWN:
+		return character_view.get_animation_length(&"attack_down")
+	if direction == Vector2i.UP:
+		return character_view.get_animation_length(&"attack_up")
+	return 0.0
 
 
 func update_move_animation(should_walk: bool) -> void:
@@ -115,24 +130,6 @@ func update_move_animation(should_walk: bool) -> void:
 		character_view.play_walk()
 	else:
 		character_view.play_idle()
-
-
-func send_network_state() -> void:
-	_sync_facing_from_view()
-	var character_view: CharacterView = _get_view()
-	var current_animation: StringName = &""
-	if character_view != null:
-		current_animation = character_view.get_current_animation()
-
-	if runtime == null:
-		return
-	runtime.send_character_state(
-		steam_id,
-		global_position,
-		str(current_animation),
-		is_moving,
-		facing_left
-	)
 
 
 func die() -> void:
@@ -208,6 +205,7 @@ func _attack(
 	is_attacking = false
 	if runtime != null:
 		runtime.notify_entity_action_finished_in_turn(self)
+	attack_finished.emit(target_cell)
 	character_view.play_idle()
 	_sync_facing_from_view()
 
@@ -216,6 +214,13 @@ func _sync_facing_from_view() -> void:
 	var character_view: CharacterView = _get_view()
 	if character_view != null:
 		facing_left = character_view.get_facing_left()
+
+
+func _on_attack_presentation_forced() -> void:
+	var character_view: CharacterView = _get_view()
+	if character_view != null:
+		character_view.play_idle()
+	_sync_facing_from_view()
 
 
 func _get_view() -> CharacterView:

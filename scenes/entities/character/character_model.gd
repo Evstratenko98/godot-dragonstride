@@ -16,12 +16,10 @@ func _process(_delta: float) -> void:
 	var can_read_movement_input: bool = _can_read_movement_input()
 	if can_read_movement_input:
 		direction = get_input_direction()
-		character.update_move_animation(direction != Vector2i.ZERO)
+		if not character.is_attacking:
+			character.update_move_animation(direction != Vector2i.ZERO)
 	elif not character.is_attacking:
 		character.update_move_animation(false)
-
-	if GameSession.is_multiplayer() and not character.is_attacking:
-		character.send_network_state()
 
 	if not can_read_movement_input or character.is_moving:
 		return
@@ -46,9 +44,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		character.runtime.cancel_spell_targeting(character)
 		character.runtime.request_end_turn(character)
 		get_viewport().set_input_as_handled()
-		return
-
-	if character.is_moving or character.is_attacking or character.runtime.is_entity_casting(character):
 		return
 
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
@@ -94,8 +89,6 @@ func try_continue_moving() -> bool:
 func _can_read_movement_input() -> bool:
 	if (
 		not character.can_receive_input
-		or character.is_attacking
-		or character.runtime != null and character.runtime.is_entity_movement_blocked_by_spell(character)
 		or _is_console_open()
 	):
 		return false

@@ -2,10 +2,15 @@ class_name MeteorEffect
 extends SpellCastEffect
 
 const FLY_DURATION := 0.8
+const BURST_DURATION := 0.8
 
 @onready var animation_player: AnimationPlayer = get_node("AnimationPlayer") as AnimationPlayer
 
 var movement_tween: Tween = null
+
+
+func get_expected_duration() -> float:
+	return FLY_DURATION + BURST_DURATION
 
 
 func play_effect(start_position: Vector2, target_position: Vector2) -> void:
@@ -18,11 +23,11 @@ func play_effect(start_position: Vector2, target_position: Vector2) -> void:
 	await movement_tween.finished
 
 	global_position = target_position
-	impact.emit()
+	_emit_impact()
 	animation_player.play(&"burst")
 	var finished_animation: StringName = await animation_player.animation_finished
 	while finished_animation != &"burst":
 		finished_animation = await animation_player.animation_finished
 
-	finished.emit()
+	_emit_finished()
 	queue_free()
