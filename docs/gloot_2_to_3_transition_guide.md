@@ -60,4 +60,3 @@ Some UI Control classes have also been unified and simplified:
 For additional information:
 
 * Refer to the `README.md` file for more comprehensive documentation.
-* Explore the provided examples to better understand the new features and workflows in GLoot v3.0.

@@ -12,6 +12,11 @@ rejects malformed, duplicate, and over-capacity requests before acceptance. The
 external queue holds at most 100 records; internal lifecycle continuations do not
 consume this allowance.
 
+An actor may have at most one pending external action of each `action_type`, counting
+both the currently executing record and queued records. A second action of the same
+type for the same actor is rejected with `duplicate_pending_action`; a different
+actor or a different action type remains independent.
+
 `NetworkActionChannel` transports only lifecycle metadata:
 
 - accepted or rejected to the requester;
@@ -40,7 +45,9 @@ gameplay result was already applied only has its presentation forced to finish.
 
 Player movement sends direction only. The host determines `from_cell`, validates and
 reserves `target_cell`, commits the cell at Tween completion, and never accepts a
-client completion or canonical position update. NPC movement and attacks during the
+client completion or canonical position update. Both authoritative and remote player
+movement start the walk presentation and update facing from the accepted direction.
+NPC movement and attacks during the
 composite world turn carry the world action's parent sequence plus a local
 subsequence.
 

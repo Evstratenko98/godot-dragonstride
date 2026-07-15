@@ -9,6 +9,7 @@ signal stream_idle_changed(is_idle: bool)
 const MAX_QUEUED_ACTIONS := 100
 const REJECTION_QUEUE_FULL := "queue_full"
 const REJECTION_DUPLICATE_REQUEST := "duplicate_request"
+const REJECTION_DUPLICATE_PENDING_ACTION := "duplicate_pending_action"
 const REJECTION_INVALID_ACTION := "invalid_action"
 const REJECTION_ACTOR_UNAVAILABLE := "actor_unavailable"
 const REJECTION_PRESENTATION_TIMEOUT := "presentation_timeout"
@@ -108,9 +109,6 @@ func enqueue_external_action(action: WorldActionRecord, requester_peer_id: int) 
 	if action.action_type == WorldActionRecord.ActionType.END_PLAYER_TURN and not is_idle():
 		_reject_request(requester_peer_id, action.request_id, REJECTION_STREAM_BUSY)
 		return false
-	if action.action_type == WorldActionRecord.ActionType.MOVE and has_pending_move(action.actor_entity_id):
-		_reject_request(requester_peer_id, action.request_id, "movement_pending")
-		return false
 	if (
 		_is_external_player_action(action.action_type)
 		and (
@@ -127,6 +125,9 @@ func enqueue_external_action(action: WorldActionRecord, requester_peer_id: int) 
 	var request_key: String = _make_request_key(action)
 	if processed_request_keys.has(request_key):
 		_reject_request(requester_peer_id, action.request_id, REJECTION_DUPLICATE_REQUEST)
+		return false
+	if has_pending_action(action.actor_entity_id, action.action_type):
+		_reject_request(requester_peer_id, action.request_id, REJECTION_DUPLICATE_PENDING_ACTION)
 		return false
 
 	processed_request_keys[request_key] = true
@@ -154,11 +155,20 @@ func enqueue_internal_action(action: WorldActionRecord) -> bool:
 
 
 func has_pending_move(actor_entity_id: String) -> bool:
-	if current_action != null and current_action.actor_entity_id == actor_entity_id:
-		if current_action.action_type == WorldActionRecord.ActionType.MOVE:
-			return true
+	return has_pending_action(actor_entity_id, WorldActionRecord.ActionType.MOVE)
+
+
+func has_pending_action(actor_entity_id: String, action_type: WorldActionRecord.ActionType) -> bool:
+	if actor_entity_id.is_empty():
+		return false
+	if (
+		current_action != null
+		and current_action.actor_entity_id == actor_entity_id
+		and current_action.action_type == action_type
+	):
+		return true
 	for action: WorldActionRecord in queued_actions:
-		if action.actor_entity_id == actor_entity_id and action.action_type == WorldActionRecord.ActionType.MOVE:
+		if action.actor_entity_id == actor_entity_id and action.action_type == action_type:
 			return true
 	return false
 

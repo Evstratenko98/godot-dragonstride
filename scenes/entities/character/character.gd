@@ -85,10 +85,14 @@ func execute_authoritative_move(direction: Vector2i) -> bool:
 func play_remote_move(from_cell: Vector2i, target_cell: Vector2i) -> bool:
 	if runtime == null or is_moving or is_attacking:
 		return false
+	var direction: Vector2i = target_cell - from_cell
+	if absi(direction.x) + absi(direction.y) != 1:
+		return false
 	current_cell = from_cell
 	global_position = runtime.cell_to_world(from_cell)
 	if not runtime.reserve_entity_cell(self, from_cell, target_cell):
 		return false
+	_on_move_direction_selected(direction)
 	_move_to_cell(target_cell, false)
 	return true
 
@@ -152,6 +156,10 @@ func _on_move_direction_selected(direction: Vector2i) -> void:
 	if character_view != null:
 		character_view.face_direction(direction)
 	_sync_facing_from_view()
+
+
+func _on_move_started(_target_cell: Vector2i) -> void:
+	update_move_animation(true)
 
 
 func _try_continue_moving() -> bool:

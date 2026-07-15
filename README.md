@@ -1,9 +1,5 @@
 # GLoot
 
-<p align="center">
-  <img src="images/gloot_logo_128x128.png" />
-</p>
-
 A universal inventory system for the Godot game engine (version 4.4 and newer).
 
 > NOTE: **Version 3.0 has been merged to `master`** and includes a number of changes that are not backwards-compatible with version 2.x. If you intend to upgrade from version 2 to version 3, there is a short [transition guide](docs/gloot_2_to_3_transition_guide.md) that will hopefully make the process smoother. If you, however, plan to stick to the old version, it can be found on the `v2.x` branch.
@@ -28,7 +24,6 @@ A universal inventory system for the Godot game engine (version 4.4 and newer).
     6. [Editing Item Properties](#editing-item-properties)
 5. [Serialization](#serialization)
 6. [Documentation](#documentation)
-7. [Examples](#examples)
 
 ## Features
 
@@ -57,27 +52,17 @@ User interfaces are usually unique for each project, but it often helps to have 
 The following controls offer some basic interaction with various inventories:
 * ![](addons/gloot/images/icon_ctrl_inventory.svg) [`CtrlInventory`](docs/ctrl_inventory.md) - Control node for displaying inventories as an [`ItemList`](https://docs.godotengine.org/en/stable/classes/class_itemlist.html).
 
-    ![](images/screenshots/ss_inventory.png)
-
 * ![](addons/gloot/images/icon_ctrl_capacity.svg) [`CtrlInventoryCapacity`](docs/ctrl_inventory_capacity.md) - Control node for displaying inventory capacity as a progress bar (in case a `WeightConstraint` or an `ItemCountConstraint` is attached to the inventory).
-
-    ![](images/screenshots/ss_capacity.png)
     
 * ![](addons/gloot/images/icon_ctrl_inventory_grid.svg) [`CtrlInventoryGrid`](docs/ctrl_inventory_grid.md) - Control node for displaying inventories with a `GridConstraint` on a 2d grid.
-
-    ![](images/screenshots/ss_inventory_grid.png)
     
 * ![](addons/gloot/images/icon_ctrl_item_slot.svg) [`CtrlItemSlot`](docs/ctrl_item_slot.md) - A control node representing an inventory slot (`ItemSlot`).
-    
-    ![](images/screenshots/ss_item_slot.png)
 
 ## Installation
 
 1. Create an `addons` directory inside your project directory.
 2. Get the plugin from the AssetLib or from GitHub
     * From the AssetLib: Open the AssetLib from the Godot editor and search for "GLoot". Click download and deselect everything except the `addons` directory when importing.
-
-        ![](images/screenshots/ss_install_gloot.png)
 
     * From GitHub: Run `git clone https://github.com/peter-kish/gloot.git` and copy the contents of the `addons` directory to your projects `addons` directory.
 4. Enable the plugin in `Project Settings > Plugins`.
@@ -87,11 +72,7 @@ The following controls offer some basic interaction with various inventories:
 1. Create a JSON resource that will hold all the item prototypes used by the inventory (see [Creating Item Prototypes](#creating-item-prototypes) below).
 2. Create an `Inventory` node in your scene and set its `prototree_json` property (previously created).
 3. (*Optional*) Add constraints as child nodes to the previously created inventory node.
-3. Add items to the inventory from the inspector:
-
-    ![](images/screenshots/ss_inspector.png)
-
-    Items can also be added from code, e.g. by calling `create_and_add_item()` to create and add items based on the given prototype path:
+3. Add items to the inventory from the inspector. Items can also be added from code, e.g. by calling `create_and_add_item()` to create and add items based on the given prototype path:
     ```gdscript
     inventory.create_and_add_item("melee_weapons/knife")
     ```
@@ -234,10 +215,7 @@ if stack_size > 0:
     item.set_property("stack_size", stack_size - 1)
 ```
 
-Item properties can also be modified and overridden from the editor:
-![](images/screenshots/ss_inspector_inventory_item.png)
-
-To open the item editor select an inventory node, select an item in the inspector and press the "Edit" button.
+Item properties can also be modified and overridden from the editor. To open the item editor select an inventory node, select an item in the inspector and press the "Edit" button.
 Properties marked with green in the item editor represent overridden properties.
 
 ## Serialization
@@ -267,7 +245,3 @@ if res.error == OK:
 ## Documentation
 
 The documentation can be found [here](https://github.com/peter-kish/gloot/tree/dev_v3.0.0/docs).
-
-## Examples
-
-Some example scenes can be found in the [examples](examples/README.md) directory.
