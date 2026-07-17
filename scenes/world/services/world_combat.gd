@@ -182,16 +182,9 @@ func _broadcast_entity_damage_result(target_entity: Node, was_lethal: bool) -> v
 		target_health = int(target_entity.get("health"))
 
 	if was_lethal:
-		var target_type: int = int(target_entity.get("entity_type"))
-		if target_type == Entity.EntityType.CHARACTER:
-			var target_cell: Vector2i = target_entity.get("current_cell")
-			NetworkManager.entity.broadcast_entity_respawn(
-				target_id,
-				target_cell,
-				target_health,
-				runtime.get_current_action_sequence_id()
-			)
-		elif not (target_entity is NonPlayerEntity):
+		if target_entity is PlayerCharacter:
+			return
+		if not (target_entity is NonPlayerEntity):
 			NetworkManager.entity.broadcast_entity_removed(
 				target_id,
 				runtime.get_current_action_sequence_id()

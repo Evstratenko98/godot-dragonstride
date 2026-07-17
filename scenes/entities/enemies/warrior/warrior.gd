@@ -12,6 +12,7 @@ const REASON_TARGET_MISSING := "target missing"
 const REASON_TARGET_UNREACHABLE := "target unreachable"
 const MAX_STEPS_PER_TURN := 3
 const MAX_ATTACKS_PER_TURN := 1
+const MAX_REMOTE_ACTIONS := 8
 const ORTHOGONAL_DIRECTIONS: Array[Vector2i] = [
 	Vector2i.RIGHT,
 	Vector2i.LEFT,
@@ -56,6 +57,7 @@ func spawn_death_drop(death_cell: Vector2i) -> bool:
 
 
 func behavior() -> void:
+	var behavior_generation: int = get_behavior_generation()
 	if not _is_turn_mode_enabled() or not _is_ai_authority():
 		_finish_behavior()
 		return
@@ -84,6 +86,8 @@ func behavior() -> void:
 	if _can_attack_target(target):
 		is_running_behavior_turn = false
 		var did_initial_attack: bool = await _perform_behavior_attack(target)
+		if behavior_generation != get_behavior_generation():
+			return
 		if did_initial_attack:
 			return
 		_finish_behavior()
@@ -111,6 +115,8 @@ func behavior() -> void:
 		if _can_attack_target(target):
 			is_running_behavior_turn = false
 			var did_pre_move_attack: bool = await _perform_behavior_attack(target)
+			if behavior_generation != get_behavior_generation():
+				return
 			if did_pre_move_attack:
 				return
 			_finish_behavior()
@@ -123,6 +129,8 @@ func behavior() -> void:
 			return
 
 		await _wait_until_ready_for_next_action()
+		if behavior_generation != get_behavior_generation():
+			return
 		if not is_running_behavior_turn:
 			return
 		_sync_current_cell()
@@ -136,6 +144,8 @@ func behavior() -> void:
 		if _can_attack_target(target):
 			is_running_behavior_turn = false
 			var did_post_move_attack: bool = await _perform_behavior_attack(target)
+			if behavior_generation != get_behavior_generation():
+				return
 			if did_post_move_attack:
 				return
 			_finish_behavior()
@@ -153,11 +163,23 @@ func consider_character_triggers(characters: Array[Node]) -> void:
 		if ignored_defeated_character_ids.has(_get_entity_id(character)):
 			continue
 
-		if _can_trigger_on_character(character):
+		if not _can_trigger_on_character(character):
+			continue
+		if selected_character == null or _is_preferred_target(character, selected_character):
 			selected_character = character
 
 	if selected_character != null:
 		_set_ai_state(STATE_ACTIVE, _get_entity_id(selected_character), REASON_NONE)
+
+
+func _is_preferred_target(candidate: Node, current: Node) -> bool:
+	var candidate_cell: Vector2i = candidate.get("current_cell")
+	var current_target_cell: Vector2i = current.get("current_cell")
+	var candidate_distance: int = absi(candidate_cell.x - current_cell.x) + absi(candidate_cell.y - current_cell.y)
+	var current_distance: int = absi(current_target_cell.x - current_cell.x) + absi(current_target_cell.y - current_cell.y)
+	if candidate_distance != current_distance:
+		return candidate_distance < current_distance
+	return _get_entity_id(candidate) < _get_entity_id(current)
 
 
 func consider_character_trigger(character: Node) -> void:
@@ -190,6 +212,10 @@ func apply_remote_ai_state(new_state: String, new_target_entity_id: String, reas
 
 
 func play_remote_move(from_cell: Vector2i, target_cell: Vector2i) -> void:
+	if remote_action_queue.size() >= MAX_REMOTE_ACTIONS:
+		if runtime != null and runtime.action_stream != null:
+			runtime.action_stream.request_runtime_resync(WorldActionStream.REJECTION_SEQUENCE_GAP)
+		return
 	remote_action_queue.append({
 		"type": "move",
 		"from_cell": from_cell,
@@ -199,6 +225,10 @@ func play_remote_move(from_cell: Vector2i, target_cell: Vector2i) -> void:
 
 
 func play_remote_attack(target_cell: Vector2i, should_apply: bool = true) -> void:
+	if remote_action_queue.size() >= MAX_REMOTE_ACTIONS:
+		if runtime != null and runtime.action_stream != null:
+			runtime.action_stream.request_runtime_resync(WorldActionStream.REJECTION_SEQUENCE_GAP)
+		return
 	remote_action_queue.append({
 		"type": "attack",
 		"target_cell": target_cell,
@@ -342,7 +372,7 @@ func _attack(
 	pending_behavior_attack_target_id = ""
 	is_attacking = false
 	if runtime != null:
-		runtime.notify_entity_action_finished_in_turn(self)
+		runtime.notify_entity_action_finished_in_turn(self, get_behavior_generation())
 
 	if view != null:
 		view.play_idle()

@@ -142,13 +142,15 @@ func die() -> void:
 	respawn()
 
 
-func respawn() -> void:
-	super.respawn()
+func respawn() -> bool:
+	if not super.respawn():
+		return false
 	var character_view: CharacterView = _get_view()
 	if character_view != null:
 		character_view.play_idle()
 	update_move_animation(false)
 	_sync_facing_from_view()
+	return true
 
 
 func _on_move_direction_selected(direction: Vector2i) -> void:

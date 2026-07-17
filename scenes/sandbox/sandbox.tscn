@@ -1,6 +1,6 @@
 [gd_scene format=4 uid="uid://dbpsjckioxl17"]
 
-[ext_resource type="Script" uid="uid://c8xtq3hakydor" path="res://scenes/full_world/full_world_level.gd" id="1"]
+[ext_resource type="Script" uid="uid://c8xtq3hakydor" path="res://scenes/sandbox/sandbox_level.gd" id="1"]
 [ext_resource type="Texture2D" uid="uid://2l2pctwopuf1" path="res://art/Tiny Swords (Free Pack)/Terrain/Tileset/Tilemap_color3.png" id="4_fh5r6"]
 [ext_resource type="Texture2D" uid="uid://b0sr73cw4wvfi" path="res://art/Tiny Swords (Free Pack)/Terrain/Decorations/Clouds/Clouds_01.png" id="4_i73x7"]
 [ext_resource type="PackedScene" uid="uid://dxxhv77xcn8hc" path="res://scenes/objects/tree/tree.tscn" id="5"]
@@ -274,7 +274,7 @@ texture_region_size = Vector2i(256, 256)
 tile_size = Vector2i(256, 256)
 sources/0 = SubResource("TileSetAtlasSource_14r8b")
 
-[node name="FullWorld" type="Node2D" unique_id=786344412]
+[node name="Sandbox" type="Node2D" unique_id=786344412]
 y_sort_enabled = true
 script = ExtResource("1")
 

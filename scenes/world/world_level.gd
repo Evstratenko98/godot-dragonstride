@@ -68,3 +68,7 @@ func get_death_sound_stream() -> AudioStream:
 		return null
 
 	return definition.death_sound_stream
+
+
+func allows_debug_commands() -> bool:
+	return definition != null and definition.allows_debug_commands

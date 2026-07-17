@@ -1,3 +1,4 @@
+class_name GameCamera
 extends Camera2D
 
 const MODE_FOLLOW := "follow"
@@ -10,13 +11,15 @@ const MODE_FREE := "free"
 @export var follow_smoothing: float = 8.0
 
 var target: Node2D = null
+var allows_console_commands: bool = false
 
 
 func _ready() -> void:
 	if not target_path.is_empty():
 		target = get_node_or_null(target_path) as Node2D
 	make_current()
-	_register_console_commands()
+	if allows_console_commands:
+		_register_console_commands()
 
 
 func _exit_tree() -> void:
@@ -50,10 +53,14 @@ func set_camera_mode(new_mode: String) -> void:
 
 
 func console_follow() -> void:
+	if not allows_console_commands:
+		return
 	set_camera_mode(MODE_FOLLOW)
 
 
 func console_free() -> void:
+	if not allows_console_commands:
+		return
 	set_camera_mode(MODE_FREE)
 
 

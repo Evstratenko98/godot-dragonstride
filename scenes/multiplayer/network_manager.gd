@@ -10,6 +10,7 @@ extends Node
 @onready var spells: NetworkSpellChannel = get_node(^"Spells") as NetworkSpellChannel
 @onready var actions: NetworkActionChannel = get_node(^"Actions") as NetworkActionChannel
 @onready var match_channel: NetworkMatchChannel = get_node(^"Match") as NetworkMatchChannel
+@onready var players: NetworkPlayerChannel = get_node(^"Players") as NetworkPlayerChannel
 
 var peers: NetworkPeerRegistry = NetworkPeerRegistry.new()
 var store: NetworkReplicationStore = NetworkReplicationStore.new()
@@ -26,3 +27,15 @@ func _ready() -> void:
 	spells.configure_context(connection, peers, store)
 	actions.configure_context(connection, peers, store)
 	match_channel.configure_context(connection, peers, store)
+	players.configure_context(connection, peers, store)
+	if not GameSession.session_cleared.is_connected(_on_session_cleared):
+		GameSession.session_cleared.connect(_on_session_cleared)
+
+
+func _exit_tree() -> void:
+	if GameSession.session_cleared.is_connected(_on_session_cleared):
+		GameSession.session_cleared.disconnect(_on_session_cleared)
+
+
+func _on_session_cleared() -> void:
+	store.clear()

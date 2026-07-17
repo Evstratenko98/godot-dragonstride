@@ -7,24 +7,26 @@ same records and executors without an alternate gameplay path.
 
 ## Record and lifecycle
 
-An external request is identified by `(requester_steam_id, request_id)`. The host
-rejects malformed, duplicate, and over-capacity requests before acceptance. The
-external queue holds at most 100 records; internal lifecycle continuations do not
-consume this allowance.
+An external request is identified by `(match_id, requester_steam_id, request_id)`.
+The host rejects malformed, duplicate, stale-turn, rate-limited, and over-capacity
+requests before acceptance. The external queue holds at most 64 records and the
+combined internal queue is capped at 256 records. Per Steam ID, the token bucket
+accepts 8 intents per second with a burst of 12, while the deduplication window keeps
+the latest 256 accepted request IDs.
 
-An actor may have at most one pending external action of each `action_type`, counting
-both the currently executing record and queued records. A second action of the same
-type for the same actor is rejected with `duplicate_pending_action`; a different
-actor or a different action type remains independent.
+An actor may have at most one pending external gameplay action in total, counting
+both the currently executing record and queued records. Any second external action
+for the same actor is rejected with `actor_busy`.
 
-`NetworkActionChannel` transports only lifecycle metadata:
+`NetworkActionChannel` transports lifecycle metadata and the bounded snapshot stream:
 
 - accepted or rejected to the requester;
 - started, completed, or cancelled to participants;
-- the action-boundary snapshot used by a joining client.
+- the action-boundary snapshot used for initial synchronization and one-shot resync.
 
-The stable record fields are `request_id`, `sequence_id`,
-`requester_steam_id`, `actor_entity_id`, `action_type`, and `turn_epoch`.
+Every lifecycle record carries `protocol_version`, `match_id`, and `sequence_id`.
+The stable action fields are `request_id`, `sequence_id`, `match_id`,
+`requester_steam_id`, `actor_entity_id`, `action_type`, and `turn_revision`.
 Gameplay payload travels through the matching character, combat, spell, or inventory
 channel on reliable transfer channel 1. A client joins lifecycle metadata and payload
 by `sequence_id` before presenting the action.
@@ -70,13 +72,84 @@ cleared only on a new full round; free mode has no round usage limit. Entity tar
 are resolved again at execution and cancel if missing or dead, while cell targets keep
 their accepted cell.
 
-## Late join
+Every change of the allowed action author advances the monotonic `turn_revision`.
+Move, attack, interaction, spell cast, inventory use, and end turn intents must carry
+the current `match_id` and `turn_revision`. In turn mode, spell cast and inventory use
+are accepted only from the active player; inventory move and delete remain available
+for organization outside the player's turn.
 
-A joining client requests a stream snapshot after its runtime is configured and
-buffers live messages until receipt. At the next action boundary the host sends
-entity cells/vitality, object state, inventories, turn state, round-scoped spell
-usage, and `next_sequence_id`. Events older than that boundary are discarded; newer
-buffered events are then presented in order.
+## Resynchronization boundary
+
+Late join and reconnect are intentionally rejected by the first-iteration match
+protocol. An accepted client must finish initial synchronization before it reports
+`player_world_ready`. A running client enters one bounded resync cycle when an
+expected lifecycle/profile message is missing, a future sequence exceeds the window,
+or an auxiliary buffer reaches its limit. Gameplay input remains disabled during
+that cycle.
+
+Snapshot requests contain `(match_id, sync_id, expected_sequence_id)`. The host sends
+snapshots only between actions; during an action it returns `sync_pending`. A complete
+snapshot contains the frozen roster hash, turn revision, inventories and their
+revisions, spell usage, entity vitality/cells, object and AI state, dynamic spawns,
+removal records, world-turn generation, and the next `boundary_sequence_id`.
+
+The client validates the complete snapshot before mutation and applies registry cell
+changes through the atomic batch API. Events below the committed boundary are
+discarded. A runtime resync that cannot complete within 35 seconds ends only that
+client session; the host match continues and the player becomes disconnected.
+
+Snapshots use schema version 1 and are serialized into at most 16 reliable chunks of
+48 KiB, with a total limit of 512 KiB. Chunks are correlated by `sync_id` and are
+committed only after the SHA-256 checksum matches. Initial synchronization retries
+every 500 ms for up to 8 seconds.
+
+## Bounded delivery
+
+The remote future window is 64 sequence IDs, with at most 64 sequence buckets, 32
+profile messages per sequence, and 256 deferred profile messages in total. Stale
+messages below `next_remote_sequence_id` are discarded immediately. A missing
+sequence/profile payload is watched for two seconds; a missing terminal lifecycle is
+watched for five seconds.
+
+All action, turn, combat, inventory, entity, NPC, spawn, snapshot-request, and removal
+buffers are cleared with the session. The protocol exposes aggregated local counters
+for buffered records, resync attempts/results, stale packets, buffer rejections, and
+watchdog activations; these diagnostics are never sent over the network.
+
+## Disconnect and asynchronous generations
+
+The frozen roster is not changed when a client disconnects. Its character stays
+visible, registered, targetable, and cell-occupying, but cannot act. Queued external
+actions are cancelled with `actor_disconnected`; a started action reaches exactly one
+authoritative terminal. Future turns for that player are skipped.
+
+Each world turn advances `world_turn_generation`. NPC completion callbacks are
+accepted only when their `(entity_id, generation)` token matches the current pending
+entry. Per-NPC behavior has an eight-second watchdog, the whole world turn remains
+bounded by 32 seconds, and one NPC may buffer at most eight remote sub-actions.
+
+## Inventory and spell transactions
+
+Inventory intents carry `expected_inventory_revision`; the host validates it both at
+acceptance and immediately before execution. A successful add/move/delete/use
+increments the revision once. Failed operations restore the previous inventory, and
+item-use rollback also restores the typed effect state. `stale_inventory` returns a
+fresh authoritative snapshot to the owner.
+
+Meteor casts are correlated by `cast_id`. A cancelled queued/pre-impact cast releases
+its reservation and use slot. Impact damage is applied once; a later presentation
+timeout cannot roll it back or apply it again.
+
+## Protocol compatibility and limits
+
+The current network protocol version is 2. It is advertised in lobby data, filtered
+in lobby discovery, checked in `prepare_match`, transport identity registration, and
+snapshots. Builds with another version are rejected before world loading.
+
+Identifiers and display names are limited to 64 characters, roster size to four,
+normal intent payloads to 8 KiB, world-record collections to 512, and snapshots to
+512 KiB. Every channel validates `match_id`, sender identity, types, bounded values,
+and safe reason codes before emitting a domain signal or changing replication state.
 
 This protocol is intentionally incompatible with builds made before the `Actions`
-channel and sequenced profile payloads were introduced.
+channel and protocol version 2.

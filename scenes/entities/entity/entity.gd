@@ -189,7 +189,17 @@ func die() -> void:
 	queue_free()
 
 
-func respawn() -> void:
+func respawn() -> bool:
+	if runtime != null and self is PlayerCharacter:
+		return runtime.request_player_respawn(self as PlayerCharacter)
+	return respawn_at_cell(spawn_cell)
+
+
+func respawn_at_cell(respawn_cell: Vector2i) -> bool:
+	if runtime != null:
+		var registration_result: int = runtime.respawn_entity(self, respawn_cell)
+		if registration_result != WorldRegistry.RegistrationError.NONE:
+			return false
 	action_generation += 1
 	if movement_tween != null and movement_tween.is_valid():
 		movement_tween.kill()
@@ -197,15 +207,15 @@ func respawn() -> void:
 	set_health(max_health)
 	is_moving = false
 	is_attacking = false
-	current_cell = spawn_cell
+	current_cell = respawn_cell
 
 	if runtime != null:
-		global_position = runtime.cell_to_world(spawn_cell)
-		runtime.respawn_entity(self, spawn_cell)
+		global_position = runtime.cell_to_world(respawn_cell)
 
 	show()
 	_update_health_bar()
 	_on_respawned()
+	return true
 
 
 func force_cancel_movement(from_cell: Vector2i) -> void:

@@ -25,14 +25,15 @@ const MAX_STEPS_PER_TURN := 10
 const MAX_ATTACKS_PER_TURN := 1
 const MAX_INTERACTIONS_PER_TURN := 1
 const WORLD_TURN_WATCHDOG_MSEC := 32000
+const NPC_BEHAVIOR_WATCHDOG_MSEC := 8000
 
 var runtime: WorldRuntime = null
 var level: WorldLevel = null
 var state: String = STATE_FREE
 var round_number: int = 0
+var turn_revision: int = 0
 var turn_order: Array[String] = []
 var turn_order_steam_ids: Dictionary = {}
-var disconnected_steam_ids: Dictionary = {}
 var current_turn_index: int = -1
 var active_entity_id: String = ""
 var steps_left: int = 0
@@ -42,17 +43,23 @@ var pending_end_turn: bool = false
 var pending_world_entity_ids: Dictionary = {}
 var is_starting_world_behaviors: bool = false
 var was_world_turn_completion_emitted: bool = false
+var world_turn_generation: int = 0
+var behavior_deadline_by_entity_id: Dictionary[String, int] = {}
+var watchdog_activation_count: int = 0
 var pending_remote_snapshots: Dictionary[int, Dictionary] = {}
 
 
 func _ready() -> void:
-	_register_console_commands()
 	_connect_network_signals()
+	if not GameSession.session_cleared.is_connected(_on_session_cleared):
+		GameSession.session_cleared.connect(_on_session_cleared)
 
 
 func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void:
 	runtime = new_runtime
 	level = new_level
+	if level != null and level.allows_debug_commands():
+		_register_console_commands()
 	if runtime.action_stream != null and not runtime.action_stream.action_started.is_connected(_on_stream_action_started):
 		runtime.action_stream.action_started.connect(_on_stream_action_started)
 
@@ -62,9 +69,13 @@ func _exit_tree() -> void:
 	_disconnect_network_signals()
 	if runtime != null and runtime.action_stream != null and runtime.action_stream.action_started.is_connected(_on_stream_action_started):
 		runtime.action_stream.action_started.disconnect(_on_stream_action_started)
+	if GameSession.session_cleared.is_connected(_on_session_cleared):
+		GameSession.session_cleared.disconnect(_on_session_cleared)
 
 
 func enable_turn_mode() -> void:
+	if level == null or not level.allows_debug_commands():
+		return
 	if not _can_control_turn_mode():
 		ConsoleOutput.print_console("Only host can change turn mode", runtime)
 		return
@@ -72,6 +83,8 @@ func enable_turn_mode() -> void:
 
 
 func disable_turn_mode() -> void:
+	if level == null or not level.allows_debug_commands():
+		return
 	if not _can_control_turn_mode():
 		ConsoleOutput.print_console("Only host can change turn mode", runtime)
 		return
@@ -80,6 +93,8 @@ func disable_turn_mode() -> void:
 
 
 func print_turn_status() -> void:
+	if level == null or not level.allows_debug_commands():
+		return
 	if state == STATE_FREE:
 		ConsoleOutput.print_console("Game mode: free", runtime)
 		return
@@ -107,8 +122,12 @@ func is_world_turn_active() -> bool:
 	return state == STATE_WORLD_TURN
 
 
-func get_turn_epoch() -> int:
-	return round_number
+func is_entity_active_in_turn(entity: Node) -> bool:
+	return state == STATE_PLAYER_TURN and _is_active_entity(entity)
+
+
+func get_turn_revision() -> int:
+	return turn_revision
 
 
 func can_entity_move(entity: Node) -> bool:
@@ -149,19 +168,14 @@ func can_entity_interact(entity: Node) -> bool:
 
 
 func can_entity_use_item(entity: Node) -> bool:
-	if state == STATE_FREE:
-		return true
-
 	return state == STATE_PLAYER_TURN and _is_active_entity(entity)
 
 
 func can_entity_cast_spell(entity: Node) -> bool:
 	if runtime != null and not runtime.allows_spell_intents():
 		return false
-	if state == STATE_FREE:
-		return true
 
-	return state == STATE_PLAYER_TURN and entity != null
+	return state == STATE_PLAYER_TURN and _is_active_entity(entity)
 
 
 func can_entity_sync_state(entity: Node) -> bool:
@@ -201,9 +215,9 @@ func notify_entity_interacted(entity: Node) -> void:
 	_broadcast_snapshot()
 
 
-func notify_entity_action_finished(entity: Node) -> void:
+func notify_entity_action_finished(entity: Node, completed_generation: int = 0) -> void:
 	if _is_authority() and state == STATE_WORLD_TURN and _is_world_turn_entity(entity):
-		_mark_world_entity_action_finished(entity)
+		_mark_world_entity_action_finished(entity, completed_generation)
 		return
 
 	if not _is_authority() or not _is_active_entity(entity):
@@ -221,6 +235,7 @@ func notify_entity_removed(entity: Node) -> void:
 		return
 
 	pending_world_entity_ids.erase(entity_id)
+	behavior_deadline_by_entity_id.erase(entity_id)
 	if not is_starting_world_behaviors:
 		_finish_world_turn_if_ready()
 
@@ -232,7 +247,7 @@ func request_end_turn(entity: Node) -> void:
 	var request_id: int = runtime.create_action_request_id()
 	if GameSession.is_multiplayer() and not GameSession.is_host():
 		var steam_id: int = _get_entity_steam_id(entity)
-		NetworkManager.turns.request_turn_end(steam_id, request_id)
+		NetworkManager.turns.request_turn_end(steam_id, GameSession.get_match_id(), turn_revision, request_id)
 		return
 
 	runtime.enqueue_player_action(
@@ -251,6 +266,7 @@ func can_end_turn(entity: Node) -> bool:
 func execute_set_turn_mode_action(is_enabled: bool) -> bool:
 	if is_enabled:
 		_reset_turn_state()
+		_advance_turn_revision()
 		state = STATE_PLAYER_TURN
 		round_number = 1
 		_build_player_turn_order()
@@ -261,6 +277,7 @@ func execute_set_turn_mode_action(is_enabled: bool) -> bool:
 		return true
 
 	_reset_turn_state()
+	_advance_turn_revision()
 	turn_mode_changed.emit(false)
 	ConsoleOutput.print_console("Free mode enabled", runtime)
 	_broadcast_snapshot(EVENT_TURN_MODE_DISABLED)
@@ -296,10 +313,12 @@ func execute_world_turn_started_action() -> bool:
 	_start_world_turn()
 	var deadline_msec: int = Time.get_ticks_msec() + WORLD_TURN_WATCHDOG_MSEC
 	while not was_world_turn_completion_emitted and Time.get_ticks_msec() < deadline_msec:
+		_cancel_timed_out_world_behaviors()
 		await scene_tree.process_frame
 		if not is_inside_tree():
 			return false
 	if not was_world_turn_completion_emitted:
+		watchdog_activation_count += 1
 		for entity_id_value: Variant in pending_world_entity_ids.keys():
 			var entity: NonPlayerEntity = runtime.get_entity_by_id(str(entity_id_value)) as NonPlayerEntity
 			if entity != null:
@@ -318,8 +337,12 @@ func execute_world_turn_ended_action() -> bool:
 
 
 func apply_remote_snapshot(snapshot: Dictionary) -> void:
+	if not is_valid_remote_snapshot(snapshot):
+		return
 	state = str(snapshot.get("state", STATE_FREE))
 	round_number = int(snapshot.get("round_number", 0))
+	turn_revision = int(snapshot.get("turn_revision", turn_revision))
+	world_turn_generation = int(snapshot.get("world_turn_generation", world_turn_generation))
 	active_entity_id = str(snapshot.get("active_entity_id", ""))
 	steps_left = int(snapshot.get("steps_left", 0))
 	attacks_left = int(snapshot.get("attacks_left", 0))
@@ -348,8 +371,44 @@ func apply_remote_snapshot(snapshot: Dictionary) -> void:
 		round_started.emit(round_number)
 
 
+func is_valid_remote_snapshot(snapshot: Dictionary) -> bool:
+	var snapshot_state: String = str(snapshot.get("state", ""))
+	var turn_order_value: Variant = snapshot.get("turn_order")
+	var event_payload_value: Variant = snapshot.get("event_payload", {})
+	if (
+		snapshot_state not in [STATE_FREE, STATE_PLAYER_TURN, STATE_WORLD_TURN]
+		or int(snapshot.get("round_number", -1)) < 0
+		or int(snapshot.get("turn_revision", -1)) < 0
+		or int(snapshot.get("world_turn_generation", -1)) < 0
+		or not NetworkProtocol.is_valid_optional_identifier(str(snapshot.get("active_entity_id", "")))
+		or int(snapshot.get("steps_left", -1)) < 0
+		or int(snapshot.get("steps_left", -1)) > MAX_STEPS_PER_TURN
+		or int(snapshot.get("attacks_left", -1)) < 0
+		or int(snapshot.get("attacks_left", -1)) > MAX_ATTACKS_PER_TURN
+		or int(snapshot.get("interactions_left", -1)) < 0
+		or int(snapshot.get("interactions_left", -1)) > MAX_INTERACTIONS_PER_TURN
+		or not (turn_order_value is Array)
+		or (turn_order_value as Array).size() > NetworkProtocol.MAX_ROSTER_SIZE
+		or not (event_payload_value is Dictionary)
+		or not NetworkProtocol.is_valid_bounded_text(str(snapshot.get("event", "")))
+	):
+		return false
+	var seen_entity_ids: Dictionary[String, bool] = {}
+	for entity_id_value: Variant in turn_order_value as Array:
+		var entity_id: String = str(entity_id_value)
+		if not NetworkProtocol.is_valid_identifier(entity_id) or seen_entity_ids.has(entity_id):
+			return false
+		seen_entity_ids[entity_id] = true
+	var current_index: int = int(snapshot.get("current_turn_index", -1))
+	return current_index >= -1 and current_index < maxi((turn_order_value as Array).size(), 1)
+
+
 func create_action_stream_snapshot() -> Dictionary:
 	return _make_snapshot()
+
+
+func get_watchdog_activation_count() -> int:
+	return watchdog_activation_count
 
 
 func _start_round() -> void:
@@ -373,6 +432,7 @@ func _start_next_player_turn() -> void:
 		var player: Node = runtime.get_entity_by_id(entity_id)
 		var skip_reason: String = _get_player_skip_reason(entity_id, player)
 		if not skip_reason.is_empty():
+			_advance_turn_revision()
 			_log_player_skipped(entity_id, player, skip_reason)
 			current_turn_index += 1
 			continue
@@ -387,8 +447,20 @@ func _start_next_player_turn() -> void:
 
 func _start_player_turn(player: Node) -> void:
 	if player is Entity and player.get("health") != null and int(player.get("health")) <= 0:
-		(player as Entity).respawn()
+		if not (player as Entity).respawn():
+			_advance_turn_revision()
+			state = STATE_PLAYER_TURN
+			active_entity_id = runtime.get_entity_id(player)
+			steps_left = 0
+			attacks_left = 0
+			interactions_left = 0
+			runtime.enqueue_system_action(WorldActionRecord.ActionType.PLAYER_TURN_SKIPPED, {
+				"actor_entity_id": active_entity_id,
+				"reason": "respawn_pending",
+			})
+			return
 
+	_advance_turn_revision()
 	state = STATE_PLAYER_TURN
 	active_entity_id = runtime.get_entity_id(player)
 	steps_left = MAX_STEPS_PER_TURN
@@ -409,6 +481,8 @@ func _start_player_turn(player: Node) -> void:
 
 
 func _start_world_turn() -> void:
+	_advance_turn_revision()
+	world_turn_generation += 1
 	state = STATE_WORLD_TURN
 	active_entity_id = ""
 	steps_left = 0
@@ -416,6 +490,7 @@ func _start_world_turn() -> void:
 	interactions_left = 0
 	pending_end_turn = false
 	pending_world_entity_ids.clear()
+	behavior_deadline_by_entity_id.clear()
 	was_world_turn_completion_emitted = false
 
 	var start_log: String = "World turn started"
@@ -429,6 +504,9 @@ func _start_world_behaviors() -> void:
 		return
 
 	var world_entities: Array[NonPlayerEntity] = _get_world_turn_entities()
+	world_entities.sort_custom(func(first: NonPlayerEntity, second: NonPlayerEntity) -> bool:
+		return runtime.get_entity_id(first) < runtime.get_entity_id(second)
+	)
 	var ready_entities: Array[NonPlayerEntity] = []
 	for entity in world_entities:
 		var entity_id: String = runtime.get_entity_id(entity)
@@ -436,7 +514,9 @@ func _start_world_behaviors() -> void:
 			continue
 
 		ready_entities.append(entity)
-		pending_world_entity_ids[entity_id] = true
+		pending_world_entity_ids[entity_id] = world_turn_generation
+		behavior_deadline_by_entity_id[entity_id] = Time.get_ticks_msec() + NPC_BEHAVIOR_WATCHDOG_MSEC
+		entity.begin_behavior_generation(world_turn_generation)
 
 	if pending_world_entity_ids.is_empty():
 		_emit_world_turn_behaviors_finished()
@@ -447,14 +527,17 @@ func _start_world_behaviors() -> void:
 		if _is_world_turn_entity_available(entity):
 			(entity as NonPlayerEntity).behavior()
 		else:
-			_mark_world_entity_action_finished(entity)
+			_mark_world_entity_action_finished(entity, world_turn_generation)
 
 	is_starting_world_behaviors = false
 	_finish_world_turn_if_ready()
 
 
 func _finish_world_turn() -> void:
+	_advance_turn_revision()
 	pending_world_entity_ids.clear()
+	behavior_deadline_by_entity_id.clear()
+	pending_remote_snapshots.clear()
 	is_starting_world_behaviors = false
 	was_world_turn_completion_emitted = false
 	var finish_log: String = "World turn ended"
@@ -465,15 +548,18 @@ func _finish_world_turn() -> void:
 	_start_round()
 
 
-func _mark_world_entity_action_finished(entity: Node) -> void:
+func _mark_world_entity_action_finished(entity: Node, completed_generation: int) -> void:
 	if entity == null:
 		return
 
 	var entity_id: String = runtime.get_entity_id(entity)
 	if entity_id.is_empty():
 		return
+	if int(pending_world_entity_ids.get(entity_id, -1)) != completed_generation:
+		return
 
 	pending_world_entity_ids.erase(entity_id)
+	behavior_deadline_by_entity_id.erase(entity_id)
 	if not is_starting_world_behaviors:
 		_finish_world_turn_if_ready()
 
@@ -481,6 +567,20 @@ func _mark_world_entity_action_finished(entity: Node) -> void:
 func _finish_world_turn_if_ready() -> void:
 	if state == STATE_WORLD_TURN and pending_world_entity_ids.is_empty():
 		_emit_world_turn_behaviors_finished()
+
+
+func _cancel_timed_out_world_behaviors() -> void:
+	var now_msec: int = Time.get_ticks_msec()
+	for entity_id: String in behavior_deadline_by_entity_id.keys():
+		if now_msec < int(behavior_deadline_by_entity_id[entity_id]):
+			continue
+		var entity: NonPlayerEntity = runtime.get_entity_by_id(entity_id) as NonPlayerEntity
+		if entity != null:
+			entity.cancel_behavior()
+		watchdog_activation_count += 1
+		pending_world_entity_ids.erase(entity_id)
+		behavior_deadline_by_entity_id.erase(entity_id)
+	_finish_world_turn_if_ready()
 
 
 func _emit_world_turn_behaviors_finished() -> void:
@@ -500,6 +600,7 @@ func _finish_pending_turn_if_ready() -> void:
 
 
 func _finish_player_turn() -> void:
+	_advance_turn_revision()
 	var player: Node = _get_active_entity()
 	var player_name: String = active_entity_id
 	if player != null:
@@ -518,6 +619,7 @@ func _finish_player_turn() -> void:
 
 
 func _skip_active_player(reason: String) -> void:
+	_advance_turn_revision()
 	var player: Node = _get_active_entity()
 	_log_player_skipped(active_entity_id, player, reason)
 	active_entity_id = ""
@@ -577,9 +679,8 @@ func _add_player_to_turn_order(player: Node, steam_id: int) -> void:
 
 func _get_player_skip_reason(entity_id: String, player: Node) -> String:
 	var steam_id: int = int(turn_order_steam_ids.get(entity_id, 0))
-	if GameSession.is_multiplayer() and steam_id != 0 and steam_id != GameSession.local_steam_id:
-		if not NetworkManager.peers.has_peer_for_steam_id(steam_id):
-			return "disconnected"
+	if GameSession.is_multiplayer() and steam_id != 0 and not runtime.is_player_connected(steam_id):
+		return "disconnected"
 
 	if player == null:
 		return "missing"
@@ -691,6 +792,8 @@ func _make_snapshot(event: String = EVENT_NONE, event_payload: Dictionary = {}) 
 	return {
 		"state": state,
 		"round_number": round_number,
+		"turn_revision": turn_revision,
+		"world_turn_generation": world_turn_generation,
 		"active_entity_id": active_entity_id,
 		"steps_left": steps_left,
 		"attacks_left": attacks_left,
@@ -716,7 +819,6 @@ func _reset_turn_state() -> void:
 	round_number = 0
 	turn_order.clear()
 	turn_order_steam_ids.clear()
-	disconnected_steam_ids.clear()
 	current_turn_index = -1
 	active_entity_id = ""
 	steps_left = 0
@@ -724,8 +826,17 @@ func _reset_turn_state() -> void:
 	interactions_left = 0
 	pending_end_turn = false
 	pending_world_entity_ids.clear()
+	behavior_deadline_by_entity_id.clear()
 	is_starting_world_behaviors = false
 	was_world_turn_completion_emitted = false
+
+
+func _on_session_cleared() -> void:
+	_reset_turn_state()
+
+
+func _advance_turn_revision() -> void:
+	turn_revision += 1
 
 
 func _can_control_turn_mode() -> bool:
@@ -774,8 +885,6 @@ func _connect_network_signals() -> void:
 	if not NetworkManager.turns.turn_end_requested.is_connected(_on_turn_end_requested):
 		NetworkManager.turns.turn_end_requested.connect(_on_turn_end_requested)
 
-	if not NetworkManager.connection.steam_peer_disconnected.is_connected(_on_steam_peer_disconnected):
-		NetworkManager.connection.steam_peer_disconnected.connect(_on_steam_peer_disconnected)
 
 
 func _disconnect_network_signals() -> void:
@@ -785,14 +894,23 @@ func _disconnect_network_signals() -> void:
 	if NetworkManager.turns.turn_end_requested.is_connected(_on_turn_end_requested):
 		NetworkManager.turns.turn_end_requested.disconnect(_on_turn_end_requested)
 
-	if NetworkManager.connection.steam_peer_disconnected.is_connected(_on_steam_peer_disconnected):
-		NetworkManager.connection.steam_peer_disconnected.disconnect(_on_steam_peer_disconnected)
 
 
 func _on_turn_state_received(snapshot: Dictionary, sequence_id: int) -> void:
 	if GameSession.is_host():
 		return
+	if sequence_id > 0:
+		runtime.action_stream.receive_auxiliary_profile(sequence_id, "turn_snapshot")
 	if sequence_id > 0 and runtime.get_current_action_sequence_id() != sequence_id:
+		var expected_sequence_id: int = runtime.get_expected_remote_action_sequence_id()
+		if sequence_id < expected_sequence_id:
+			return
+		if (
+			sequence_id - expected_sequence_id > NetworkProtocol.MAX_FUTURE_SEQUENCE_DISTANCE
+			or pending_remote_snapshots.size() >= NetworkProtocol.MAX_BUFFERED_SEQUENCES
+		):
+			runtime.action_stream.request_runtime_resync(WorldActionStream.REJECTION_SEQUENCE_GAP)
+			return
 		pending_remote_snapshots[sequence_id] = snapshot.duplicate(true)
 		return
 	apply_remote_snapshot(snapshot)
@@ -805,7 +923,13 @@ func _on_stream_action_started(action: WorldActionRecord) -> void:
 		apply_remote_snapshot(snapshot)
 
 
-func _on_turn_end_requested(steam_id: int, request_id: int, requester_peer_id: int) -> void:
+func _on_turn_end_requested(
+	steam_id: int,
+	match_id: String,
+	requested_turn_revision: int,
+	request_id: int,
+	requester_peer_id: int
+) -> void:
 	if not _is_authority() or state != STATE_PLAYER_TURN:
 		return
 
@@ -819,17 +943,23 @@ func _on_turn_end_requested(steam_id: int, request_id: int, requester_peer_id: i
 			player as PlayerCharacter,
 			{},
 			request_id,
-			requester_peer_id
+			requester_peer_id,
+			requested_turn_revision,
+			match_id
 		)
 
 
-func _on_steam_peer_disconnected(steam_id: int) -> void:
-	disconnected_steam_ids[steam_id] = true
+func handle_player_disconnected(steam_id: int) -> void:
 	if not _is_authority() or state == STATE_FREE:
 		return
 
 	var active_player: Node = _get_active_entity()
 	if active_player != null and _get_entity_steam_id(active_player) == steam_id:
+		if runtime.action_stream.has_pending_action(
+			active_entity_id,
+			WorldActionRecord.ActionType.PLAYER_TURN_SKIPPED
+		):
+			return
 		runtime.enqueue_system_action(WorldActionRecord.ActionType.PLAYER_TURN_SKIPPED, {
 			"actor_entity_id": active_entity_id,
 			"reason": "disconnected",

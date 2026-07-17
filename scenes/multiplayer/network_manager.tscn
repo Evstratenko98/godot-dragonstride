@@ -1,4 +1,4 @@
-[gd_scene load_steps=12 format=3]
+[gd_scene load_steps=13 format=3]
 
 [ext_resource path="res://scenes/multiplayer/network_manager.gd" type="Script" id="1_manager"]
 [ext_resource path="res://scenes/multiplayer/channels/network_connection_channel.gd" type="Script" id="2_connection"]
@@ -11,6 +11,7 @@
 [ext_resource path="res://scenes/multiplayer/channels/network_match_channel.gd" type="Script" id="9_match"]
 [ext_resource path="res://scenes/multiplayer/channels/network_spell_channel.gd" type="Script" id="10_spells"]
 [ext_resource path="res://scenes/multiplayer/channels/network_action_channel.gd" type="Script" id="11_actions"]
+[ext_resource path="res://scenes/multiplayer/channels/network_player_channel.gd" type="Script" id="12_players"]
 
 [node name="NetworkManager" type="Node"]
 script = ExtResource("1_manager")
@@ -44,3 +45,6 @@ script = ExtResource("11_actions")
 
 [node name="Match" type="Node" parent="."]
 script = ExtResource("9_match")
+
+[node name="Players" type="Node" parent="."]
+script = ExtResource("12_players")

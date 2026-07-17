@@ -1,9 +1,9 @@
 class_name LevelCatalog
 extends RefCounted
 
-const DEFAULT_LEVEL_ID := "full_world"
+const DEFAULT_LEVEL_ID := "sandbox"
 const LEVEL_SCENE_PATHS := {
-	"full_world": "res://scenes/full_world/full_world.tscn",
+	"sandbox": "res://scenes/sandbox/sandbox.tscn",
 	"level_1": "res://scenes/levels/level_1/level_1.tscn",
 }
 

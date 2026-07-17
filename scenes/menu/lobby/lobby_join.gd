@@ -1,6 +1,7 @@
 extends Control
 
 @onready var lobbies_list: VBoxContainer = $LobbiesList
+@onready var status_label: Label = $StatusLabel
 
 func _ready() -> void:
 	SteamManager.lobby_list_received.connect(_on_lobby_list_received)
@@ -22,6 +23,7 @@ func _exit_tree() -> void:
 
 
 func _on_refresh_button_pressed() -> void:
+	status_label.text = ""
 	SteamManager.request_lobbies()
 
 
@@ -66,4 +68,8 @@ func _on_lobby_joined(_lobby_id: int) -> void:
 
 
 func _on_lobby_join_failed(response: int) -> void:
-	print("Failed to join lobby. Response: ", response)
+	if response == -1:
+		status_label.text = "This lobby uses an incompatible network protocol version."
+		return
+	status_label.text = "Failed to join the selected lobby."
+	push_warning("Failed to join lobby. Steam response: %d" % response)

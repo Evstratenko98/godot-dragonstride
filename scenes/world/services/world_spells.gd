@@ -29,17 +29,21 @@ var reserved_spell_slots: Dictionary[String, bool] = {}
 var active_casts_by_entity_id: Dictionary[String, String] = {}
 var active_cast_target_cells_by_entity_id: Dictionary[String, Vector2i] = {}
 var impacted_cast_ids: Dictionary[String, bool] = {}
-var pending_local_spell_request_ids: Dictionary[int, bool] = {}
+var pending_local_spell_request_ids: Dictionary[int, int] = {}
 
 
 func _ready() -> void:
 	_connect_network_signals()
+	if not GameSession.session_cleared.is_connected(_on_session_cleared):
+		GameSession.session_cleared.connect(_on_session_cleared)
 
 
 func _exit_tree() -> void:
 	_disconnect_action_stream_signals()
 	_disconnect_turn_signals()
 	_disconnect_network_signals()
+	if GameSession.session_cleared.is_connected(_on_session_cleared):
+		GameSession.session_cleared.disconnect(_on_session_cleared)
 
 
 func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void:
@@ -49,6 +53,17 @@ func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void
 	level = new_level
 	_connect_turn_signals()
 	_connect_action_stream_signals()
+
+
+func _on_session_cleared() -> void:
+	selected_player_entity_id = ""
+	selected_spell_slot_index = -1
+	used_spell_slots.clear()
+	reserved_spell_slots.clear()
+	active_casts_by_entity_id.clear()
+	active_cast_target_cells_by_entity_id.clear()
+	impacted_cast_ids.clear()
+	pending_local_spell_request_ids.clear()
 
 
 func toggle_spell_targeting(player: PlayerCharacter, spell_slot_index: int) -> bool:
@@ -64,6 +79,7 @@ func toggle_spell_targeting(player: PlayerCharacter, spell_slot_index: int) -> b
 	if spell_id.is_empty():
 		return false
 	if not runtime.can_entity_cast_spell_in_turn(player):
+		runtime.notify_local_action_rejected(WorldActionStream.REJECTION_NOT_ACTIVE_PLAYER)
 		return false
 	if get_remaining_spell_slot_uses(player, spell_slot_index) <= 0:
 		return false
@@ -113,8 +129,8 @@ func request_selected_spell_cast(player: PlayerCharacter, target_cell: Vector2i)
 
 	var request_id: int = runtime.create_action_request_id()
 	if GameSession.is_multiplayer():
-		pending_local_spell_request_ids[request_id] = true
-		NetworkManager.spells.request_spell_cast(spell_slot_index, target_cell, request_id)
+		pending_local_spell_request_ids[request_id] = 0
+		NetworkManager.spells.request_spell_cast(spell_slot_index, target_cell, GameSession.get_match_id(), runtime.get_turn_revision(), request_id)
 	else:
 		runtime.enqueue_player_action(
 			WorldActionRecord.ActionType.SPELL_CAST,
@@ -195,16 +211,38 @@ func create_action_stream_snapshot() -> Dictionary:
 
 func broadcast_action_payload(action: WorldActionRecord) -> void:
 	if action != null:
-		NetworkManager.spells.broadcast_action_payload(action.sequence_id, action.payload)
+		NetworkManager.spells.broadcast_action_payload(action.match_id, action.sequence_id, action.payload)
 
 
 func apply_action_stream_snapshot(snapshot: Dictionary) -> void:
-	var used_slots_value: Variant = snapshot.get("used_spell_slots", {})
-	if not (used_slots_value is Dictionary):
+	if not is_valid_action_stream_snapshot(snapshot):
 		return
+	var used_slots_value: Variant = snapshot.get("used_spell_slots", {})
 	used_spell_slots = (used_slots_value as Dictionary).duplicate(true)
 	reserved_spell_slots.clear()
 	spell_usage_changed.emit()
+
+
+func is_valid_action_stream_snapshot(snapshot: Dictionary) -> bool:
+	var used_slots_value: Variant = snapshot.get("used_spell_slots", {})
+	if not (used_slots_value is Dictionary):
+		return false
+	var used_slots: Dictionary = used_slots_value as Dictionary
+	if used_slots.size() > NetworkProtocol.MAX_ROSTER_SIZE:
+		return false
+	for entity_id_value: Variant in used_slots.keys():
+		var entity_id: String = str(entity_id_value)
+		var slots_value: Variant = used_slots[entity_id_value]
+		if not NetworkProtocol.is_valid_identifier(entity_id) or not (slots_value is Dictionary):
+			return false
+		var slots: Dictionary = slots_value as Dictionary
+		if slots.size() > CharacterInventory.SPELL_SLOT_COUNT:
+			return false
+		for slot_index_value: Variant in slots.keys():
+			var slot_index: int = int(slot_index_value)
+			if slot_index < 0 or slot_index >= CharacterInventory.SPELL_SLOT_COUNT or not bool(slots[slot_index_value]):
+				return false
+	return true
 
 
 func get_action_rejection_reason(action: WorldActionRecord) -> String:
@@ -269,6 +307,7 @@ func execute_action_cast(action: WorldActionRecord, is_authority: bool) -> bool:
 		var was_applied: bool = bool(impacted_cast_ids.get(cast_id, false))
 		_force_finish_cast(cast_id, player.entity_id)
 		if is_authority and not was_applied:
+			_remove_spell_slot_use(player.entity_id, spell_slot_index)
 			action.payload["cancellation_reason"] = WorldActionStream.REJECTION_PRESENTATION_TIMEOUT
 			return false
 	return true
@@ -346,6 +385,8 @@ func _on_effect_impact(
 		return
 	if active_casts_by_entity_id.get(caster_entity_id, "") != cast_id:
 		return
+	if bool(impacted_cast_ids.get(cast_id, false)):
+		return
 
 	impacted_cast_ids[cast_id] = true
 	var caster: Node = runtime.get_entity_by_id(caster_entity_id)
@@ -384,6 +425,16 @@ func _record_spell_slot_use(entity_id: String, spell_slot_index: int) -> void:
 	var entity_slots: Dictionary = used_spell_slots.get(entity_id, {}) as Dictionary
 	entity_slots[spell_slot_index] = true
 	used_spell_slots[entity_id] = entity_slots
+
+
+func _remove_spell_slot_use(entity_id: String, spell_slot_index: int) -> void:
+	var entity_slots: Dictionary = used_spell_slots.get(entity_id, {}) as Dictionary
+	entity_slots.erase(spell_slot_index)
+	if entity_slots.is_empty():
+		used_spell_slots.erase(entity_id)
+	else:
+		used_spell_slots[entity_id] = entity_slots
+	spell_usage_changed.emit()
 
 
 func _is_spell_slot_used(entity_id: String, spell_slot_index: int) -> bool:
@@ -430,6 +481,8 @@ func _print_rejection(reason_code: String) -> void:
 func _on_spell_cast_requested(
 	spell_slot_index: int,
 	target_cell: Vector2i,
+	match_id: String,
+	turn_revision: int,
 	request_id: int,
 	requester_peer_id: int
 ) -> void:
@@ -448,7 +501,9 @@ func _on_spell_cast_requested(
 			"target_kind": "cell",
 		},
 		request_id,
-		requester_peer_id
+		requester_peer_id,
+		turn_revision,
+		match_id
 	)
 
 
@@ -504,6 +559,8 @@ func _connect_network_signals() -> void:
 		NetworkManager.spells.spell_cast_requested.connect(_on_spell_cast_requested)
 	if not NetworkManager.spells.spell_action_payload_received.is_connected(_on_spell_action_payload_received):
 		NetworkManager.spells.spell_action_payload_received.connect(_on_spell_action_payload_received)
+	if not NetworkManager.actions.action_accepted.is_connected(_on_action_accepted):
+		NetworkManager.actions.action_accepted.connect(_on_action_accepted)
 	if not NetworkManager.actions.action_rejected.is_connected(_on_action_rejected):
 		NetworkManager.actions.action_rejected.connect(_on_action_rejected)
 
@@ -513,12 +570,14 @@ func _disconnect_network_signals() -> void:
 		NetworkManager.spells.spell_cast_requested.disconnect(_on_spell_cast_requested)
 	if NetworkManager.spells.spell_action_payload_received.is_connected(_on_spell_action_payload_received):
 		NetworkManager.spells.spell_action_payload_received.disconnect(_on_spell_action_payload_received)
+	if NetworkManager.actions.action_accepted.is_connected(_on_action_accepted):
+		NetworkManager.actions.action_accepted.disconnect(_on_action_accepted)
 	if NetworkManager.actions.action_rejected.is_connected(_on_action_rejected):
 		NetworkManager.actions.action_rejected.disconnect(_on_action_rejected)
 
 
-func _on_spell_action_payload_received(sequence_id: int, payload: Dictionary) -> void:
-	if not GameSession.is_host() and runtime != null:
+func _on_spell_action_payload_received(match_id: String, sequence_id: int, payload: Dictionary) -> void:
+	if not GameSession.is_host() and runtime != null and match_id == GameSession.get_match_id():
 		runtime.receive_action_profile_payload(sequence_id, payload)
 
 
@@ -529,6 +588,8 @@ func _connect_action_stream_signals() -> void:
 		runtime.action_stream.action_completed.connect(_on_stream_action_completed)
 	if not runtime.action_stream.action_cancelled.is_connected(_on_stream_action_cancelled):
 		runtime.action_stream.action_cancelled.connect(_on_stream_action_cancelled)
+	if not runtime.action_stream.remote_snapshot_committed.is_connected(_on_remote_snapshot_committed):
+		runtime.action_stream.remote_snapshot_committed.connect(_on_remote_snapshot_committed)
 
 
 func _disconnect_action_stream_signals() -> void:
@@ -538,6 +599,8 @@ func _disconnect_action_stream_signals() -> void:
 		runtime.action_stream.action_completed.disconnect(_on_stream_action_completed)
 	if runtime.action_stream.action_cancelled.is_connected(_on_stream_action_cancelled):
 		runtime.action_stream.action_cancelled.disconnect(_on_stream_action_cancelled)
+	if runtime.action_stream.remote_snapshot_committed.is_connected(_on_remote_snapshot_committed):
+		runtime.action_stream.remote_snapshot_committed.disconnect(_on_remote_snapshot_committed)
 
 
 func _on_stream_action_completed(action: WorldActionRecord) -> void:
@@ -557,6 +620,18 @@ func _on_action_rejected(request_id: int, reason_code: String) -> void:
 		return
 	pending_local_spell_request_ids.erase(request_id)
 	_print_rejection(reason_code)
+
+
+func _on_action_accepted(request_id: int, sequence_id: int) -> void:
+	if pending_local_spell_request_ids.has(request_id):
+		pending_local_spell_request_ids[request_id] = sequence_id
+
+
+func _on_remote_snapshot_committed(boundary_sequence_id: int) -> void:
+	for request_id: int in pending_local_spell_request_ids.keys():
+		var sequence_id: int = pending_local_spell_request_ids[request_id]
+		if sequence_id > 0 and sequence_id < boundary_sequence_id:
+			pending_local_spell_request_ids.erase(request_id)
 
 
 func _is_authority() -> bool:

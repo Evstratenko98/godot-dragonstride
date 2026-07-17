@@ -9,7 +9,6 @@ var level: WorldLevel = null
 
 
 func _ready() -> void:
-	_register_console_commands()
 	queue_redraw()
 
 
@@ -37,12 +36,16 @@ func _draw() -> void:
 
 
 func show_lines() -> void:
+	if level == null or not level.allows_debug_commands():
+		return
 	visible = true
 	queue_redraw()
 	ConsoleOutput.print_console("Game grid lines: shown")
 
 
 func hide_lines() -> void:
+	if level == null or not level.allows_debug_commands():
+		return
 	visible = false
 	ConsoleOutput.print_console("Game grid lines: hidden")
 
@@ -50,6 +53,8 @@ func hide_lines() -> void:
 func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void:
 	runtime = new_runtime
 	level = new_level
+	if level != null and level.allows_debug_commands():
+		_register_console_commands()
 	queue_redraw()
 
 

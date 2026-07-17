@@ -33,6 +33,8 @@ func _exit_tree() -> void:
 	if runtime != null:
 		if runtime.match_end_requested.is_connected(_on_runtime_match_end_requested):
 			runtime.match_end_requested.disconnect(_on_runtime_match_end_requested)
+		if runtime.runtime_sync_failed.is_connected(_on_runtime_sync_failed):
+			runtime.runtime_sync_failed.disconnect(_on_runtime_sync_failed)
 		runtime.disconnect_signals()
 
 
@@ -41,7 +43,12 @@ func start_match() -> void:
 		return
 
 	has_started_match = true
-	runtime.start_game()
+	var start_error: String = await runtime.start_game()
+	if not start_error.is_empty():
+		has_started_match = false
+		if GameSession.is_multiplayer():
+			LobbyMatchCoordinator.cancel_runtime_start(start_error)
+		return
 	_play_level_music()
 
 
@@ -79,6 +86,8 @@ func _initialize_match() -> void:
 	runtime.configure_for_level(level)
 	if not runtime.match_end_requested.is_connected(_on_runtime_match_end_requested):
 		runtime.match_end_requested.connect(_on_runtime_match_end_requested)
+	if not runtime.runtime_sync_failed.is_connected(_on_runtime_sync_failed):
+		runtime.runtime_sync_failed.connect(_on_runtime_sync_failed)
 	level_container.add_child(level)
 	grid_lines.configure_context(runtime, level)
 	cell_hover.configure_context(runtime)
@@ -123,3 +132,7 @@ func _leave_active_multiplayer_session() -> void:
 
 func _on_runtime_match_end_requested() -> void:
 	game_over(false)
+
+
+func _on_runtime_sync_failed(reason_code: String) -> void:
+	LobbyMatchCoordinator.handle_runtime_sync_failure(reason_code)

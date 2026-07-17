@@ -2,13 +2,13 @@
 
 Этот документ предназначен для разработчика, который впервые открыл проект. Он описывает не только целевую архитектуру из `AGENTS.md`, но и фактически реализованное поведение текущего кода.
 
-Актуальность описания: состояние рабочей копии на 14 июля 2026 года. Проект использует Godot 4.6 и GDScript.
+Актуальность описания: состояние рабочей копии на 16 июля 2026 года. Проект использует Godot 4.6 и GDScript.
 
 ## 1. Что это за проект
 
 DragonStride сейчас представляет собой двухмерную игру на клеточной карте. Игрок управляет персонажем, перемещается по проходимым клеткам, атакует соседние клетки, сущности и объекты. Игра поддерживает одиночный режим и Steam-мультиплеер с лобби. Дополнительно существует включаемый через консоль пошаговый режим, в котором игроки и мир действуют по очереди.
 
-Общая игровая оболочка — `scenes/world/match_world.tscn`, а `scenes/full_world/full_world.tscn` является одним конкретным уровнем. Меню, сессия, сетевое соединение и жизненный цикл матча находятся вне данных карты.
+Общая игровая оболочка — `scenes/world/match_world.tscn`. Сцена `scenes/sandbox/sandbox.tscn` создана исключительно как песочница для проверки функциональности, воспроизведения и исправления ошибок; она не является production-уровнем. Меню, сессия, сетевое соединение и жизненный цикл матча находятся вне данных карты.
 
 ## 2. Короткая ментальная модель
 
@@ -42,10 +42,12 @@ DragonStride сейчас представляет собой двухмерну
 ### 3.2. Игровая сессия
 
 - Поддерживаются состояния: сессии нет, одиночная игра, multiplayer-host и multiplayer-client.
-- В сессии хранятся выбранный `level_id`, lobby ID, Steam ID хоста и локального игрока, список игроков и настройки матча.
+- В сессии хранятся выбранный `level_id`, lobby ID, Steam ID хоста и локального игрока, `match_id`, revision roster, список игроков и настройки матча.
+- Multiplayer-сессия сначала provisional и становится committed только после готовности transport, загрузки мира и синхронизации всех игроков.
+- Frozen roster сортируется по Steam ID. Host детерминированно назначает `player_1`, `player_2` и далее; имя игрока не является идентификатором.
 - Для одиночной игры создаётся один локальный игрок `Patrick`.
 - Для мультиплеера список игроков строится по участникам Steam-лобби.
-- Уровень выбирается по разрешённому `level_id`; каталог содержит `full_world` и тестовый `level_1`.
+- Уровень выбирается по разрешённому `level_id`; каталог содержит тестовую песочницу `sandbox` и уровень `level_1`.
 
 ### 3.3. Steam-лобби
 
@@ -55,16 +57,19 @@ DragonStride сейчас представляет собой двухмерну
 - Вход и выход из лобби.
 - Отображение состава лобби, владельца и локального пользователя.
 - Запуск матча владельцем лобби.
-- Координация старта host/client через сообщения Steam lobby chat.
+- `LobbyMatchCoordinator` координирует подготовку, transport, загрузку сцены, world readiness и отмену запуска.
+- Управляющие сообщения Steam lobby chat принимаются только от актуального владельца lobby.
+- При старте lobby получает `status = starting` и `joinable = false`; late join и reconnect после фиксации roster не поддерживаются.
 
 ### 3.4. Сетевой transport
 
 - Создание `SteamMultiplayerPeer` для host и client.
-- Сопоставление Godot `peer_id` со Steam ID.
+- Сопоставление Godot `peer_id` со Steam ID с проверкой Steam identity, полученной непосредственно от transport, и текущего состава лобби.
 - Передача состояния персонажей, атак, движения NPC, здоровья, смерти/возрождения, состояний AI и объектов.
 - Синхронизация пошагового состояния.
 - Сетевое создание разрешённых сущностей и объектов.
-- Кэширование состояний объектов, AI и созданных во время матча объектов для подключающихся участников.
+- Кэширование авторитетных состояний объектов, AI и созданных во время матча объектов для resync уже подключённых участников.
+- Завершение host-матча использует уникальный `end_id`, ACK от верифицированных peers и timeout 3 секунды перед локальным teardown.
 - Разделение часто обновляемого состояния персонажа (`unreliable`) и одноразовых игровых событий (`reliable`).
 
 ### 3.5. Уровень и жизненный цикл матча
@@ -89,7 +94,9 @@ DragonStride сейчас представляет собой двухмерну
 - Реестр хранит текущие клетки сущностей.
 - На время движения целевая клетка резервируется, чтобы две сущности не вошли в неё одновременно.
 - Поддерживаются сущности и объекты, занимающие несколько клеток.
-- Проверка размещения сообщает, находится ли клетка вне сетки, непроходима, занята объектом/сущностью или зарезервирована.
+- Регистрация и перемещение сначала полностью валидируются и только затем атомарно изменяют реестр; duplicate ID и частичная регистрация запрещены.
+- Обратные индексы хранят клетки сущности, её reservations и клетки объекта, поэтому unregister, move и respawn не сканируют весь реестр.
+- Типизированный результат различает invalid ID, duplicate ID, выход за сетку, непроходимость, занятость объектом/сущностью и reservation.
 - По клетке можно найти сущность, объект или человекочитаемое имя поверхности.
 
 ### 3.8. Игроки и камера
@@ -100,6 +107,9 @@ DragonStride сейчас представляет собой двухмерну
 - Для локального игрока создаётся камера.
 - Камера умеет плавно следовать за игроком и переключаться в свободный режим с перемещением у краёв экрана.
 - Multiplayer authority узлов игроков назначается после построения Steam ID ↔ peer ID mapping.
+- Host выбирает spawn-клетки в порядке frozen roster. Невалидная preferred cell получает детерминированный fallback по Manhattan distance, затем по `y` и `x`.
+- Канал `Players` передаёт авторитетный spawn snapshot, `player_world_ready` и `players_committed`; клиент не создаёт итоговые spawn records.
+- Если разместить весь roster невозможно, запуск отменяется для всех. Занятый respawn использует тот же fallback или остаётся pending без наложения сущностей.
 
 ### 3.9. Управление персонажем и движение
 
@@ -129,7 +139,7 @@ DragonStride сейчас представляет собой двухмерну
 ### 3.11. Пошаговый режим
 
 - По умолчанию режим выключен: игра допускает свободное движение и атаки.
-- Включение и выключение выполняется консольными командами `game_turns_enable` и `game_turns_disable`.
+- В тестовой сцене `sandbox` включение и выключение выполняется консольными командами `game_turns_enable` и `game_turns_disable`.
 - Состояния режима: ход игрока и ход мира.
 - За ход игрок получает до 10 шагов и одну результативную атаку по сущности или объекту.
 - Пустая атака не расходует доступную атаку.
@@ -140,6 +150,9 @@ DragonStride сейчас представляет собой двухмерну
 - Во время хода мира запускается `behavior()` доступных `NonPlayerEntity`.
 - После завершения действий всех мировых сущностей начинается новый раунд.
 - Host хранит авторитетное состояние ходов и рассылает снимки клиентам.
+- Каждый переход, меняющий допустимого автора, увеличивает монотонный `turn_revision`; revision включён в turn snapshot и gameplay intents.
+- Move, attack, interaction, spell cast, inventory use и end turn проверяют `match_id`, `turn_revision`, активного Steam-пользователя и отсутствие другого pending action персонажа.
+- Перемещение и удаление предметов разрешены вне собственного хода; применение предметов и заклинаний в пошаговом режиме разрешено только активному игроку.
 
 ### 3.12. NPC и AI
 
@@ -157,7 +170,7 @@ DragonStride сейчас представляет собой двухмерну
 
 ### 3.13. Создание сущностей и объектов в runtime
 
-- Консольная команда `game_create <type> <x> <y>` создаёт разрешённый тип в указанной клетке.
+- Только в `sandbox` консольная команда `game_create <type> <x> <y>` создаёт разрешённый тип в указанной клетке.
 - Каталог содержит `sheep`, `warrior`, `tree`, `house`, `meat`, `precision_stone` и `meteor_scroll`.
 - До создания проверяются границы, проходимость, занятость и резервации.
 - Созданным экземплярам назначается уникальный `spawn_id`.
@@ -187,7 +200,7 @@ DragonStride сейчас представляет собой двухмерну
 - Обычные предметы и заклинания хранятся в двух независимых контейнерах по пять слотов. Прототип с `inventory_kind = "spell"` не может попасть в обычный слот.
 - Свиток `meteor_scroll` содержит заклинание `meteor`, остаётся в инвентаре после применения и не складывается в стек: каждый экземпляр занимает отдельный spell-слот.
 - В пошаговом режиме каждый занятый spell-слот даёт одно независимое применение за ход. Индикатор `остаток/всего` конкретного слота отображается в его правом верхнем углу.
-- В свободном режиме свиток можно использовать повторно без расходования; один игрок не может запустить второй метеорит до завершения первого.
+- В свободном режиме каст заклинаний запрещён. В пошаговом режиме заклинание может использовать только активный игрок в свой ход; один игрок не может запустить второй метеорит до завершения первого.
 - Во время полёта и взрыва метеорита двигаться могут все игроки, кроме персонажа, который в данный момент находится в целевой клетке эффекта.
 - Метеорит летит к центру выбранной клетки детерминированным `Tween`. Завершение движения является моментом удара; физические коллизии не используются.
 - При ударе host заново определяет содержимое клетки, наносит сущности 50 урона либо повреждает `GridObject` через `WorldCombat`.
@@ -292,12 +305,14 @@ flowchart TB
 sequenceDiagram
     actor User as Пользователь
     participant Menu as MainMenu или Lobby
+    participant Coordinator as LobbyMatchCoordinator
     participant Session as GameSession
-    participant Net as NetworkManager
+    participant Steam as SteamManager
+    participant Net as NetworkConnectionChannel
+    participant PlayerNet as NetworkPlayerChannel
     participant Level as WorldLevel
     participant Match as MatchController
     participant Runtime as WorldRuntime
-    participant Registry as WorldRegistry
     participant Players as WorldPlayers
 
     User->>Menu: Начать игру
@@ -305,23 +320,28 @@ sequenceDiagram
         Menu->>Net: stop_network()
         Menu->>Session: start_singleplayer()
     else Steam-мультиплеер
-        Menu->>Session: start_multiplayer_from_lobby()
-        Menu->>Net: start_from_session()
-        Net-->>Menu: network_started
+        Menu->>Coordinator: request_start_match()
+        Coordinator->>Session: freeze roster + match_id
+        Coordinator->>Steam: status=starting, joinable=false
+        Coordinator->>Net: start_from_session()
+        Coordinator-->>Coordinator: ждать client_match_ready всех участников
+        Coordinator->>Net: load_match(match_id)
     end
-    Menu->>Session: go_to_selected_scene()
+    Coordinator->>Session: go_to_selected_scene()
     Session->>Match: Загружается match_world.tscn
     Match->>Level: Создаётся сцена выбранного level_id
     Match->>Runtime: configure_for_level(level)
-    Runtime->>Registry: collect_blockers()
     Runtime->>Players: prepare_players_root()
-    Runtime->>Players: start_singleplayer() / start_multiplayer()
-    Runtime->>Registry: зарегистрировать игроков и NPC уровня
-    Match->>Runtime: connect_signals()
-    Match->>Match: включить музыку
+    Runtime->>Players: получить/применить host spawn snapshot
+    Players->>PlayerNet: player_world_ready(match_id)
+    PlayerNet-->>Coordinator: все участники готовы
+    Coordinator->>PlayerNet: players_committed(match_id)
+    Coordinator->>Session: commit_multiplayer_match()
+    Runtime-->>Match: start_game() завершён успешно
+    Match->>Match: включить управление и музыку
 ```
 
-Практически вся подготовка игрового мира начинается в `WorldRuntime.start_game()`, но вызывается владельцем lifecycle — `MatchController`.
+`LobbyMatchCoordinator` владеет orchestration до committed-состояния, а `MatchController` — lifecycle уже загруженного мира. `WorldRuntime.start_game()` является ожидаемой операцией: ошибка spawn/synchronization отменяет provisional-сессию и возвращает группу в lobby.
 
 ## 6. Как проходит действие игрока
 
@@ -477,9 +497,11 @@ flowchart TB
 | `LobbyMain` | `scenes/menu/lobby/lobby_main.gd` | Выбор между созданием и поиском Steam-лобби. |
 | `LobbyHost` | `scenes/menu/lobby/lobby_host.gd` | Экран состава лобби, host-controls и запуск игры владельцем. Этим же экраном пользуется вошедший клиент. |
 | `LobbyJoin` | `scenes/menu/lobby/lobby_join.gd` | Запрос списка лобби, отображение результатов и подключение. |
-| `GameSession` | `scenes/multiplayer/game_session.gd` | Режим игры, выбранную сцену, игроков, Steam IDs и настройки матча. Не хранит правила мира. |
-| `SteamManager` | `scenes/multiplayer/steam_manager.gd` | Внешний Steam lobby API, relay readiness, участников и координацию старта матча. |
-| `NetworkManager` | `scenes/multiplayer/network_manager.gd` | Низкоуровневый peer transport, mapping, RPC, delivery mode и сетевые кэши. Это единственное место для `@rpc`, `rpc()` и `rpc_id()`. |
+| `LobbyMatchCoordinator` | `scenes/multiplayer/lobby_match_coordinator.gd` | Состояния подготовки матча, timeout, frozen roster, переходы между lobby и миром и commit/cancel orchestration. Не содержит Steam API или RPC. |
+| `GameSession` | `scenes/multiplayer/game_session.gd` | Режим игры, `match_id`, provisional/committed-состояние, выбранную сцену, frozen roster, Steam IDs и настройки матча. Не хранит правила мира. |
+| `SteamManager` | `scenes/multiplayer/steam_manager.gd` | Внешний Steam lobby API, relay readiness, участников, lobby status/joinable и проверку автора lobby-команд. |
+| `NetworkManager` | `scenes/multiplayer/network_manager.tscn` | Composition root transport, peer registry, replication store и профильных `Network*Channel`. RPC находятся только в каналах. |
+| `NetworkPlayerChannel` | `scenes/multiplayer/channels/network_player_channel.gd` | Авторитетный player spawn snapshot, запрос snapshot, world readiness, players commit и pending-respawn состояние. Фиксированное сетевое имя узла — `Players`. |
 | `Console` addon | `addons/console/` | Внешнюю игровую консоль и регистрацию команд. Это сторонний код; без отдельной задачи его не изменяют. |
 | `ConsoleOutput` | `scenes/console/console_output.gd` | Маленькую границу между gameplay-сообщениями и внешним console addon. |
 
@@ -489,7 +511,7 @@ flowchart TB
 |---|---|---|
 | `WorldLevel` | `scenes/world/world_level.gd` | Данные конкретной карты и типизированный доступ к корням/узлам уровня. |
 | `match_world.tscn` | `scenes/world/match_world.tscn` | Общую оболочку матча: сервисы, runtime, controller, Players, audio, HUD и контейнер выбранного уровня. |
-| `full_world.tscn` | `scenes/full_world/full_world.tscn` | Конкретную карту: Water/Ground/Clouds и размещённые House/Tree/Sheep/Warrior без общей инфраструктуры. |
+| `sandbox.tscn` | `scenes/sandbox/sandbox.tscn` | Песочницу для проверки функциональности и воспроизведения ошибок: Water/Ground/Clouds, размещённые House/Tree/Sheep/Warrior и разрешённые debug-команды. Не является production-уровнем. |
 | `MatchController` | `scenes/world/match_controller.gd` | Загрузку выбранного уровня, запуск/завершение матча, runtime-signals, музыку и переход в меню. |
 | `WorldRuntime` | `scenes/world/world_runtime.gd` | Устойчивый API мира для сущностей и компонентов. Связывает загруженный уровень с общими сервисами. |
 | `WorldGrid` | `scenes/world/services/world_grid.gd` | Размер и координаты сетки, границы, размер клетки и проходимые TileMap-слои. |
@@ -558,7 +580,7 @@ scenes/
   menu/                        главное меню, настройки, Steam lobby UI
   multiplayer/                 GameSession, SteamManager, NetworkManager
   world/                       общая оболочка матча, runtime, lifecycle и World-сервисы
-  full_world/                  сцена и конфигурация уровня full_world
+  sandbox/                     тестовая сцена и конфигурация sandbox
   levels/                      дополнительные сцены и конфигурации уровней
   entities/
     entity/                    базовая Entity
@@ -598,7 +620,7 @@ fonts/                         шрифты и лицензии
 | Поведение конкретного NPC | Скрипт NPC, например `warrior.gd` | `NonPlayerEntity`, `WorldAwareness`, `WorldTurns`. |
 | Создание нового runtime-объекта | `WorldSpawner.CATALOG` | Новая scene, базовый `Entity` или `GridObject`, network cache. |
 | Создание нового уровня | Новый `WorldLevel`-совместимый `.tscn`, level-скрипт и `LevelDefinition.tres` | Каталог `GameSession`; Runtime/Controller/сервисы предоставляет общий `match_world.tscn`. |
-| Lobby | `SteamManager` и `scenes/menu/lobby/` | `GameSession.start_multiplayer_from_lobby()`. |
+| Lobby и запуск матча | `LobbyMatchCoordinator` и `scenes/menu/lobby/` | `SteamManager` для lobby API, `GameSession` для frozen roster, connection/player channels для протокола. |
 | RPC или delivery mode | `NetworkManager` | Доменное применение события в `WorldNetwork`. |
 | Анимацию игрока | `CharacterView` и `character.tscn` | Не переносить туда combat/turn/network rules. |
 | Анимацию NPC | Конкретный view | Базовый контракт `NonPlayerView`. |
@@ -639,14 +661,14 @@ View показывает спрайт, направление и анимаци
 
 Эти особенности легко принять за баг, если о них не знать:
 
-- Пошаговый режим не включается автоматически. Без команды `game_turns_enable` игра работает в real-time-подобном свободном режиме.
+- Пошаговый режим не включается автоматически. В `sandbox` он включается командой `game_turns_enable`; production-уровень должен включать его через настройки или orchestration матча, а не через консоль.
 - Атака разрешена только по ортогонально соседней клетке; диагональная атака невозможна.
 - Триггер активности вражеского воина, напротив, учитывает восемь соседних клеток, включая диагонали.
 - Уничтоженный дом или дерево меняет вид, но остаётся препятствием.
-- Игрок не удаляется после смерти, а сразу возвращается на spawn cell.
+- После смерти игрок возвращается на фактически свободную spawn/fallback cell. Если клетки временно нет, игрок скрыт, исключён из registry и ожидает безопасного respawn.
 - Обычный NPC после смерти удаляется.
 - В мировой ход все готовые NPC получают запуск `behavior()`; завершение мирового хода ждёт, пока каждый сообщит о завершении.
-- `full_world.tscn` уже содержит House, Tree и Sheep; runtime дополнительно может создать Sheep, Warrior, Tree и House.
+- `sandbox.tscn` уже содержит House, Tree и Sheep; в этой песочнице runtime дополнительно может создавать тестовые сущности и объекты.
 - Единственная проходимая поверхность по умолчанию — TileMap-слой `Ground`; `Water` не считается проходимым.
 - Сетка логически ограничена `grid_size`, даже если в TileMap нарисованы тайлы за этими границами.
 
@@ -655,13 +677,16 @@ View показывает спрайт, направление и анимаци
 Это не список требований на немедленную переделку, а ориентир для понимания зрелости проекта:
 
 - UI выбора уровня пока не добавлен; `GameSession` предоставляет каталог и программный выбор по `level_id`.
-- Runtime-spawner ограничен четырьмя типами и не является универсальным редактором карты.
+- Runtime-spawner ограничен явным `WorldSpawner.CATALOG` и не является универсальным редактором карты.
 - Объекты имеют только бинарное состояние цел/уничтожен и не имеют числового здоровья.
-- Непрерывное состояние позиции игрока приходит от клиента. Host проверяет соответствие Steam ID и право действовать в текущем ходу, но в этом пути не пересчитывает полностью клеточную траекторию и коллизии клиента. При развитии соревновательной сетевой модели это важная зона усиления authority-validation.
-- Основной gameplay-путь атаки использует общий `broadcast_entity_attack`/`_relay_entity_attack`, а не более узкий `request_attack` с проверкой Steam ID отправителя. Relay-обработчики общих entity events сейчас не проверяют sender ownership для переданного `entity_id`; клиент также запускает локальное применение атаки до получения результата host. Это ключевая зона усиления настоящей host-authoritative модели.
+- Клиентские gameplay-команды являются intents. Host получает автора из верифицированного peer registry, повторно проверяет клетку, цель, здоровье и turn-budget перед выполнением и рассылает авторитетный результат.
+- Action stream ограничен одной внешней pending-командой на персонажа, очередями 64/256, token bucket 8 intents/секунду с burst 12 и окном deduplication 256 request ID на Steam ID.
+- Late join и reconnect намеренно не входят в текущий протокол: после фиксации roster новый transport peer отключается.
 - Часть старых UI/Steam-скриптов использует вывод типов `:=` и широкие `Array`/`Dictionary`. Правила `AGENTS.md` требуют явных типов для нового и изменяемого кода, но не требуют переписывать нетронутый legacy-код только ради стиля.
 
 ## 17. Консольные команды проекта
+
+Все перечисленные проектные команды регистрируются только в `sandbox`. В других уровнях они отсутствуют. Связанные с ними сетевые debug mutation intents дополнительно отклоняются host, если текущий уровень не разрешает `allows_debug_commands`.
 
 | Команда | Назначение |
 |---|---|
@@ -669,6 +694,9 @@ View показывает спрайт, направление и анимаци
 | `game_turns_disable` | Выключить пошаговый режим; в multiplayer доступно только host. |
 | `game_turns_status` | Показать состояние, раунд, активного игрока и оставшиеся действия. |
 | `game_create <type> <x> <y>` | Создать разрешённую сущность или объект, включая `meteor_scroll`, в клетке. |
+| `game_create_full <type>` | Заполнить доступные клетки разрешённым тестовым типом. |
+| `game_clear_full [type]` | Удалить созданные тестовые сущности и объекты выбранного типа или всех типов. |
+| `game_character_kill` | Убить и немедленно возродить локального персонажа для проверки lifecycle. |
 | `game_inventory_add <item_id> <amount>` | Добавить обычный предмет или свиток, включая `meteor_scroll`, в соответствующий контейнер локального игрока. |
 | `game_camera_mode_follow` | Камера плавно следует за локальным персонажем. |
 | `game_camera_mode_free` | Камера двигается при приближении курсора к краям экрана. |
@@ -694,7 +722,7 @@ View показывает спрайт, направление и анимаци
 ## 19. Рекомендуемый порядок знакомства с кодом
 
 1. Открыть `project.godot` и увидеть main scene, autoload и Input Map.
-2. Посмотреть дерево `full_world.tscn`, не углубляясь в большие данные TileMap.
+2. Посмотреть дерево тестовой сцены `sandbox.tscn`, не углубляясь в большие данные TileMap.
 3. Прочитать `world_level.gd`, `match_controller.gd` и `world_runtime.gd`.
 4. По очереди изучить `WorldGrid`, `WorldRegistry`, `WorldPlayers`, `WorldCombat` и `WorldTurns`.
 5. Пройти цепочку `CharacterModel → PlayerCharacter → Entity → WorldRuntime`.
@@ -703,3 +731,31 @@ View показывает спрайт, направление и анимаци
 8. В конце посмотреть views, HUD, camera, grid visualization и menu UI: они проще, когда понятен домен.
 
 Такой порядок движется от владельцев жизненного цикла и данных к деталям поведения и помогает не принять конкретную сцену уровня за архитектурный центр всего приложения.
+
+## 20. Сетевой протокол версии 2
+
+Текущая сборка использует `NetworkProtocol.PROTOCOL_VERSION = 2`. Версия записывается в данные lobby, проверяется в `prepare_match`, transport identity handshake и action snapshot. Lobby другой версии отфильтровывается при поиске, а прямое подключение завершается с безопасной причиной `protocol_mismatch` до загрузки уровня. Совместимость со сборками protocol v1 не поддерживается.
+
+### Ограниченная доставка и resync
+
+Host присваивает каждому action монотонный `sequence_id`. Клиент хранит не более 64 будущих sequence buckets, не более 32 профильных сообщений на sequence и не более 256 отложенных профильных сообщений всего. Пакеты ниже `next_remote_sequence_id` сразу отбрасываются; пакет дальше окна 64 запускает синхронизацию вместо роста памяти.
+
+Пропущенный lifecycle или профильный payload ожидается не более 2 секунд, terminal `completed/cancelled` — не более 5 секунд. Initial snapshot повторно запрашивается каждые 500 мс и должен прийти за 8 секунд. Runtime resync ждёт безопасную action boundary до 35 секунд. На один обнаруженный разрыв выполняется один ограниченный цикл resync; при неустранимой ошибке выходит только проблемный клиент, а host продолжает матч.
+
+Snapshot создаётся host только между actions и содержит frozen roster hash, action boundary, entity cells/vitality, объекты, inventories с revisions, turn state, spell usage, dynamic spawns, removals и AI state. Он ограничен 512 KiB, делится максимум на 16 chunks по 48 KiB и применяется только после полной сборки и проверки SHA-256. Реестр клеток изменяется через atomic batch; конфликт не должен оставлять частично применённую раскладку.
+
+### Disconnect policy
+
+Отключение клиента не меняет frozen roster. Его персонаж остаётся видимым, зарегистрированным, занимает клетку и может получать damage, но становится инертным и не получает управление. Ещё не начатые действия отменяются с `actor_disconnected`, начатое действие доходит до единственного authoritative terminal, а последующие ходы игрока пропускаются. Late join и reconnect по-прежнему запрещены.
+
+### Транзакции и асинхронные callbacks
+
+Inventory intents передают `expected_inventory_revision`. Host проверяет revision при приёме и непосредственно перед выполнением; успешная операция увеличивает её ровно один раз. Add/move/delete/use формируют mutation plan, а ошибка восстанавливает исходный inventory. Item use откатывает также изменяемое effect state. При `stale_inventory` владелец получает свежий authoritative snapshot.
+
+Meteor использует уникальный `cast_id`: отмена до impact освобождает reservation и spell use, а произошедший impact наносит damage ровно один раз и не откатывается из-за таймаута анимации. Каждый мировой ход получает `world_turn_generation`; запоздалый NPC callback другой generation игнорируется. Watchdog одного NPC равен 8 секундам, всего world turn — 32 секундам, `BLOCKING_EVENT` — 10 секундам.
+
+### Лимиты payload и replication cache
+
+Строковые ID и display name ограничены 64 символами, roster — четырьмя участниками, обычный intent — 8 KiB, world records — 512 записями. Входящие данные проверяются по типу, диапазону, `match_id`, размеру и verified sender до передачи World-сервису. По сети отправляются только причины из whitelist; локальные ошибки и пути остаются в диагностике.
+
+`NetworkReplicationStore` хранит состояние в keyed dictionaries и заменяет запись того же ID без роста массива. Removal удаляет связанные spawn/object/AI/vitality records. Store и все sequence/snapshot/request caches очищаются при cancel, match end, host loss и смене `match_id`. Для наблюдения доступны только агрегированные локальные счётчики; логирование каждого packet/frame запрещено.

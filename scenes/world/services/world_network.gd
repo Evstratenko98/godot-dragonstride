@@ -10,6 +10,7 @@ var pending_combat_messages: Dictionary[int, Array] = {}
 var pending_entity_messages: Dictionary[int, Array] = {}
 var pending_npc_action_messages: Dictionary[int, Array] = {}
 var pending_local_move_request_id: int = 0
+var pending_local_move_sequence_id: int = 0
 
 
 func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void:
@@ -18,19 +19,22 @@ func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void
 
 
 func connect_signals() -> void:
+	if not GameSession.session_cleared.is_connected(_on_session_cleared):
+		GameSession.session_cleared.connect(_on_session_cleared)
 	if runtime.action_stream != null and not runtime.action_stream.action_started.is_connected(_on_stream_action_started):
 		runtime.action_stream.action_started.connect(_on_stream_action_started)
 	if runtime.action_stream != null and not runtime.action_stream.action_completed.is_connected(_on_stream_action_finished):
 		runtime.action_stream.action_completed.connect(_on_stream_action_finished)
 	if runtime.action_stream != null and not runtime.action_stream.action_cancelled.is_connected(_on_stream_action_cancelled):
 		runtime.action_stream.action_cancelled.connect(_on_stream_action_cancelled)
+	if runtime.action_stream != null and not runtime.action_stream.remote_snapshot_committed.is_connected(_on_remote_snapshot_committed):
+		runtime.action_stream.remote_snapshot_committed.connect(_on_remote_snapshot_committed)
+	if not NetworkManager.actions.action_accepted.is_connected(_on_action_accepted):
+		NetworkManager.actions.action_accepted.connect(_on_action_accepted)
 	if not NetworkManager.actions.action_rejected.is_connected(_on_action_rejected):
 		NetworkManager.actions.action_rejected.connect(_on_action_rejected)
 	if not NetworkManager.peers.peer_map_updated.is_connected(_on_peer_map_updated):
 		NetworkManager.peers.peer_map_updated.connect(_on_peer_map_updated)
-
-	if not NetworkManager.connection.peer_connected.is_connected(_on_peer_connected):
-		NetworkManager.connection.peer_connected.connect(_on_peer_connected)
 
 	if not NetworkManager.combat.attack_requested.is_connected(_on_attack_requested):
 		NetworkManager.combat.attack_requested.connect(_on_attack_requested)
@@ -94,19 +98,22 @@ func connect_signals() -> void:
 
 
 func disconnect_signals() -> void:
+	if GameSession.session_cleared.is_connected(_on_session_cleared):
+		GameSession.session_cleared.disconnect(_on_session_cleared)
 	if runtime.action_stream != null and runtime.action_stream.action_started.is_connected(_on_stream_action_started):
 		runtime.action_stream.action_started.disconnect(_on_stream_action_started)
 	if runtime.action_stream != null and runtime.action_stream.action_completed.is_connected(_on_stream_action_finished):
 		runtime.action_stream.action_completed.disconnect(_on_stream_action_finished)
 	if runtime.action_stream != null and runtime.action_stream.action_cancelled.is_connected(_on_stream_action_cancelled):
 		runtime.action_stream.action_cancelled.disconnect(_on_stream_action_cancelled)
+	if runtime.action_stream != null and runtime.action_stream.remote_snapshot_committed.is_connected(_on_remote_snapshot_committed):
+		runtime.action_stream.remote_snapshot_committed.disconnect(_on_remote_snapshot_committed)
+	if NetworkManager.actions.action_accepted.is_connected(_on_action_accepted):
+		NetworkManager.actions.action_accepted.disconnect(_on_action_accepted)
 	if NetworkManager.actions.action_rejected.is_connected(_on_action_rejected):
 		NetworkManager.actions.action_rejected.disconnect(_on_action_rejected)
 	if NetworkManager.peers.peer_map_updated.is_connected(_on_peer_map_updated):
 		NetworkManager.peers.peer_map_updated.disconnect(_on_peer_map_updated)
-
-	if NetworkManager.connection.peer_connected.is_connected(_on_peer_connected):
-		NetworkManager.connection.peer_connected.disconnect(_on_peer_connected)
 
 	if NetworkManager.combat.attack_requested.is_connected(_on_attack_requested):
 		NetworkManager.combat.attack_requested.disconnect(_on_attack_requested)
@@ -255,20 +262,21 @@ func request_character_move(player: PlayerCharacter, direction: Vector2i) -> boo
 	if not NetworkManager.connection.is_ready():
 		return false
 	pending_local_move_request_id = request_id
-	NetworkManager.character.request_entity_move(direction, request_id)
+	pending_local_move_sequence_id = 0
+	NetworkManager.character.request_entity_move(direction, GameSession.get_match_id(), runtime.get_turn_revision(), request_id)
 	return true
 
 
 func broadcast_character_action_payload(action: WorldActionRecord) -> void:
-	NetworkManager.character.broadcast_action_payload(action.sequence_id, action.payload)
+	NetworkManager.character.broadcast_action_payload(action.match_id, action.sequence_id, action.payload)
 
 
 func broadcast_combat_action_payload(action: WorldActionRecord) -> void:
-	NetworkManager.combat.broadcast_action_payload(action.sequence_id, action.payload)
+	NetworkManager.combat.broadcast_action_payload(action.match_id, action.sequence_id, action.payload)
 
 
 func broadcast_inventory_action_payload(action: WorldActionRecord) -> void:
-	NetworkManager.inventory.broadcast_action_payload(action.sequence_id, action.payload)
+	NetworkManager.inventory.broadcast_action_payload(action.match_id, action.sequence_id, action.payload)
 
 
 func request_character_interaction(interactor: PlayerCharacter, target_cell: Vector2i) -> void:
@@ -286,7 +294,7 @@ func request_character_interaction(interactor: PlayerCharacter, target_cell: Vec
 		)
 		return
 
-	NetworkManager.character.request_interaction(target_cell, request_id)
+	NetworkManager.character.request_interaction(target_cell, GameSession.get_match_id(), runtime.get_turn_revision(), request_id)
 
 
 func request_character_attack(attacker: PlayerCharacter, target_cell: Vector2i) -> bool:
@@ -313,7 +321,7 @@ func request_character_attack(attacker: PlayerCharacter, target_cell: Vector2i) 
 	if not NetworkManager.connection.is_ready():
 		return false
 
-	NetworkManager.combat.request_attack(target_cell, request_id)
+	NetworkManager.combat.request_attack(target_cell, GameSession.get_match_id(), runtime.get_turn_revision(), request_id)
 	return true
 
 
@@ -322,17 +330,18 @@ func request_inventory_add(item_id: String, amount: int) -> void:
 	if local_player == null:
 		return
 	var request_id: int = runtime.create_action_request_id()
+	var inventory_revision: int = local_player.character_inventory.revision
 	if GameSession.is_singleplayer():
 		runtime.enqueue_player_action(
 			WorldActionRecord.ActionType.INVENTORY_ADD,
 			local_player,
-			{"item_id": item_id, "amount": amount},
+			{"item_id": item_id, "amount": amount, "expected_inventory_revision": inventory_revision},
 			request_id,
 			0
 		)
 		return
 
-	NetworkManager.inventory.request_inventory_add(item_id, amount, request_id)
+	NetworkManager.inventory.request_inventory_add(item_id, amount, inventory_revision, GameSession.get_match_id(), runtime.get_turn_revision(), request_id)
 
 
 func request_inventory_move(inventory_kind: String, source_slot_index: int, target_slot_index: int) -> void:
@@ -340,6 +349,7 @@ func request_inventory_move(inventory_kind: String, source_slot_index: int, targ
 	if local_player == null:
 		return
 	var request_id: int = runtime.create_action_request_id()
+	var inventory_revision: int = local_player.character_inventory.revision
 	if GameSession.is_singleplayer():
 		runtime.enqueue_player_action(
 			WorldActionRecord.ActionType.INVENTORY_MOVE,
@@ -348,13 +358,14 @@ func request_inventory_move(inventory_kind: String, source_slot_index: int, targ
 				"inventory_kind": inventory_kind,
 				"source_slot_index": source_slot_index,
 				"target_slot_index": target_slot_index,
+				"expected_inventory_revision": inventory_revision,
 			},
 			request_id,
 			0
 		)
 		return
 
-	NetworkManager.inventory.request_inventory_move(inventory_kind, source_slot_index, target_slot_index, request_id)
+	NetworkManager.inventory.request_inventory_move(inventory_kind, source_slot_index, target_slot_index, inventory_revision, GameSession.get_match_id(), runtime.get_turn_revision(), request_id)
 
 
 func request_inventory_delete(inventory_kind: String, slot_index: int) -> void:
@@ -362,17 +373,18 @@ func request_inventory_delete(inventory_kind: String, slot_index: int) -> void:
 	if local_player == null:
 		return
 	var request_id: int = runtime.create_action_request_id()
+	var inventory_revision: int = local_player.character_inventory.revision
 	if GameSession.is_singleplayer():
 		runtime.enqueue_player_action(
 			WorldActionRecord.ActionType.INVENTORY_DELETE,
 			local_player,
-			{"inventory_kind": inventory_kind, "slot_index": slot_index},
+			{"inventory_kind": inventory_kind, "slot_index": slot_index, "expected_inventory_revision": inventory_revision},
 			request_id,
 			0
 		)
 		return
 
-	NetworkManager.inventory.request_inventory_delete(inventory_kind, slot_index, request_id)
+	NetworkManager.inventory.request_inventory_delete(inventory_kind, slot_index, inventory_revision, GameSession.get_match_id(), runtime.get_turn_revision(), request_id)
 
 
 func request_inventory_use(slot_index: int) -> void:
@@ -380,17 +392,18 @@ func request_inventory_use(slot_index: int) -> void:
 	if local_player == null:
 		return
 	var request_id: int = runtime.create_action_request_id()
+	var inventory_revision: int = local_player.character_inventory.revision
 	if GameSession.is_singleplayer():
 		runtime.enqueue_player_action(
 			WorldActionRecord.ActionType.INVENTORY_USE,
 			local_player,
-			{"slot_index": slot_index},
+			{"slot_index": slot_index, "expected_inventory_revision": inventory_revision},
 			request_id,
 			0
 		)
 		return
 
-	NetworkManager.inventory.request_inventory_use(slot_index, request_id)
+	NetworkManager.inventory.request_inventory_use(slot_index, inventory_revision, GameSession.get_match_id(), runtime.get_turn_revision(), request_id)
 
 
 func broadcast_object_state(target_object: Node) -> void:
@@ -448,17 +461,7 @@ func _on_peer_map_updated() -> void:
 		_send_entity_vitality_states_to_mapped_peers()
 
 
-func _on_peer_connected(_peer_id: int) -> void:
-	if GameSession.is_host():
-		runtime.request_action_stream_snapshot(_peer_id)
-		NetworkManager.world.send_world_spawns_to_peer(_peer_id)
-		NetworkManager.world.send_world_removals_to_peer(_peer_id)
-		NetworkManager.entity.send_entity_ai_states_to_peer(_peer_id)
-		_send_entity_vitality_states_to_peer(_peer_id)
-		broadcast_all_object_states()
-
-
-func _on_attack_requested(target_cell: Vector2i, request_id: int, requester_peer_id: int) -> void:
+func _on_attack_requested(target_cell: Vector2i, match_id: String, turn_revision: int, request_id: int, requester_peer_id: int) -> void:
 	if not GameSession.is_host():
 		return
 
@@ -470,16 +473,18 @@ func _on_attack_requested(target_cell: Vector2i, request_id: int, requester_peer
 		player,
 		{"target_cell": target_cell},
 		request_id,
-		requester_peer_id
+		requester_peer_id,
+		turn_revision,
+		match_id
 	)
 
 
-func _on_action_profile_payload_received(sequence_id: int, payload: Dictionary) -> void:
-	if not GameSession.is_host():
+func _on_action_profile_payload_received(match_id: String, sequence_id: int, payload: Dictionary) -> void:
+	if not GameSession.is_host() and match_id == GameSession.get_match_id():
 		runtime.receive_action_profile_payload(sequence_id, payload)
 
 
-func _on_interaction_requested(target_cell: Vector2i, request_id: int, requester_peer_id: int) -> void:
+func _on_interaction_requested(target_cell: Vector2i, match_id: String, turn_revision: int, request_id: int, requester_peer_id: int) -> void:
 	if not GameSession.is_host():
 		return
 
@@ -491,7 +496,9 @@ func _on_interaction_requested(target_cell: Vector2i, request_id: int, requester
 		player,
 		{"target_cell": target_cell},
 		request_id,
-		requester_peer_id
+		requester_peer_id,
+		turn_revision,
+		match_id
 	)
 
 
@@ -528,6 +535,8 @@ func _apply_npc_move_message(entity_id: String, from_cell: Vector2i, target_cell
 func _on_entity_move_requested(
 	requester_steam_id: int,
 	direction: Vector2i,
+	match_id: String,
+	turn_revision: int,
 	request_id: int
 ) -> void:
 	var player: PlayerCharacter = _get_requested_player(requester_steam_id)
@@ -539,7 +548,9 @@ func _on_entity_move_requested(
 		player,
 		{"direction": direction},
 		request_id,
-		peer_id
+		peer_id,
+		turn_revision,
+		match_id
 	)
 
 
@@ -722,10 +733,11 @@ func _on_entity_respawn_received(sequence_id: int, entity_id: String, cell: Vect
 func _apply_respawn_message(entity_id: String, cell: Vector2i, new_health: int) -> void:
 	var entity: Entity = runtime.get_entity_by_id(entity_id) as Entity
 	if entity == null:
+		entity = runtime.get_player_by_entity_id(entity_id)
+	if entity == null:
 		return
 
-	entity.spawn_cell = cell
-	entity.respawn()
+	entity.respawn_at_cell(cell)
 	entity.set_health(new_health)
 
 
@@ -744,8 +756,8 @@ func _apply_removed_message(entity_id: String) -> void:
 	entity.queue_free()
 
 
-func _on_inventory_add_requested(item_id: String, amount: int, request_id: int, requester_peer_id: int) -> void:
-	if not GameSession.is_host():
+func _on_inventory_add_requested(item_id: String, amount: int, expected_inventory_revision: int, match_id: String, turn_revision: int, request_id: int, requester_peer_id: int) -> void:
+	if not GameSession.is_host() or level == null or not level.allows_debug_commands():
 		return
 
 	var player: PlayerCharacter = _get_requesting_player(requester_peer_id)
@@ -754,9 +766,11 @@ func _on_inventory_add_requested(item_id: String, amount: int, request_id: int, 
 	runtime.enqueue_player_action(
 		WorldActionRecord.ActionType.INVENTORY_ADD,
 		player,
-		{"item_id": item_id, "amount": amount},
+		{"item_id": item_id, "amount": amount, "expected_inventory_revision": expected_inventory_revision},
 		request_id,
-		requester_peer_id
+		requester_peer_id,
+		turn_revision,
+		match_id
 	)
 
 
@@ -764,6 +778,9 @@ func _on_inventory_move_requested(
 	inventory_kind: String,
 	source_slot_index: int,
 	target_slot_index: int,
+	expected_inventory_revision: int,
+	match_id: String,
+	turn_revision: int,
 	request_id: int,
 	requester_peer_id: int
 ) -> void:
@@ -780,15 +797,21 @@ func _on_inventory_move_requested(
 			"inventory_kind": inventory_kind,
 			"source_slot_index": source_slot_index,
 			"target_slot_index": target_slot_index,
+			"expected_inventory_revision": expected_inventory_revision,
 		},
 		request_id,
-		requester_peer_id
+		requester_peer_id,
+		turn_revision,
+		match_id
 	)
 
 
 func _on_inventory_delete_requested(
 	inventory_kind: String,
 	slot_index: int,
+	expected_inventory_revision: int,
+	match_id: String,
+	turn_revision: int,
 	request_id: int,
 	requester_peer_id: int
 ) -> void:
@@ -801,13 +824,15 @@ func _on_inventory_delete_requested(
 	runtime.enqueue_player_action(
 		WorldActionRecord.ActionType.INVENTORY_DELETE,
 		player,
-		{"inventory_kind": inventory_kind, "slot_index": slot_index},
+		{"inventory_kind": inventory_kind, "slot_index": slot_index, "expected_inventory_revision": expected_inventory_revision},
 		request_id,
-		requester_peer_id
+		requester_peer_id,
+		turn_revision,
+		match_id
 	)
 
 
-func _on_inventory_use_requested(slot_index: int, request_id: int, requester_peer_id: int) -> void:
+func _on_inventory_use_requested(slot_index: int, expected_inventory_revision: int, match_id: String, turn_revision: int, request_id: int, requester_peer_id: int) -> void:
 	if not GameSession.is_host():
 		return
 
@@ -817,9 +842,11 @@ func _on_inventory_use_requested(slot_index: int, request_id: int, requester_pee
 	runtime.enqueue_player_action(
 		WorldActionRecord.ActionType.INVENTORY_USE,
 		player,
-		{"slot_index": slot_index},
+		{"slot_index": slot_index, "expected_inventory_revision": expected_inventory_revision},
 		request_id,
-		requester_peer_id
+		requester_peer_id,
+		turn_revision,
+		match_id
 	)
 
 
@@ -827,6 +854,9 @@ func _on_inventory_snapshot_received(snapshot: Dictionary, sequence_id: int) -> 
 	if GameSession.is_host():
 		return
 	if sequence_id > 0 and runtime.get_current_action_sequence_id() != sequence_id:
+		if not _can_buffer_profile_sequence(sequence_id) or pending_inventory_snapshots.size() >= NetworkProtocol.MAX_BUFFERED_SEQUENCES:
+			_request_profile_resync()
+			return
 		pending_inventory_snapshots[sequence_id] = snapshot.duplicate(true)
 		return
 	_apply_inventory_snapshot(snapshot)
@@ -891,22 +921,55 @@ func _on_stream_action_started(action: WorldActionRecord) -> void:
 func _on_stream_action_finished(action: WorldActionRecord) -> void:
 	if action != null and action.action_type == WorldActionRecord.ActionType.MOVE:
 		if action.request_id == pending_local_move_request_id:
-			pending_local_move_request_id = 0
+			_clear_pending_local_move_request()
 
 
-func _on_stream_action_cancelled(action: WorldActionRecord, _reason_code: String) -> void:
+func _on_stream_action_cancelled(action: WorldActionRecord, reason_code: String) -> void:
 	_on_stream_action_finished(action)
+	if GameSession.is_host() and action != null and reason_code == "stale_inventory":
+		var player: PlayerCharacter = runtime.get_entity_by_id(action.actor_entity_id) as PlayerCharacter
+		var peer_id: int = NetworkManager.peers.get_peer_id_for_steam_id(action.requester_steam_id)
+		_send_inventory_snapshot(player, peer_id)
+	if action != null and action.requester_steam_id == GameSession.local_steam_id:
+		runtime.notify_local_action_rejected(reason_code)
 
 
-func _on_action_rejected(request_id: int, _reason_code: String) -> void:
+func _on_action_rejected(request_id: int, reason_code: String) -> void:
 	if request_id == pending_local_move_request_id:
-		pending_local_move_request_id = 0
+		_clear_pending_local_move_request()
+	runtime.notify_local_action_rejected(reason_code)
+
+
+func _on_action_accepted(request_id: int, sequence_id: int) -> void:
+	if request_id == pending_local_move_request_id:
+		pending_local_move_sequence_id = sequence_id
+
+
+func _on_remote_snapshot_committed(boundary_sequence_id: int) -> void:
+	if (
+		pending_local_move_request_id > 0
+		and pending_local_move_sequence_id > 0
+		and pending_local_move_sequence_id < boundary_sequence_id
+	):
+		_clear_pending_local_move_request()
+
+
+func _clear_pending_local_move_request() -> void:
+	pending_local_move_request_id = 0
+	pending_local_move_sequence_id = 0
 
 
 func _buffer_combat_message(sequence_id: int, message: Dictionary) -> bool:
 	if sequence_id <= 0 or runtime.get_current_action_sequence_id() == sequence_id:
 		return false
+	if not _can_buffer_profile_sequence(sequence_id):
+		if sequence_id >= runtime.get_expected_remote_action_sequence_id():
+			_request_profile_resync()
+		return true
 	var messages: Array = pending_combat_messages.get(sequence_id, []) as Array
+	if messages.size() >= NetworkProtocol.MAX_MESSAGES_PER_SEQUENCE or _get_buffered_message_count() >= NetworkProtocol.MAX_BUFFERED_MESSAGES:
+		_request_profile_resync()
+		return true
 	messages.append(message)
 	pending_combat_messages[sequence_id] = messages
 	return true
@@ -936,7 +999,14 @@ func _apply_buffered_combat_message(message: Dictionary) -> void:
 func _buffer_entity_message(sequence_id: int, message: Dictionary) -> bool:
 	if sequence_id <= 0 or runtime.get_current_action_sequence_id() == sequence_id:
 		return false
+	if not _can_buffer_profile_sequence(sequence_id):
+		if sequence_id >= runtime.get_expected_remote_action_sequence_id():
+			_request_profile_resync()
+		return true
 	var messages: Array = pending_entity_messages.get(sequence_id, []) as Array
+	if messages.size() >= NetworkProtocol.MAX_MESSAGES_PER_SEQUENCE or _get_buffered_message_count() >= NetworkProtocol.MAX_BUFFERED_MESSAGES:
+		_request_profile_resync()
+		return true
 	messages.append(message)
 	pending_entity_messages[sequence_id] = messages
 	return true
@@ -969,7 +1039,14 @@ func _apply_buffered_entity_message(message: Dictionary) -> void:
 func _buffer_npc_action_message(parent_sequence_id: int, message: Dictionary) -> bool:
 	if parent_sequence_id <= 0 or runtime.get_current_action_sequence_id() == parent_sequence_id:
 		return false
+	if not _can_buffer_profile_sequence(parent_sequence_id):
+		if parent_sequence_id >= runtime.get_expected_remote_action_sequence_id():
+			_request_profile_resync()
+		return true
 	var messages: Array = pending_npc_action_messages.get(parent_sequence_id, []) as Array
+	if messages.size() >= NetworkProtocol.MAX_MESSAGES_PER_SEQUENCE or _get_buffered_message_count() >= NetworkProtocol.MAX_BUFFERED_MESSAGES:
+		_request_profile_resync()
+		return true
 	messages.append(message)
 	pending_npc_action_messages[parent_sequence_id] = messages
 	return true
@@ -998,6 +1075,38 @@ func _send_inventory_snapshots_to_owners() -> void:
 		var peer_id: int = NetworkManager.peers.get_peer_id_for_steam_id(player.steam_id)
 		if peer_id != 0:
 			_send_inventory_snapshot(player, peer_id)
+
+
+func _can_buffer_profile_sequence(sequence_id: int) -> bool:
+	var expected_sequence_id: int = runtime.get_expected_remote_action_sequence_id()
+	return (
+		sequence_id >= expected_sequence_id
+		and sequence_id - expected_sequence_id <= NetworkProtocol.MAX_FUTURE_SEQUENCE_DISTANCE
+	)
+
+
+func _get_buffered_message_count() -> int:
+	var count: int = pending_inventory_snapshots.size()
+	for messages_value: Variant in pending_combat_messages.values():
+		count += (messages_value as Array).size()
+	for messages_value: Variant in pending_entity_messages.values():
+		count += (messages_value as Array).size()
+	for messages_value: Variant in pending_npc_action_messages.values():
+		count += (messages_value as Array).size()
+	return count
+
+
+func _request_profile_resync() -> void:
+	if runtime.action_stream != null:
+		runtime.action_stream.request_runtime_resync(WorldActionStream.REJECTION_SEQUENCE_GAP)
+
+
+func _on_session_cleared() -> void:
+	pending_inventory_snapshots.clear()
+	pending_combat_messages.clear()
+	pending_entity_messages.clear()
+	pending_npc_action_messages.clear()
+	_clear_pending_local_move_request()
 
 
 func _send_entity_vitality_states_to_peer(peer_id: int) -> void:

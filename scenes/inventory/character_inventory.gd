@@ -3,6 +3,19 @@ extends Node
 
 signal inventory_changed()
 
+enum MutationResult {
+	NONE,
+	UNKNOWN_ITEM,
+	INVALID_KIND,
+	INVALID_SLOT,
+	EMPTY_SLOT,
+	INSUFFICIENT_CAPACITY,
+	STALE_REVISION,
+	EFFECT_UNAVAILABLE,
+	EFFECT_FAILED,
+	MUTATION_FAILED,
+}
+
 const ITEM_SLOT_COUNT := 5
 const SPELL_SLOT_COUNT := 5
 const DEFAULT_MAX_STACK_SIZE := 10
@@ -24,6 +37,7 @@ const KNOWN_ITEM_IDS: PackedStringArray = [
 
 var revision: int = 0
 var owner_entity_id: String = ""
+var last_mutation_result: MutationResult = MutationResult.NONE
 
 
 func configure_owner(new_owner_entity_id: String) -> void:
@@ -44,15 +58,19 @@ func get_inventory_kind_for_item_id(item_id: String) -> String:
 
 func try_add_item(item_id: String, amount: int) -> bool:
 	if not has_item_id(item_id) or amount <= 0:
+		last_mutation_result = MutationResult.UNKNOWN_ITEM
 		return false
 
 	var inventory_kind: String = get_inventory_kind_for_item_id(item_id)
 	var target_inventory: Inventory = _get_inventory(inventory_kind)
 	var target_grid: GridConstraint = _get_grid_constraint(inventory_kind)
 	if target_inventory == null or target_grid == null:
+		last_mutation_result = MutationResult.INVALID_KIND
 		return false
 	if get_available_capacity(item_id) < amount:
+		last_mutation_result = MutationResult.INSUFFICIENT_CAPACITY
 		return false
+	var rollback_snapshot: Dictionary = create_snapshot()
 
 	var remaining_amount: int = amount
 	for target_item_variant: Variant in target_inventory.get_items_with_prototype_id(item_id):
@@ -70,29 +88,40 @@ func try_add_item(item_id: String, amount: int) -> bool:
 	while remaining_amount > 0:
 		var free_slot_index: int = _find_free_slot_index(inventory_kind)
 		if free_slot_index < 0:
+			restore_snapshot(rollback_snapshot)
+			last_mutation_result = MutationResult.MUTATION_FAILED
 			return false
 		var new_stack: InventoryItem = InventoryItem.new(target_inventory.protoset, item_id)
 		var stack_amount: int = mini(new_stack.get_max_stack_size(), remaining_amount)
 		if not new_stack.set_stack_size(stack_amount):
+			restore_snapshot(rollback_snapshot)
+			last_mutation_result = MutationResult.MUTATION_FAILED
 			return false
 		if not target_grid.add_item_at(new_stack, Vector2i(free_slot_index, 0)):
+			restore_snapshot(rollback_snapshot)
+			last_mutation_result = MutationResult.MUTATION_FAILED
 			return false
 		remaining_amount -= stack_amount
 
 	_commit_change()
+	last_mutation_result = MutationResult.NONE
 	return true
 
 
 func try_move_stack(inventory_kind: String, source_slot_index: int, target_slot_index: int) -> bool:
 	if not _is_valid_slot_index(inventory_kind, source_slot_index):
+		last_mutation_result = MutationResult.INVALID_SLOT
 		return false
 	if not _is_valid_slot_index(inventory_kind, target_slot_index):
+		last_mutation_result = MutationResult.INVALID_SLOT
 		return false
 	if source_slot_index == target_slot_index:
 		return false
+	var rollback_snapshot: Dictionary = create_snapshot()
 
 	var source_item: InventoryItem = get_item_at_slot(inventory_kind, source_slot_index)
 	if source_item == null:
+		last_mutation_result = MutationResult.EMPTY_SLOT
 		return false
 
 	var target_item: InventoryItem = get_item_at_slot(inventory_kind, target_slot_index)
@@ -106,36 +135,45 @@ func try_move_stack(inventory_kind: String, source_slot_index: int, target_slot_
 		was_changed = InventoryItem.swap(source_item, target_item)
 
 	if not was_changed:
+		restore_snapshot(rollback_snapshot)
+		last_mutation_result = MutationResult.MUTATION_FAILED
 		return false
 
 	_commit_change()
+	last_mutation_result = MutationResult.NONE
 	return true
 
 
 func try_delete_stack(inventory_kind: String, slot_index: int) -> bool:
 	if not _is_valid_slot_index(inventory_kind, slot_index):
+		last_mutation_result = MutationResult.INVALID_SLOT
 		return false
 
 	var target_item: InventoryItem = get_item_at_slot(inventory_kind, slot_index)
 	var target_inventory: Inventory = _get_inventory(inventory_kind)
 	if target_item == null or target_inventory == null or not target_inventory.remove_item(target_item):
+		last_mutation_result = MutationResult.EMPTY_SLOT if target_item == null else MutationResult.MUTATION_FAILED
 		return false
 
 	_commit_change()
+	last_mutation_result = MutationResult.NONE
 	return true
 
 
 func try_consume_one(inventory_kind: String, slot_index: int) -> bool:
 	if not _is_valid_slot_index(inventory_kind, slot_index):
+		last_mutation_result = MutationResult.INVALID_SLOT
 		return false
 
 	var target_item: InventoryItem = get_item_at_slot(inventory_kind, slot_index)
 	var target_inventory: Inventory = _get_inventory(inventory_kind)
 	if target_item == null or target_inventory == null:
+		last_mutation_result = MutationResult.EMPTY_SLOT
 		return false
 
 	var stack_size: int = target_item.get_stack_size()
 	if stack_size <= 0:
+		last_mutation_result = MutationResult.EMPTY_SLOT
 		return false
 	if stack_size == 1:
 		if not target_inventory.remove_item(target_item):
@@ -144,6 +182,7 @@ func try_consume_one(inventory_kind: String, slot_index: int) -> bool:
 		return false
 
 	_commit_change()
+	last_mutation_result = MutationResult.NONE
 	return true
 
 
@@ -241,23 +280,77 @@ func apply_snapshot(snapshot: Dictionary) -> bool:
 	if not _is_valid_snapshot(spell_slot_records, INVENTORY_KIND_SPELL):
 		return false
 
-	item_inventory.clear()
-	spell_inventory.clear()
-	if not _apply_slot_records(item_slot_records, INVENTORY_KIND_ITEM):
-		_clear_inventories()
-		return false
-	if not _apply_slot_records(spell_slot_records, INVENTORY_KIND_SPELL):
-		_clear_inventories()
-		return false
+	return _replace_with_snapshot(snapshot, true)
 
-	revision = snapshot_revision
-	inventory_changed.emit()
-	return true
+
+func restore_snapshot(snapshot: Dictionary) -> bool:
+	var item_slot_records: Array = snapshot.get("item_slots", []) as Array
+	var spell_slot_records: Array = snapshot.get("spell_slots", []) as Array
+	if not _is_valid_snapshot(item_slot_records, INVENTORY_KIND_ITEM):
+		return false
+	if not _is_valid_snapshot(spell_slot_records, INVENTORY_KIND_SPELL):
+		return false
+	return _replace_with_snapshot(snapshot, true)
+
+
+func apply_authoritative_snapshot(snapshot: Dictionary) -> bool:
+	if not is_valid_authoritative_snapshot(snapshot, owner_entity_id):
+		return false
+	var item_slot_records: Array = snapshot.get("item_slots", []) as Array
+	var spell_slot_records: Array = snapshot.get("spell_slots", []) as Array
+	return _replace_with_snapshot(snapshot, true)
+
+
+func is_valid_authoritative_snapshot(snapshot: Dictionary, expected_entity_id: String) -> bool:
+	var item_slots_value: Variant = snapshot.get("item_slots")
+	var spell_slots_value: Variant = snapshot.get("spell_slots")
+	if (
+		str(snapshot.get("entity_id", "")) != expected_entity_id
+		or int(snapshot.get("revision", -1)) < 0
+		or not (item_slots_value is Array)
+		or not (spell_slots_value is Array)
+		or (item_slots_value as Array).size() > ITEM_SLOT_COUNT
+		or (spell_slots_value as Array).size() > SPELL_SLOT_COUNT
+		or not NetworkProtocol.is_valid_intent_payload(snapshot)
+	):
+		return false
+	return (
+		_is_valid_snapshot(item_slots_value as Array, INVENTORY_KIND_ITEM)
+		and _is_valid_snapshot(spell_slots_value as Array, INVENTORY_KIND_SPELL)
+	)
+
+
+func matches_revision(expected_revision: int) -> bool:
+	return expected_revision >= 0 and revision == expected_revision
+
+
+func get_last_mutation_result() -> MutationResult:
+	return last_mutation_result
 
 
 func _commit_change() -> void:
 	revision += 1
 	inventory_changed.emit()
+
+
+func _replace_with_snapshot(snapshot: Dictionary, should_emit: bool) -> bool:
+	var previous_snapshot: Dictionary = create_snapshot()
+	var item_slot_records: Array = snapshot.get("item_slots", []) as Array
+	var spell_slot_records: Array = snapshot.get("spell_slots", []) as Array
+	_clear_inventories()
+	if (
+		not _apply_slot_records(item_slot_records, INVENTORY_KIND_ITEM)
+		or not _apply_slot_records(spell_slot_records, INVENTORY_KIND_SPELL)
+	):
+		_clear_inventories()
+		_apply_slot_records(previous_snapshot.get("item_slots", []) as Array, INVENTORY_KIND_ITEM)
+		_apply_slot_records(previous_snapshot.get("spell_slots", []) as Array, INVENTORY_KIND_SPELL)
+		revision = int(previous_snapshot.get("revision", revision))
+		return false
+	revision = int(snapshot.get("revision", revision))
+	if should_emit:
+		inventory_changed.emit()
+	return true
 
 
 func _create_slot_records(inventory_kind: String) -> Array[Dictionary]:

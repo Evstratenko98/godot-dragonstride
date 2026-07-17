@@ -3,6 +3,8 @@ extends "res://scenes/entities/entity/entity.gd"
 
 @onready var view: NonPlayerView = get_node_or_null("View") as NonPlayerView
 
+var active_behavior_generation: int = 0
+
 
 func _ready() -> void:
 	super._ready()
@@ -47,6 +49,14 @@ func spawn_death_drop(_death_cell: Vector2i) -> bool:
 
 func behavior() -> void:
 	_finish_behavior()
+
+
+func begin_behavior_generation(generation: int) -> void:
+	active_behavior_generation = generation
+
+
+func get_behavior_generation() -> int:
+	return active_behavior_generation
 
 
 func consider_character_triggers(_characters: Array[Node]) -> void:
@@ -97,6 +107,7 @@ func cancel_behavior() -> void:
 		force_cancel_movement(current_cell)
 	if is_attacking:
 		force_finish_attack_presentation()
+	active_behavior_generation = 0
 
 
 func can_behavior_move(direction: Vector2i) -> bool:
@@ -131,4 +142,4 @@ func _on_attack_presentation_forced() -> void:
 
 func _finish_behavior() -> void:
 	if runtime != null:
-		runtime.notify_entity_action_finished_in_turn(self)
+		runtime.notify_entity_action_finished_in_turn(self, active_behavior_generation)

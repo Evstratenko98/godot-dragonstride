@@ -10,20 +10,18 @@ signal lobby_left()
 
 signal lobby_list_received(lobbies: Array)
 signal lobby_members_updated(members: Array)
-signal lobby_game_start_requested()
+signal lobby_control_message_received(command: String, payload: Dictionary)
 
 const LOBBY_GAME_KEY := "game"
 const LOBBY_GAME_VALUE := "dragonsride"
 const LOBBY_STATUS_KEY := "status"
 const LOBBY_LEVEL_KEY := "level_id"
+const LOBBY_PROTOCOL_KEY := "protocol_version"
 const LOBBY_STATUS_WAITING := "waiting"
+const LOBBY_STATUS_STARTING := "starting"
 const LOBBY_STATUS_IN_GAME := "in_game"
-const LOBBY_MESSAGE_START_GAME := "start_game"
-const LOBBY_MESSAGE_HOST_NETWORK_READY := "host_network_ready"
 
-var is_steam_initialized := false
-var is_starting_game_from_lobby := false
-var is_waiting_for_host_network := false
+var is_steam_initialized: bool = false
 
 var lobby_id: int = 0
 var lobby_members: Array = []
@@ -43,6 +41,7 @@ func _ready() -> void:
 	Steam.lobby_joined.connect(_on_lobby_joined)
 	Steam.lobby_match_list.connect(_on_lobby_match_list)
 	Steam.lobby_message.connect(_on_lobby_message)
+	Steam.lobby_chat_update.connect(_on_lobby_chat_update)
 	Steam.persona_state_change.connect(_on_persona_state_change)
 
 
@@ -75,6 +74,7 @@ func _on_lobby_created(result: int, created_lobby_id: int) -> void:
 	Steam.setLobbyData(lobby_id, LOBBY_GAME_KEY, LOBBY_GAME_VALUE)
 	Steam.setLobbyData(lobby_id, LOBBY_STATUS_KEY, LOBBY_STATUS_WAITING)
 	Steam.setLobbyData(lobby_id, LOBBY_LEVEL_KEY, LevelCatalog.DEFAULT_LEVEL_ID)
+	Steam.setLobbyData(lobby_id, LOBBY_PROTOCOL_KEY, str(NetworkProtocol.PROTOCOL_VERSION))
 	Steam.setLobbyData(lobby_id, "host_id", str(Steam.getSteamID()))
 	Steam.setLobbyJoinable(lobby_id, true)
 
@@ -100,6 +100,12 @@ func request_lobbies() -> void:
 		Steam.LOBBY_COMPARISON_EQUAL
 	)
 
+	Steam.addRequestLobbyListStringFilter(
+		LOBBY_PROTOCOL_KEY,
+		str(NetworkProtocol.PROTOCOL_VERSION),
+		Steam.LOBBY_COMPARISON_EQUAL
+	)
+
 	Steam.addRequestLobbyListDistanceFilter(Steam.LOBBY_DISTANCE_FILTER_WORLDWIDE)
 
 	Steam.requestLobbyList()
@@ -120,6 +126,7 @@ func _on_lobby_match_list(lobbies: Array) -> void:
 
 		var lobby_name := Steam.getLobbyData(found_lobby_id, "name")
 		var lobby_host := Steam.getLobbyData(found_lobby_id, "host_id")
+		var lobby_protocol_version: int = int(Steam.getLobbyData(found_lobby_id, LOBBY_PROTOCOL_KEY))
 		var member_count := Steam.getNumLobbyMembers(found_lobby_id)
 		var max_members := Steam.getLobbyMemberLimit(found_lobby_id)
 
@@ -129,6 +136,7 @@ func _on_lobby_match_list(lobbies: Array) -> void:
 			"game": lobby_game,
 			"status": lobby_status,
 			"host_id": lobby_host,
+			"protocol_version": lobby_protocol_version,
 			"member_count": member_count,
 			"max_members": max_members
 		}
@@ -145,6 +153,9 @@ func join_lobby(selected_lobby_id: int) -> void:
 
 	if lobby_id != 0:
 		print("Already in lobby: ", lobby_id)
+		return
+	if int(Steam.getLobbyData(selected_lobby_id, LOBBY_PROTOCOL_KEY)) != NetworkProtocol.PROTOCOL_VERSION:
+		lobby_join_failed.emit(-1)
 		return
 
 	Steam.joinLobby(selected_lobby_id)
@@ -176,8 +187,6 @@ func leave_lobby() -> void:
 
 	NetworkManager.connection.stop_network()
 	lobby_id = 0
-	is_starting_game_from_lobby = false
-	is_waiting_for_host_network = false
 	lobby_members.clear()
 
 	lobby_left.emit()
@@ -214,6 +223,16 @@ func _on_persona_state_change(_steam_id: int, _flag: int) -> void:
 		update_lobby_members()
 
 
+func _on_lobby_chat_update(
+	updated_lobby_id: int,
+	_changed_steam_id: int,
+	_making_change_steam_id: int,
+	_chat_state: int
+) -> void:
+	if updated_lobby_id == lobby_id:
+		update_lobby_members()
+
+
 func is_lobby_owner() -> bool:
 	if lobby_id == 0:
 		return false
@@ -232,19 +251,32 @@ func get_current_lobby_id() -> int:
 	return lobby_id
 
 
+func is_current_lobby_protocol_compatible() -> bool:
+	return (
+		lobby_id != 0
+		and int(Steam.getLobbyData(lobby_id, LOBBY_PROTOCOL_KEY)) == NetworkProtocol.PROTOCOL_VERSION
+	)
+
+
 func get_current_lobby_members() -> Array:
 	return lobby_members
 
 
-func set_lobby_status(status: String) -> void:
+func set_lobby_status(status: String) -> bool:
 	if lobby_id == 0:
-		return
+		return false
 
 	if not is_lobby_owner():
 		print("Only lobby owner can change lobby status")
-		return
+		return false
 
-	Steam.setLobbyData(lobby_id, LOBBY_STATUS_KEY, status)
+	return bool(Steam.setLobbyData(lobby_id, LOBBY_STATUS_KEY, status))
+
+
+func set_lobby_joinable(is_joinable: bool) -> bool:
+	if lobby_id == 0 or not is_lobby_owner():
+		return false
+	return bool(Steam.setLobbyJoinable(lobby_id, is_joinable))
 
 
 func set_lobby_level_id(level_id: String) -> bool:
@@ -265,109 +297,36 @@ func get_lobby_level_id() -> String:
 	return level_id
 
 
-func request_start_game_from_lobby() -> void:
-	if lobby_id == 0:
-		print("Cannot start game: not in a lobby")
-		return
-
-	if not is_lobby_owner():
-		print("Only lobby owner can start the game")
-		return
-
-	if is_starting_game_from_lobby:
-		return
-
-	if not is_relay_network_ready():
-		push_warning("Cannot start multiplayer: Steam relay network is not ready on host")
-
-		if Steam.has_method("initRelayNetworkAccess"):
-			Steam.initRelayNetworkAccess()
-
-		return
-
-	update_lobby_members()
-	set_lobby_status(LOBBY_STATUS_IN_GAME)
-
-	var start_message_sent := Steam.sendLobbyChatMsg(lobby_id, LOBBY_MESSAGE_START_GAME)
-	if not start_message_sent:
-		print("Failed to send lobby start game message")
-
-	start_game_from_lobby()
-
-	if not is_starting_game_from_lobby:
-		return
-
-	var was_sent := Steam.sendLobbyChatMsg(lobby_id, LOBBY_MESSAGE_HOST_NETWORK_READY)
-
-	if not was_sent:
-		print("Failed to send host network ready message")
-
-
-func start_game_from_lobby() -> void:
-	if is_starting_game_from_lobby:
-		return
-
-	if lobby_id == 0:
-		print("Cannot start game: not in a lobby")
-		return
-
-	is_starting_game_from_lobby = true
-	lobby_game_start_requested.emit()
-
-	update_lobby_members()
-	GameSession.start_multiplayer_from_lobby()
-	var network_result: int = NetworkManager.connection.start_from_session()
-
-	if network_result != OK:
-		is_starting_game_from_lobby = false
-		is_waiting_for_host_network = false
-		GameSession.clear()
-		return
-
-	if NetworkManager.connection.is_ready():
-		is_waiting_for_host_network = false
-		GameSession.go_to_selected_scene()
-		return
-
-	if not NetworkManager.connection.network_started.is_connected(_on_network_started_for_game):
-		NetworkManager.connection.network_started.connect(_on_network_started_for_game, CONNECT_ONE_SHOT)
-
-
-func wait_for_host_network_from_lobby() -> void:
-	if is_starting_game_from_lobby or is_waiting_for_host_network:
-		return
-
-	if lobby_id == 0:
-		print("Cannot prepare game: not in a lobby")
-		return
-
-	is_waiting_for_host_network = true
-	lobby_game_start_requested.emit()
-	update_lobby_members()
-	GameSession.start_multiplayer_from_lobby()
-
-
-func _on_network_started_for_game() -> void:
-	if not is_starting_game_from_lobby:
-		return
-
-	is_waiting_for_host_network = false
-	GameSession.go_to_selected_scene()
+func send_lobby_control_message(command: String, payload: Dictionary) -> bool:
+	if lobby_id == 0 or command.is_empty():
+		return false
+	var message_record: Dictionary = {
+		"command": command,
+		"payload": payload.duplicate(true),
+	}
+	return bool(Steam.sendLobbyChatMsg(lobby_id, JSON.stringify(message_record)))
 
 
 func _on_lobby_message(
 	message_lobby_id: int,
-	_user: int,
+	sender_steam_id: int,
 	message: String,
 	_chat_type: int
 ) -> void:
 	if message_lobby_id != lobby_id:
 		return
-
-	if message == LOBBY_MESSAGE_START_GAME:
-		wait_for_host_network_from_lobby()
-	elif message == LOBBY_MESSAGE_HOST_NETWORK_READY:
-		start_game_from_lobby()
+	var parsed_value: Variant = JSON.parse_string(message)
+	if not (parsed_value is Dictionary):
+		return
+	if sender_steam_id == 0 or sender_steam_id != get_lobby_owner_id():
+		push_warning("Ignored lobby control message from a non-owner")
+		return
+	var message_record: Dictionary = parsed_value as Dictionary
+	var command: String = str(message_record.get("command", ""))
+	var payload_value: Variant = message_record.get("payload", {})
+	if command.is_empty() or not (payload_value is Dictionary):
+		return
+	lobby_control_message_received.emit(command, (payload_value as Dictionary).duplicate(true))
 
 
 func is_relay_network_ready() -> bool:

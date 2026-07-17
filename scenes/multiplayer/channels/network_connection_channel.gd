@@ -8,6 +8,8 @@ signal peer_connected(peer_id: int)
 signal peer_disconnected(peer_id: int)
 signal server_disconnected()
 signal steam_peer_disconnected(steam_id: int)
+signal client_match_ready_received(steam_id: int, match_id: String, roster_hash: String)
+signal match_load_requested(match_id: String)
 
 var peer: MultiplayerPeer = null
 var is_network_active: bool = false
@@ -20,6 +22,7 @@ var has_reported_ready: bool = false
 var has_registered_with_host: bool = false
 var peers: NetworkPeerRegistry = null
 var store: NetworkReplicationStore = null
+var is_accepting_match_peers: bool = true
 
 
 func _process(_delta: float) -> void:
@@ -42,6 +45,9 @@ func start_from_session() -> int:
 	lobby_id = GameSession.lobby_id
 	host_steam_id = GameSession.host_steam_id
 	local_steam_id = GameSession.local_steam_id
+	var transport_local_steam_id: int = int(Steam.getSteamID())
+	if local_steam_id == 0 or local_steam_id != transport_local_steam_id:
+		return _fail("Cannot start network: local Steam identity does not match transport identity")
 	if GameSession.is_host():
 		return start_host()
 	return start_client()
@@ -122,6 +128,7 @@ func stop_network() -> void:
 	local_steam_id = 0
 	has_reported_ready = false
 	has_registered_with_host = false
+	is_accepting_match_peers = true
 	if peers != null:
 		peers.clear()
 	if store != null:
@@ -135,6 +142,23 @@ func is_ready() -> bool:
 		and peer != null
 		and peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED
 	)
+
+
+func set_accepting_match_peers(is_accepting: bool) -> void:
+	is_accepting_match_peers = is_accepting
+
+
+func send_client_match_ready(match_id: String, roster_hash: String) -> void:
+	if not is_ready() or is_host or match_id.is_empty() or roster_hash.is_empty():
+		return
+	rpc_id(1, "_submit_client_match_ready", match_id, roster_hash)
+
+
+func broadcast_match_load(match_id: String) -> void:
+	if not is_host or not is_ready() or match_id.is_empty():
+		return
+	match_load_requested.emit(match_id)
+	rpc("_receive_match_load", match_id)
 
 
 func _create_steam_multiplayer_peer() -> MultiplayerPeer:
@@ -232,22 +256,65 @@ func _complete_network_ready() -> void:
 	has_reported_ready = true
 	if not is_host and not has_registered_with_host:
 		has_registered_with_host = true
-		rpc_id(1, "_register_remote_steam_id", local_steam_id)
+		rpc_id(1, "_register_remote_steam_id", local_steam_id, NetworkProtocol.PROTOCOL_VERSION)
 	network_started.emit()
 
 
 func _is_allowed_session_steam_id(steam_id: int) -> bool:
-	return steam_id != 0 and not GameSession.get_player_by_steam_id(steam_id).is_empty()
+	return (
+		steam_id != 0
+		and steam_id != local_steam_id
+		and not GameSession.get_player_by_steam_id(steam_id).is_empty()
+	)
+
+
+func _get_transport_steam_id_for_peer_id(peer_id: int) -> int:
+	if peer == null or peer_id == 0 or not peer.has_method("get_steam_id_for_peer_id"):
+		return 0
+	return int(peer.call("get_steam_id_for_peer_id", peer_id))
 
 
 @rpc("any_peer", "reliable")
-func _register_remote_steam_id(steam_id: int) -> void:
-	if not is_host or not _is_allowed_session_steam_id(steam_id):
+func _register_remote_steam_id(claimed_steam_id: int, protocol_version: int) -> void:
+	if not is_host:
 		return
 	var sender_peer_id: int = multiplayer.get_remote_sender_id()
-	if sender_peer_id == 0 or not peers.register_peer(sender_peer_id, steam_id):
+	var transport_steam_id: int = _get_transport_steam_id_for_peer_id(sender_peer_id)
+	if (
+		sender_peer_id == 0
+		or transport_steam_id == 0
+		or claimed_steam_id != transport_steam_id
+		or protocol_version != NetworkProtocol.PROTOCOL_VERSION
+		or not _is_allowed_session_steam_id(transport_steam_id)
+	):
+		push_warning("Rejected peer registration because Steam transport identity was not verified")
+		_disconnect_transport_peer(sender_peer_id)
+		return
+	if not peers.register_peer(sender_peer_id, transport_steam_id):
 		return
 	_broadcast_peer_map()
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _submit_client_match_ready(submitted_match_id: String, submitted_roster_hash: String) -> void:
+	var sender_peer_id: int = _get_registered_sender_peer_id()
+	if sender_peer_id == 0:
+		return
+	var sender_steam_id: int = peers.get_steam_id_for_peer_id(sender_peer_id)
+	if (
+		submitted_match_id != GameSession.get_match_id()
+		or submitted_roster_hash != GameSession.get_roster_hash()
+		or GameSession.get_player_by_steam_id(sender_steam_id).is_empty()
+	):
+		_disconnect_transport_peer(sender_peer_id)
+		return
+	client_match_ready_received.emit(sender_steam_id, submitted_match_id, submitted_roster_hash)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _receive_match_load(submitted_match_id: String) -> void:
+	if submitted_match_id == GameSession.get_match_id():
+		match_load_requested.emit(submitted_match_id)
 
 
 @rpc("authority", "reliable")
@@ -256,6 +323,9 @@ func _receive_peer_map(remote_steam_id_by_peer_id: Dictionary) -> void:
 
 
 func _on_peer_connected(peer_id: int) -> void:
+	if is_host and not is_accepting_match_peers and not peers.has_steam_id_for_peer(peer_id):
+		_disconnect_transport_peer(peer_id)
+		return
 	if is_host:
 		_broadcast_peer_map()
 	peer_connected.emit(peer_id)
@@ -283,3 +353,18 @@ func _on_server_disconnected() -> void:
 	is_network_active = false
 	print("Server disconnected")
 	server_disconnected.emit()
+
+
+func _get_registered_sender_peer_id() -> int:
+	if not is_host:
+		return 0
+	var sender_peer_id: int = multiplayer.get_remote_sender_id()
+	if sender_peer_id == 0 or not peers.has_steam_id_for_peer(sender_peer_id):
+		return 0
+	return sender_peer_id
+
+
+func _disconnect_transport_peer(peer_id: int) -> void:
+	if peer == null or peer_id == 0 or not peer.has_method("disconnect_peer"):
+		return
+	peer.call("disconnect_peer", peer_id, true)
