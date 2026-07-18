@@ -186,6 +186,7 @@
   "active": "3993719399b7468a",
   "lastOpenFiles": [
     "addons/godotsteam/win64/~libgodotsteam.windows.template_debug.x86_64.dll",
+    "art/pointers/hand_small_point_n.svg.import",
     "_codex_verify_runtime.tscn",
     "_codex_verify_runtime.gd",
     "art/pointers/hand_small_point_n.svg",
@@ -195,7 +196,6 @@
     "hud_turn_preview.gd.uid",
     "hud_turn_preview.tscn",
     "hud_turn_preview.gd",
-    "scenes/movement_range/movement_range_overlay.gd.uid",
-    "scenes/hud/turn_status_panel.gd.uid"
+    "scenes/movement_range/movement_range_overlay.gd.uid"
   ]
 }

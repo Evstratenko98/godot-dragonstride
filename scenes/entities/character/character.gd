@@ -8,6 +8,14 @@ enum ActionMode {
 	INTERACT,
 }
 
+const DEFAULT_WARRIOR_COLOR := "Blue"
+const WARRIOR_NAMES_BY_COLOR: Dictionary[String, String] = {
+	"Purple": "Patrick",
+	"Blue": "Arnoldo",
+	"Yellow": "Huan",
+	"Red": "Dick",
+}
+
 @onready var view: CharacterView = get_node("View") as CharacterView
 @onready var model: CharacterModel = get_node("Model") as CharacterModel
 @onready var character_inventory: CharacterInventory = get_node("CharacterInventory") as CharacterInventory
@@ -17,6 +25,7 @@ var steam_id: int = 0
 var is_local_player: bool = true
 var can_receive_input: bool = true
 var action_mode: ActionMode = ActionMode.ATTACK
+var warrior_color: String = DEFAULT_WARRIOR_COLOR
 
 
 func _ready() -> void:
@@ -44,12 +53,18 @@ func start(
 	action_mode = ActionMode.ATTACK
 	start_entity(start_position, new_entity_id, new_entity_name, EntityType.CHARACTER)
 	character_inventory.configure_owner(entity_id)
-
-
-func set_warrior_color(color_name: String) -> void:
 	var character_view: CharacterView = _get_view()
 	if character_view != null:
-		character_view.set_warrior_color(color_name)
+		character_view.set_display_name(get_display_name())
+
+
+func configure_warrior_profile(color_name: String) -> void:
+	warrior_color = color_name if WARRIOR_NAMES_BY_COLOR.has(color_name) else DEFAULT_WARRIOR_COLOR
+	entity_name = str(WARRIOR_NAMES_BY_COLOR.get(warrior_color, WARRIOR_NAMES_BY_COLOR[DEFAULT_WARRIOR_COLOR]))
+	var character_view: CharacterView = _get_view()
+	if character_view != null:
+		character_view.set_warrior_color(warrior_color)
+		character_view.set_display_name(entity_name)
 
 
 func set_action_mode(new_action_mode: ActionMode) -> void:

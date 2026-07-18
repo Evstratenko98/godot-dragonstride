@@ -14,9 +14,11 @@ const WARRIOR_TEXTURES := {
 
 @export var sprite_path: NodePath = ^"../Sprite2D"
 @export var animation_player_path: NodePath = ^"../AnimationPlayer"
+@export var name_label_path: NodePath = ^"../NameLabel"
 
 @onready var sprite: Sprite2D = get_node(sprite_path) as Sprite2D
 @onready var animation_player: AnimationPlayer = get_node(animation_player_path) as AnimationPlayer
+@onready var name_label: Label = get_node(name_label_path) as Label
 
 var facing_left: bool = false
 
@@ -26,6 +28,12 @@ func set_warrior_color(color_name: String) -> void:
 	var target_sprite: Sprite2D = _get_sprite()
 	if target_sprite != null:
 		target_sprite.texture = texture
+
+
+func set_display_name(display_name: String) -> void:
+	var target_name_label: Label = _get_name_label()
+	if target_name_label != null:
+		target_name_label.text = display_name
 
 
 func apply_remote_visual_state(animation: String, remote_facing_left: bool) -> void:
@@ -137,3 +145,10 @@ func _get_animation_player() -> AnimationPlayer:
 		animation_player = get_node_or_null(animation_player_path) as AnimationPlayer
 
 	return animation_player
+
+
+func _get_name_label() -> Label:
+	if name_label == null:
+		name_label = get_node_or_null(name_label_path) as Label
+
+	return name_label

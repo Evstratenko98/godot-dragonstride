@@ -142,6 +142,20 @@ texture = ExtResource("1")
 hframes = 6
 vframes = 8
 
+[node name="NameLabel" type="Label" parent="."]
+z_index = 101
+offset_left = -48.0
+offset_top = -60.0
+offset_right = 48.0
+offset_bottom = -44.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.94, 0.96, 1, 1)
+theme_override_colors/font_outline_color = Color(0.035, 0.04, 0.055, 0.96)
+theme_override_constants/outline_size = 2
+theme_override_font_sizes/font_size = 10
+horizontal_alignment = 1
+vertical_alignment = 1
+
 [node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=255329327]
 position = Vector2(0, 15)
 shape = SubResource("CircleShape2D_1")

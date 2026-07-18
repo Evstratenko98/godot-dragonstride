@@ -17,6 +17,7 @@ const WORLD_MESSAGES := [
 var runtime: WorldRuntime = null
 var day_label: Label = null
 var player_row: HBoxContainer = null
+var turn_label: Label = null
 var active_portrait: PlayerPortrait = null
 var steps_row: VBoxContainer = null
 var steps_label: Label = null
@@ -79,7 +80,7 @@ func _build_content() -> void:
 	player_row.add_theme_constant_override("separation", 6)
 	content.add_child.call_deferred(player_row)
 
-	var turn_label: Label = Label.new()
+	turn_label = Label.new()
 	turn_label.text = "Ход совершает"
 	turn_label.add_theme_font_size_override("font_size", 14)
 	turn_label.add_theme_color_override("font_color", TEXT_COLOR)
@@ -145,6 +146,9 @@ func _refresh() -> void:
 		return
 
 	var active_player: PlayerCharacter = runtime.get_player_by_entity_id(active_entity_id)
+	turn_label.text = "Ход совершает"
+	if active_player != null:
+		turn_label.text = "Ход совершает %s" % active_player.get_display_name()
 	active_portrait.set_player(active_player)
 	var steps_left: int = turn_manager.get_steps_left()
 	var maximum_steps: int = turn_manager.get_max_steps_per_turn()

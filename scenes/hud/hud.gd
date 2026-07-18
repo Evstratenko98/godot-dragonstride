@@ -62,7 +62,7 @@ func bind_session() -> void:
 	if runtime == null:
 		return
 	var local_player: PlayerCharacter = runtime.get_local_player()
-	local_player_card.bind_player(local_player, "Вы", false)
+	local_player_card.bind_player(local_player, "", true)
 	if local_player != null:
 		inventory_bar.bind_character(local_player)
 	turn_status_panel.bind_session()

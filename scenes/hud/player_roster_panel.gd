@@ -48,13 +48,11 @@ func bind_session() -> void:
 		var player: PlayerCharacter = _resolve_player(player_record)
 		if player == null:
 			continue
-		var display_name: String = str(player_record.get("name", "Игрок"))
-		if GameSession.is_singleplayer():
-			display_name = "Игрок"
+		var steam_name: String = str(player_record.get("name", "")) if GameSession.is_multiplayer() else ""
 		var card: PlayerStatusCard = PlayerStatusCard.new()
 		card.set_layout_mode(PlayerStatusCard.LayoutMode.ROSTER)
-		card.custom_minimum_size = Vector2(190.0, 52.0)
-		card.bind_player(player, display_name, bool(player_record.get("is_local", false)))
+		card.custom_minimum_size = Vector2(190.0, 60.0)
+		card.bind_player(player, steam_name, bool(player_record.get("is_local", false)))
 		player_cards.append(card)
 		cards_container.add_child.call_deferred(card)
 	_refresh_active_player()

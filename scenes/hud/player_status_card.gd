@@ -16,13 +16,14 @@ enum LayoutMode {
 }
 
 var player: PlayerCharacter = null
-var display_name: String = ""
+var secondary_name: String = ""
 var should_show_local_tag: bool = false
 var is_active_player: bool = false
 var status_layout_mode: int = LayoutMode.LOCAL
 
 var portrait: PlayerPortrait = null
 var name_label: Label = null
+var secondary_name_label: Label = null
 var local_tag_label: Label = null
 var active_tag_label: Label = null
 var health_label: Label = null
@@ -41,12 +42,12 @@ func _exit_tree() -> void:
 	_disconnect_player_signals()
 
 
-func bind_player(new_player: PlayerCharacter, new_display_name: String, show_local_tag: bool) -> void:
+func bind_player(new_player: PlayerCharacter, new_secondary_name: String, show_local_tag: bool) -> void:
 	if player != new_player:
 		_disconnect_player_signals()
 		player = new_player
 		_connect_player_signals()
-	display_name = new_display_name
+	secondary_name = new_secondary_name
 	should_show_local_tag = show_local_tag
 	visible = player != null
 	_refresh_content()
@@ -87,6 +88,7 @@ func _build_content() -> void:
 	content.add_child.call_deferred(details)
 	_build_name_row(details)
 	if status_layout_mode == LayoutMode.ROSTER:
+		_build_secondary_name(details)
 		_build_roster_stats(details)
 	else:
 		_build_local_stats(details)
@@ -109,6 +111,14 @@ func _build_name_row(details: VBoxContainer) -> void:
 
 	active_tag_label = _create_tag_label("Ход", ACTIVE_COLOR)
 	name_row.add_child.call_deferred(active_tag_label)
+
+
+func _build_secondary_name(details: VBoxContainer) -> void:
+	secondary_name_label = Label.new()
+	secondary_name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	secondary_name_label.add_theme_font_size_override("font_size", 9)
+	secondary_name_label.add_theme_color_override("font_color", MUTED_TEXT_COLOR)
+	details.add_child.call_deferred(secondary_name_label)
 
 
 func _build_local_stats(details: VBoxContainer) -> void:
@@ -208,12 +218,16 @@ func _refresh_style() -> void:
 func _refresh_content() -> void:
 	if name_label == null:
 		return
-	name_label.text = display_name
+	var has_player: bool = player != null and is_instance_valid(player)
+	name_label.text = player.get_display_name() if has_player else ""
+	if secondary_name_label != null:
+		secondary_name_label.text = secondary_name
+		secondary_name_label.visible = not secondary_name.is_empty()
 	local_tag_label.visible = should_show_local_tag
 	active_tag_label.visible = is_active_player
-	if portrait != null and player != null and is_instance_valid(player):
+	if portrait != null and has_player:
 		portrait.set_player(player)
-	if player == null or not is_instance_valid(player):
+	if not has_player:
 		if not visible:
 			health_label.text = "HP —"
 			health_bar.max_value = 1.0

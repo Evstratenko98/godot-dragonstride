@@ -101,7 +101,7 @@ func start_singleplayer() -> void:
 		"name": "Player",
 		"is_host": true,
 		"is_local": true,
-	}, _get_spawn_cell(0), SINGLEPLAYER_WARRIOR_COLOR, "patrick", "Patrick")
+	}, _get_spawn_cell(0), SINGLEPLAYER_WARRIOR_COLOR, "patrick")
 	connection_state_by_steam_id[0] = ConnectionState.CONNECTED
 
 
@@ -463,9 +463,8 @@ func _spawn_player(
 	player_info: Dictionary,
 	spawn_cell: Vector2i,
 	warrior_color: String,
-	entity_id: String,
-	entity_name: String
-) -> Node:
+	entity_id: String
+) -> PlayerCharacter:
 	var player: PlayerCharacter = CHARACTER_SCENE.instantiate() as PlayerCharacter
 	if player == null:
 		return null
@@ -473,10 +472,10 @@ func _spawn_player(
 	player.name = _get_player_node_name(player_info)
 	players_root.add_child(player)
 	player.setup_multiplayer_player(player_info)
-	player.start(runtime.cell_to_world(spawn_cell), bool(player_info.get("is_local", false)), entity_id, entity_name)
+	player.start(runtime.cell_to_world(spawn_cell), bool(player_info.get("is_local", false)), entity_id)
 	if GameSession.is_multiplayer() and not GameSession.has_committed_match():
 		player.can_receive_input = false
-	player.set_warrior_color(warrior_color)
+	player.configure_warrior_profile(warrior_color)
 	var registration_result: int = runtime.register_entity(player)
 	if registration_result != WorldRegistry.RegistrationError.NONE:
 		player.queue_free()
@@ -552,7 +551,7 @@ func _spawn_authoritative_players(session_players: Array[Dictionary]) -> String:
 			return "spawn_unavailable"
 		var entity_id: String = str(player_info.get("entity_id", ""))
 		var warrior_color: String = _get_multiplayer_warrior_color(int(player_info.get("color_index", index)))
-		var player: Node = _spawn_player(player_info, spawn_cell, warrior_color, entity_id, entity_id)
+		var player: PlayerCharacter = _spawn_player(player_info, spawn_cell, warrior_color, entity_id)
 		if player == null:
 			return "spawn_registration_failed"
 		assigned_cells[spawn_cell] = true
@@ -612,11 +611,10 @@ func _spawn_players_from_snapshot(session_players: Array[Dictionary], snapshot: 
 		if record.is_empty() or str(record.get("entity_id", "")) != str(player_info.get("entity_id", "")):
 			return false
 		var entity_id: String = str(record.get("entity_id", ""))
-		var player: Node = _spawn_player(
+		var player: PlayerCharacter = _spawn_player(
 			player_info,
 			record.get("spawn_cell", INVALID_SPAWN_CELL),
 			str(record.get("warrior_color", "Blue")),
-			entity_id,
 			entity_id
 		)
 		if player == null:
