@@ -1,7 +1,7 @@
 class_name InventorySlotControl
 extends PanelContainer
 
-const SLOT_SIZE := Vector2(48.0, 48.0)
+const SLOT_SIZE := Vector2(38.0, 38.0)
 
 var inventory_bar: InventoryBar = null
 var inventory_kind: String = ""
@@ -32,7 +32,7 @@ func _ready() -> void:
 	usage_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	usage_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	usage_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-	usage_label.add_theme_font_size_override("font_size", 11)
+	usage_label.add_theme_font_size_override("font_size", 9)
 	usage_label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.35, 1.0))
 	add_child.call_deferred(usage_label)
 
@@ -148,13 +148,13 @@ func _refresh_style() -> void:
 
 func _create_slot_style() -> StyleBoxFlat:
 	var style: StyleBoxFlat = StyleBoxFlat.new()
-	style.bg_color = Color(0.08, 0.08, 0.1, 0.9)
+	style.bg_color = Color(0.08, 0.08, 0.1, 0.70)
 	if is_selected:
-		style.border_color = Color(1.0, 0.72, 0.12, 1.0)
+		style.border_color = Color(1.0, 0.72, 0.12, 0.94)
 	elif is_exhausted:
-		style.border_color = Color(0.42, 0.18, 0.18, 1.0)
+		style.border_color = Color(0.42, 0.18, 0.18, 0.88)
 	else:
-		style.border_color = Color(0.65, 0.65, 0.7, 1.0)
-	style.set_border_width_all(3 if is_selected else 2)
-	style.set_corner_radius_all(4)
+		style.border_color = Color(0.65, 0.65, 0.7, 0.82)
+	style.set_border_width_all(2 if is_selected else 1)
+	style.set_corner_radius_all(3)
 	return style

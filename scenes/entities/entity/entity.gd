@@ -2,7 +2,10 @@ class_name Entity
 extends CharacterBody2D
 
 signal movement_finished(from_cell: Vector2i, target_cell: Vector2i)
+signal movement_started(from_cell: Vector2i, target_cell: Vector2i)
 signal attack_finished(target_cell: Vector2i)
+signal vitality_changed(current_health: int, maximum_health: int)
+signal damage_changed(current_damage: int)
 
 enum EntityType {
 	CHARACTER,
@@ -73,6 +76,10 @@ func can_act() -> bool:
 		and not is_attacking
 		and (runtime == null or not runtime.is_entity_casting(self))
 	)
+
+
+func get_max_movement_steps_per_turn() -> int:
+	return 1
 
 
 func can_attack_cell(target_cell: Vector2i) -> bool:
@@ -170,11 +177,16 @@ func apply_attack_damage_bonus(damage_increase: int) -> bool:
 		return false
 
 	damage += damage_increase
+	damage_changed.emit(damage)
 	return true
 
 
 func apply_attack_damage_state(new_damage: int) -> void:
-	damage = maxi(new_damage, 0)
+	var next_damage: int = maxi(new_damage, 0)
+	if damage == next_damage:
+		return
+	damage = next_damage
+	damage_changed.emit(damage)
 
 
 func apply_vitality_state(new_health: int, new_max_health: int) -> void:
@@ -281,6 +293,7 @@ func _move_to_cell(target_cell: Vector2i, should_broadcast: bool = true) -> void
 	_on_move_started(target_cell)
 	if runtime != null:
 		runtime.handle_entity_move_started(self, from_cell, target_cell, should_broadcast)
+	movement_started.emit(from_cell, target_cell)
 	movement_tween.finished.connect(func() -> void:
 		if move_generation != action_generation:
 			return
@@ -384,6 +397,7 @@ func _try_continue_moving() -> bool:
 
 func _on_health_changed(_previous_health: int, _new_health: int) -> void:
 	_update_health_bar()
+	vitality_changed.emit(health, max_health)
 
 
 func _on_died() -> void:

@@ -60,6 +60,10 @@ func set_action_mode(new_action_mode: ActionMode) -> void:
 	action_mode_changed.emit(action_mode)
 
 
+func get_max_movement_steps_per_turn() -> int:
+	return WorldTurns.MAX_STEPS_PER_TURN
+
+
 func request_interaction_cell(target_cell: Vector2i) -> bool:
 	if runtime == null or health <= 0:
 		return false

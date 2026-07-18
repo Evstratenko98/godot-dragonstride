@@ -4,8 +4,15 @@ extends Node
 signal match_end_requested()
 signal action_rejected(reason_code: String)
 signal runtime_sync_failed(reason_code: String)
+signal world_occupancy_changed
 
 const MAX_BLOCKING_EVENT_SECONDS := 10.0
+const CARDINAL_DIRECTIONS: Array[Vector2i] = [
+	Vector2i.LEFT,
+	Vector2i.RIGHT,
+	Vector2i.UP,
+	Vector2i.DOWN,
+]
 
 @export var grid_path: NodePath = ^"../Grid"
 @export var registry_path: NodePath = ^"../Registry"
@@ -353,6 +360,34 @@ func get_registered_entities() -> Array:
 
 func can_enter_cell(cell: Vector2i, moving_entity: Node = null) -> bool:
 	return registry.can_enter_cell(cell, moving_entity)
+
+
+func get_reachable_cells_for_entity(entity: Entity, max_steps: int) -> Array[Vector2i]:
+	var reachable_cells: Array[Vector2i] = []
+	if entity == null or grid == null or registry == null or max_steps <= 0:
+		return reachable_cells
+
+	var start_cell: Vector2i = world_to_cell(entity.global_position)
+	var maximum_distance: int = mini(max_steps, grid.get_grid_size().x * grid.get_grid_size().y)
+	var frontier: Array[Vector2i] = [start_cell]
+	var distances: Dictionary[Vector2i, int] = {start_cell: 0}
+	var frontier_index: int = 0
+	while frontier_index < frontier.size():
+		var current_cell: Vector2i = frontier[frontier_index]
+		frontier_index += 1
+		var current_distance: int = distances[current_cell]
+		if current_distance >= maximum_distance:
+			continue
+
+		for direction: Vector2i in CARDINAL_DIRECTIONS:
+			var next_cell: Vector2i = current_cell + direction
+			if distances.has(next_cell) or not registry.can_enter_cell(next_cell, entity):
+				continue
+			distances[next_cell] = current_distance + 1
+			frontier.append(next_cell)
+			reachable_cells.append(next_cell)
+
+	return reachable_cells
 
 
 func is_cell_interactable(cell: Vector2i) -> bool:
@@ -1302,6 +1337,8 @@ func _bind_services() -> void:
 		grid.configure_context(self, level)
 	if registry != null:
 		registry.configure_context(self, level)
+		if not registry.occupancy_changed.is_connected(_on_registry_occupancy_changed):
+			registry.occupancy_changed.connect(_on_registry_occupancy_changed)
 	if players_service != null:
 		players_service.configure_context(self, level)
 	if combat != null:
@@ -1411,3 +1448,7 @@ func _on_player_connection_changed(steam_id: int, is_connected: bool) -> void:
 		action_stream.prune_disconnected_snapshot_peers()
 	if turn_manager != null:
 		turn_manager.handle_player_disconnected(steam_id)
+
+
+func _on_registry_occupancy_changed() -> void:
+	world_occupancy_changed.emit()

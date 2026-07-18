@@ -1,6 +1,8 @@
 class_name WorldRegistry
 extends Node
 
+signal occupancy_changed
+
 enum RegistrationError {
 	NONE,
 	INVALID_ID,
@@ -64,30 +66,39 @@ func register_object(blocker: Node, anchor_cell: Vector2i) -> int:
 	object_cells_by_instance_id[blocker.get_instance_id()] = cells.duplicate()
 	for cell: Vector2i in cells:
 		occupied_cells[cell] = blocker
+	occupancy_changed.emit()
 	return RegistrationError.NONE
 
 
 func unregister_object(target_object: Node) -> void:
 	if target_object == null:
 		return
+	var was_changed: bool = false
 	var object_id: String = _get_object_id(target_object)
 	if not object_id.is_empty() and objects_by_id.get(object_id, null) == target_object:
 		objects_by_id.erase(object_id)
+		was_changed = true
 	var instance_id: int = target_object.get_instance_id()
 	var cells: Array = object_cells_by_instance_id.get(instance_id, []) as Array
 	for cell_value: Variant in cells:
 		var cell: Vector2i = cell_value as Vector2i
 		if occupied_cells.get(cell, null) == target_object:
 			occupied_cells.erase(cell)
+			was_changed = true
 	object_cells_by_instance_id.erase(instance_id)
+	if was_changed:
+		occupancy_changed.emit()
 
 
 func clear_entities() -> void:
+	var was_changed: bool = not entities_by_id.is_empty() or not entity_cells.is_empty() or not reserved_entity_cells.is_empty()
 	entities_by_id.clear()
 	entity_cells.clear()
 	reserved_entity_cells.clear()
 	entity_cells_by_instance_id.clear()
 	reserved_cells_by_instance_id.clear()
+	if was_changed:
+		occupancy_changed.emit()
 
 
 func register_entity(entity: Node) -> int:
@@ -109,16 +120,21 @@ func register_entity(entity: Node) -> int:
 		return error
 	entities_by_id[entity_id] = entity
 	_add_entity_cells(entity, anchor_cell)
+	occupancy_changed.emit()
 	return RegistrationError.NONE
 
 
 func unregister_entity(entity: Node) -> void:
 	if entity == null:
 		return
+	var was_registered: bool = false
 	var entity_id: String = runtime.get_entity_id(entity)
 	if not entity_id.is_empty() and entities_by_id.get(entity_id, null) == entity:
 		entities_by_id.erase(entity_id)
+		was_registered = true
 	_remove_entity_cell_refs(entity)
+	if was_registered:
+		occupancy_changed.emit()
 
 
 func reserve_entity_cell(entity: Node, _from_cell: Vector2i, target_cell: Vector2i) -> bool:
@@ -129,6 +145,7 @@ func reserve_entity_cell(entity: Node, _from_cell: Vector2i, target_cell: Vector
 	reserved_cells_by_instance_id[entity.get_instance_id()] = cells.duplicate()
 	for cell: Vector2i in cells:
 		reserved_entity_cells[cell] = entity
+	occupancy_changed.emit()
 	return true
 
 
@@ -139,6 +156,7 @@ func complete_entity_move(entity: Node, _from_cell: Vector2i, target_cell: Vecto
 	if entity.get("current_cell") != null:
 		entity.set("current_cell", target_cell)
 	_add_entity_cells(entity, target_cell)
+	occupancy_changed.emit()
 	return RegistrationError.NONE
 
 
@@ -157,6 +175,7 @@ func respawn_entity(entity: Node, cell: Vector2i) -> int:
 		entity.set("current_cell", cell)
 	entities_by_id[entity_id] = entity
 	_add_entity_cells(entity, cell)
+	occupancy_changed.emit()
 	return RegistrationError.NONE
 
 
@@ -196,6 +215,7 @@ func apply_entity_cell_batch(cells_by_entity_id: Dictionary[String, Vector2i]) -
 		if entity.get("current_cell") != null:
 			entity.set("current_cell", anchor_cell)
 		_add_entity_cells(entity, anchor_cell)
+	occupancy_changed.emit()
 	return RegistrationError.NONE
 
 

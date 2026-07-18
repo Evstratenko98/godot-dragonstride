@@ -56,6 +56,10 @@ func spawn_death_drop(death_cell: Vector2i) -> bool:
 	return runtime.spawn_world_object(DEATH_DROP_TYPE, death_cell)
 
 
+func get_max_movement_steps_per_turn() -> int:
+	return MAX_STEPS_PER_TURN
+
+
 func behavior() -> void:
 	var behavior_generation: int = get_behavior_generation()
 	if not _is_turn_mode_enabled() or not _is_ai_authority():

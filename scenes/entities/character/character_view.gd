@@ -110,6 +110,21 @@ func get_facing_left() -> bool:
 	return facing_left
 
 
+func get_portrait_texture() -> Texture2D:
+	var target_sprite: Sprite2D = _get_sprite()
+	if target_sprite == null or target_sprite.texture == null:
+		return null
+	if target_sprite.hframes <= 1 and target_sprite.vframes <= 1:
+		return target_sprite.texture
+
+	var frame_width: float = float(target_sprite.texture.get_width()) / float(target_sprite.hframes)
+	var frame_height: float = float(target_sprite.texture.get_height()) / float(target_sprite.vframes)
+	var portrait_texture: AtlasTexture = AtlasTexture.new()
+	portrait_texture.atlas = target_sprite.texture
+	portrait_texture.region = Rect2(Vector2.ZERO, Vector2(frame_width, frame_height))
+	return portrait_texture
+
+
 func _get_sprite() -> Sprite2D:
 	if sprite == null:
 		sprite = get_node_or_null(sprite_path) as Sprite2D

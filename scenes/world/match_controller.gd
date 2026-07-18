@@ -2,18 +2,23 @@ class_name MatchController
 extends Node
 
 const MAIN_MENU_SCENE_PATH := "res://scenes/menu/main_menu/main_menu.tscn"
+const GAME_HUD_SCRIPT := preload("res://scenes/hud/hud.gd")
 
 @export var runtime_path: NodePath = ^"../WorldRuntime"
 @export var level_container_path: NodePath = ^"../LevelContainer"
 @export var grid_lines_path: NodePath = ^"../GridLines"
+@export var movement_range_overlay_path: NodePath = ^"../MovementRangeOverlay"
 @export var cell_hover_path: NodePath = ^"../CellHover"
+@export var hud_path: NodePath = ^"../HUD"
 @export var music_player_path: NodePath = ^"../Music"
 @export var death_sound_player_path: NodePath = ^"../DeathSound"
 
 @onready var runtime: WorldRuntime = get_node(runtime_path) as WorldRuntime
 @onready var level_container: Node2D = get_node(level_container_path) as Node2D
 @onready var grid_lines: GridLines = get_node(grid_lines_path) as GridLines
+@onready var movement_range_overlay: MovementRangeOverlay = get_node(movement_range_overlay_path) as MovementRangeOverlay
 @onready var cell_hover: CellHover = get_node(cell_hover_path) as CellHover
+@onready var hud: GAME_HUD_SCRIPT = get_node(hud_path) as GAME_HUD_SCRIPT
 @onready var music_player: AudioStreamPlayer = get_node(music_player_path) as AudioStreamPlayer
 @onready var death_sound_player: AudioStreamPlayer = get_node(death_sound_player_path) as AudioStreamPlayer
 
@@ -49,6 +54,7 @@ func start_match() -> void:
 		if GameSession.is_multiplayer():
 			LobbyMatchCoordinator.cancel_runtime_start(start_error)
 		return
+	hud.bind_session()
 	_play_level_music()
 
 
@@ -91,6 +97,8 @@ func _initialize_match() -> void:
 	level_container.add_child(level)
 	grid_lines.configure_context(runtime, level)
 	cell_hover.configure_context(runtime)
+	movement_range_overlay.configure_context(runtime, cell_hover)
+	hud.configure_runtime(runtime)
 	_configure_level_audio()
 	runtime.connect_signals()
 	call_deferred("_start_match_deferred")

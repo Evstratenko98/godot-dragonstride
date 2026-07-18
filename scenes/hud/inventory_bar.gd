@@ -1,14 +1,16 @@
 class_name InventoryBar
 extends HBoxContainer
 
-const SLOT_SIZE := Vector2(48.0, 48.0)
-const SLOT_SEPARATION := 6
+const SLOT_SIZE := Vector2(38.0, 38.0)
+const SLOT_SEPARATION := 5
 const ATTACK_MODE_ACTION := &"select_attack_mode"
 const INTERACTION_MODE_ACTION := &"select_interaction_mode"
 const ATTACK_CURSOR_HOTSPOT := Vector2(3.0, 3.0)
 const INTERACTION_CURSOR_HOTSPOT := Vector2(18.0, 20.0)
+const INACTIVE_ACTION_CURSOR_HOTSPOT := Vector2(15.0, 4.0)
 const ATTACK_CURSOR_TEXTURE: Texture2D = preload("res://art/pointers/tool_sword_a.svg")
 const INTERACTION_CURSOR_TEXTURE: Texture2D = preload("res://art/pointers/hand_open.svg")
+const INACTIVE_ACTION_CURSOR_TEXTURE: Texture2D = preload("res://art/pointers/hand_small_point_n.svg")
 
 var runtime: WorldRuntime = null
 var character_inventory: CharacterInventory = null
@@ -27,6 +29,7 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	Input.set_custom_mouse_cursor(null, Input.CURSOR_ARROW)
+	_disconnect_turn_signal()
 	if bound_player != null and bound_player.action_mode_changed.is_connected(_on_player_action_mode_changed):
 		bound_player.action_mode_changed.disconnect(_on_player_action_mode_changed)
 	if character_inventory != null and character_inventory.inventory_changed.is_connected(_refresh_items):
@@ -57,7 +60,11 @@ func _unhandled_key_input(event: InputEvent) -> void:
 
 
 func configure_runtime(new_runtime: WorldRuntime) -> void:
+	_disconnect_turn_signal()
 	runtime = new_runtime
+	if runtime != null and runtime.turn_manager != null:
+		if not runtime.turn_manager.turn_state_changed.is_connected(_on_turn_state_changed):
+			runtime.turn_manager.turn_state_changed.connect(_on_turn_state_changed)
 	_connect_spell_signals()
 
 
@@ -138,10 +145,6 @@ func _build_bar() -> void:
 		spell_slots.append(spell_slot)
 		add_child.call_deferred(spell_slot)
 
-	var trash_slot: InventorySlotControl = InventorySlotControl.new()
-	trash_slot.configure(self, "", -1, true)
-	add_child.call_deferred(trash_slot)
-
 
 func _refresh_items() -> void:
 	if character_inventory == null:
@@ -200,25 +203,48 @@ func _create_action_button(
 
 
 func _refresh_action_buttons(action_mode: int) -> void:
+	var attack_is_available: bool = _is_action_available(PlayerCharacter.ActionMode.ATTACK)
+	var interaction_is_available: bool = _is_action_available(PlayerCharacter.ActionMode.INTERACT)
+	var next_action_mode: int = action_mode
+	if action_mode == PlayerCharacter.ActionMode.ATTACK and not attack_is_available and interaction_is_available:
+		next_action_mode = PlayerCharacter.ActionMode.INTERACT
+	elif action_mode == PlayerCharacter.ActionMode.INTERACT and not interaction_is_available and attack_is_available:
+		next_action_mode = PlayerCharacter.ActionMode.ATTACK
+
+	if bound_player != null and bound_player.action_mode != next_action_mode:
+		bound_player.set_action_mode(next_action_mode)
+		return
+
 	for button_index: int in range(action_buttons.size()):
-		var is_selected: bool = button_index == action_mode and selected_spell_slot_index < 0
+		var is_available: bool = attack_is_available if button_index == PlayerCharacter.ActionMode.ATTACK else interaction_is_available
+		var is_selected: bool = is_available and button_index == next_action_mode and selected_spell_slot_index < 0
+		var available_tooltip: String = "Attack (Q)" if button_index == PlayerCharacter.ActionMode.ATTACK else "Interact (E)"
+		action_buttons[button_index].disabled = not is_available
+		action_buttons[button_index].tooltip_text = available_tooltip if is_available else "Действие недоступно в текущем ходу"
 		_apply_action_button_style(action_buttons[button_index], is_selected)
-	_apply_action_cursor(action_mode)
+	_apply_action_cursor(next_action_mode, attack_is_available or interaction_is_available)
 
 
 func _apply_action_button_style(action_button: Button, is_selected: bool) -> void:
 	var style: StyleBoxFlat = StyleBoxFlat.new()
-	style.bg_color = Color(0.32, 0.24, 0.06, 0.95) if is_selected else Color(0.06, 0.06, 0.08, 0.9)
-	style.border_color = Color(1.0, 0.78, 0.18, 1.0) if is_selected else Color(0.3, 0.3, 0.35, 1.0)
-	style.set_border_width_all(3 if is_selected else 2)
-	style.set_corner_radius_all(4)
+	style.bg_color = Color(0.32, 0.24, 0.06, 0.78) if is_selected else Color(0.06, 0.06, 0.08, 0.70)
+	style.border_color = Color(1.0, 0.78, 0.18, 0.92) if is_selected else Color(0.3, 0.3, 0.35, 0.82)
+	style.set_border_width_all(2 if is_selected else 1)
+	style.set_corner_radius_all(3)
+	var disabled_style: StyleBoxFlat = StyleBoxFlat.new()
+	disabled_style.bg_color = Color(0.05, 0.05, 0.06, 0.50)
+	disabled_style.border_color = Color(0.22, 0.22, 0.25, 0.65)
+	disabled_style.set_border_width_all(1)
+	disabled_style.set_corner_radius_all(3)
 	action_button.add_theme_stylebox_override("normal", style)
 	action_button.add_theme_stylebox_override("hover", style)
 	action_button.add_theme_stylebox_override("pressed", style)
+	action_button.add_theme_stylebox_override("disabled", disabled_style)
 	action_button.add_theme_color_override(
 		"font_color",
 		Color(1.0, 0.93, 0.68, 1.0) if is_selected else Color(0.7, 0.7, 0.75, 1.0)
 	)
+	action_button.add_theme_color_override("icon_disabled_color", Color(0.42, 0.42, 0.45, 0.72))
 
 
 func _on_action_button_pressed(action_mode: int) -> void:
@@ -226,7 +252,7 @@ func _on_action_button_pressed(action_mode: int) -> void:
 
 
 func _select_action_mode(action_mode: int) -> void:
-	if bound_player == null or runtime == null:
+	if bound_player == null or runtime == null or not _is_action_available(action_mode):
 		return
 
 	runtime.cancel_spell_targeting(bound_player)
@@ -234,7 +260,14 @@ func _select_action_mode(action_mode: int) -> void:
 	_refresh_action_buttons(bound_player.action_mode)
 
 
-func _apply_action_cursor(action_mode: int) -> void:
+func _apply_action_cursor(action_mode: int, has_available_action: bool = true) -> void:
+	if not has_available_action:
+		Input.set_custom_mouse_cursor(
+			INACTIVE_ACTION_CURSOR_TEXTURE,
+			Input.CURSOR_ARROW,
+			INACTIVE_ACTION_CURSOR_HOTSPOT
+		)
+		return
 	if action_mode == PlayerCharacter.ActionMode.INTERACT:
 		Input.set_custom_mouse_cursor(
 			INTERACTION_CURSOR_TEXTURE,
@@ -248,6 +281,19 @@ func _apply_action_cursor(action_mode: int) -> void:
 		Input.CURSOR_ARROW,
 		ATTACK_CURSOR_HOTSPOT
 	)
+
+
+func _is_action_available(action_mode: int) -> bool:
+	if runtime == null or runtime.turn_manager == null or bound_player == null:
+		return true
+	var turn_manager: WorldTurns = runtime.turn_manager
+	if not turn_manager.is_turn_mode_enabled():
+		return true
+	if not turn_manager.is_entity_active_in_turn(bound_player):
+		return false
+	if action_mode == PlayerCharacter.ActionMode.ATTACK:
+		return turn_manager.get_attacks_left() > 0
+	return turn_manager.get_interactions_left() > 0
 
 
 func _is_text_input_focused() -> bool:
@@ -275,6 +321,12 @@ func _on_spell_usage_changed() -> void:
 	_refresh_spell_states()
 
 
+func _on_turn_state_changed() -> void:
+	if bound_player != null:
+		_refresh_action_buttons(bound_player.action_mode)
+	_refresh_spell_states()
+
+
 func _connect_spell_signals() -> void:
 	if runtime == null or runtime.spells == null:
 		return
@@ -282,3 +334,10 @@ func _connect_spell_signals() -> void:
 		runtime.spells.targeting_changed.connect(_on_spell_targeting_changed)
 	if not runtime.spells.spell_usage_changed.is_connected(_on_spell_usage_changed):
 		runtime.spells.spell_usage_changed.connect(_on_spell_usage_changed)
+
+
+func _disconnect_turn_signal() -> void:
+	if runtime == null or runtime.turn_manager == null:
+		return
+	if runtime.turn_manager.turn_state_changed.is_connected(_on_turn_state_changed):
+		runtime.turn_manager.turn_state_changed.disconnect(_on_turn_state_changed)

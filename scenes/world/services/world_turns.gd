@@ -4,6 +4,7 @@ extends Node
 signal player_turn_started(entity_id: String)
 signal round_started(round_number: int)
 signal turn_mode_changed(is_enabled: bool)
+signal turn_state_changed
 signal world_turn_behaviors_finished
 
 const STATE_FREE := "free"
@@ -130,6 +131,34 @@ func get_turn_revision() -> int:
 	return turn_revision
 
 
+func get_state() -> String:
+	return state
+
+
+func get_round_number() -> int:
+	return round_number
+
+
+func get_active_entity_id() -> String:
+	return active_entity_id
+
+
+func get_steps_left() -> int:
+	return steps_left
+
+
+func get_max_steps_per_turn() -> int:
+	return MAX_STEPS_PER_TURN
+
+
+func get_attacks_left() -> int:
+	return attacks_left
+
+
+func get_interactions_left() -> int:
+	return interactions_left
+
+
 func can_entity_move(entity: Node) -> bool:
 	if state == STATE_FREE:
 		return true
@@ -140,7 +169,7 @@ func can_entity_move(entity: Node) -> bool:
 	return state == STATE_PLAYER_TURN and _is_active_entity(entity) and steps_left > 0
 
 
-func can_entity_attack(entity: Node, target_cell: Vector2i) -> bool:
+func can_entity_attack(entity: Node, _target_cell: Vector2i) -> bool:
 	if state == STATE_FREE:
 		return true
 
@@ -150,7 +179,7 @@ func can_entity_attack(entity: Node, target_cell: Vector2i) -> bool:
 	if state != STATE_PLAYER_TURN or not _is_active_entity(entity):
 		return false
 
-	if _attack_consumes_action(entity, target_cell) and attacks_left <= 0:
+	if attacks_left <= 0:
 		return false
 
 	return true
@@ -196,11 +225,11 @@ func notify_entity_moved(entity: Node, _from_cell: Vector2i, _target_cell: Vecto
 	_finish_pending_turn_if_ready()
 
 
-func notify_entity_attacked(entity: Node, target_cell: Vector2i) -> void:
+func notify_entity_attacked(entity: Node, _target_cell: Vector2i) -> void:
 	if not _is_authority() or state != STATE_PLAYER_TURN or not _is_active_entity(entity):
 		return
 
-	if _attack_consumes_action(entity, target_cell) and attacks_left > 0:
+	if attacks_left > 0:
 		attacks_left -= 1
 		_broadcast_snapshot()
 
@@ -369,6 +398,7 @@ func apply_remote_snapshot(snapshot: Dictionary) -> void:
 		player_turn_started.emit(active_entity_id)
 	elif event == EVENT_ROUND_STARTED:
 		round_started.emit(round_number)
+	turn_state_changed.emit()
 
 
 func is_valid_remote_snapshot(snapshot: Dictionary) -> bool:
@@ -697,14 +727,6 @@ func _has_available_turn_player() -> bool:
 	return false
 
 
-func _attack_consumes_action(attacker: Node, target_cell: Vector2i) -> bool:
-	var target_entity: Node = runtime.get_entity_at_cell(target_cell)
-	if target_entity != null and target_entity != attacker:
-		return true
-
-	return runtime.get_object_at_cell(target_cell) != null
-
-
 func _get_active_entity() -> Node:
 	if active_entity_id.is_empty():
 		return null
@@ -807,6 +829,7 @@ func _make_snapshot(event: String = EVENT_NONE, event_payload: Dictionary = {}) 
 
 
 func _broadcast_snapshot(event: String = EVENT_NONE, event_payload: Dictionary = {}) -> void:
+	turn_state_changed.emit()
 	if GameSession.is_multiplayer() and GameSession.is_host():
 		NetworkManager.turns.broadcast_turn_state(
 			_make_snapshot(event, event_payload),
@@ -829,6 +852,7 @@ func _reset_turn_state() -> void:
 	behavior_deadline_by_entity_id.clear()
 	is_starting_world_behaviors = false
 	was_world_turn_completion_emitted = false
+	turn_state_changed.emit()
 
 
 func _on_session_cleared() -> void:

@@ -185,7 +185,17 @@
   },
   "active": "3993719399b7468a",
   "lastOpenFiles": [
-    "addons/godotsteam/win64/~libgodotsteam.windows.template_debug.x86_64.dll~RF31c54c7.TMP",
-    "addons/godotsteam/win64/~libgodotsteam.windows.template_debug.x86_64.dll2640004.tmp"
+    "addons/godotsteam/win64/~libgodotsteam.windows.template_debug.x86_64.dll",
+    "_codex_verify_runtime.tscn",
+    "_codex_verify_runtime.gd",
+    "art/pointers/hand_small_point_n.svg",
+    "scenes/menu/main_menu/main_menu.tscn2622590396.tmp",
+    "hud_smoke.tscn",
+    "hud_smoke.gd",
+    "hud_turn_preview.gd.uid",
+    "hud_turn_preview.tscn",
+    "hud_turn_preview.gd",
+    "scenes/movement_range/movement_range_overlay.gd.uid",
+    "scenes/hud/turn_status_panel.gd.uid"
   ]
 }

@@ -1,65 +1,86 @@
+class_name GameHud
 extends CanvasLayer
 
 signal end_game
 
-@export var runtime_path: NodePath = ^"../WorldRuntime"
+const POINTING_HAND_CURSOR_TEXTURE: Texture2D = preload("res://art/pointers/hand_small_point_n.svg")
+const POINTING_HAND_CURSOR_HOTSPOT := Vector2(15.0, 4.0)
 
 @onready var inventory_bar: InventoryBar = get_node("InventoryBar") as InventoryBar
-@onready var action_status_label: Label = get_node("ActionStatusLabel") as Label
+@onready var local_player_card: PlayerStatusCard = get_node("LocalPlayerCard") as PlayerStatusCard
+@onready var turn_status_panel: TurnStatusPanel = get_node("TurnStatusPanel") as TurnStatusPanel
+@onready var player_roster_panel: PlayerRosterPanel = get_node("PlayerRosterPanel") as PlayerRosterPanel
 
 var runtime: WorldRuntime = null
-var is_inventory_bound: bool = false
-var action_status_deadline_msec: int = 0
-
-const REJECTION_MESSAGES := {
-	"wrong_match": "This action belongs to another match.",
-	"stale_turn": "The turn has already changed.",
-	"not_active_player": "You can act only during your turn.",
-	"actor_busy": "This character is already performing an action.",
-	"duplicate_request": "This action was already submitted.",
-	"queue_full": "The action queue is full. Try again shortly.",
-	"rate_limited": "Too many actions. Slow down.",
-	"invalid_action": "This action is not available.",
-	"actor_unavailable": "This character cannot act now.",
-	"actor_disconnected": "This player is disconnected.",
-	"stale_inventory": "The inventory changed. Its current state was restored.",
-	"effect_failed": "The item effect could not be applied.",
-	"invalid_payload": "The action data is invalid.",
-	"payload_too_large": "The action data is too large.",
-	"sequence_gap": "Synchronizing the current match state...",
-	"state_sync_failed": "The match state could not be synchronized.",
-	"world_turn": "Wait for the world turn to finish.",
-}
 
 
 func _ready() -> void:
-	runtime = get_node(runtime_path) as WorldRuntime
-	inventory_bar.configure_runtime(runtime)
-	if not runtime.action_rejected.is_connected(_on_runtime_action_rejected):
-		runtime.action_rejected.connect(_on_runtime_action_rejected)
-	set_process(true)
-
-
-func _process(_delta: float) -> void:
-	if not is_inventory_bound:
-		var local_player: PlayerCharacter = runtime.get_local_player()
-		if local_player != null:
-			inventory_bar.bind_character(local_player)
-			is_inventory_bound = true
-	if action_status_deadline_msec > 0 and Time.get_ticks_msec() >= action_status_deadline_msec:
-		action_status_deadline_msec = 0
-		action_status_label.text = ""
+	Input.set_custom_mouse_cursor(
+		POINTING_HAND_CURSOR_TEXTURE,
+		Input.CURSOR_POINTING_HAND,
+		POINTING_HAND_CURSOR_HOTSPOT
+	)
+	Input.set_custom_mouse_cursor(
+		POINTING_HAND_CURSOR_TEXTURE,
+		Input.CURSOR_DRAG,
+		POINTING_HAND_CURSOR_HOTSPOT
+	)
+	Input.set_custom_mouse_cursor(
+		POINTING_HAND_CURSOR_TEXTURE,
+		Input.CURSOR_CAN_DROP,
+		POINTING_HAND_CURSOR_HOTSPOT
+	)
+	Input.set_custom_mouse_cursor(
+		POINTING_HAND_CURSOR_TEXTURE,
+		Input.CURSOR_FORBIDDEN,
+		POINTING_HAND_CURSOR_HOTSPOT
+	)
+	_configure_interactive_cursor(self)
+	if not get_tree().node_added.is_connected(_on_scene_tree_node_added):
+		get_tree().node_added.connect(_on_scene_tree_node_added)
 
 
 func _exit_tree() -> void:
-	if runtime != null and runtime.action_rejected.is_connected(_on_runtime_action_rejected):
-		runtime.action_rejected.disconnect(_on_runtime_action_rejected)
+	if get_tree().node_added.is_connected(_on_scene_tree_node_added):
+		get_tree().node_added.disconnect(_on_scene_tree_node_added)
+	Input.set_custom_mouse_cursor(null, Input.CURSOR_POINTING_HAND)
+	Input.set_custom_mouse_cursor(null, Input.CURSOR_DRAG)
+	Input.set_custom_mouse_cursor(null, Input.CURSOR_CAN_DROP)
+	Input.set_custom_mouse_cursor(null, Input.CURSOR_FORBIDDEN)
+
+
+func configure_runtime(new_runtime: WorldRuntime) -> void:
+	runtime = new_runtime
+	if runtime == null:
+		return
+	inventory_bar.configure_runtime(runtime)
+	turn_status_panel.configure_runtime(runtime)
+	player_roster_panel.configure_runtime(runtime)
+
+
+func bind_session() -> void:
+	if runtime == null:
+		return
+	var local_player: PlayerCharacter = runtime.get_local_player()
+	local_player_card.bind_player(local_player, "Вы", false)
+	if local_player != null:
+		inventory_bar.bind_character(local_player)
+	turn_status_panel.bind_session()
+	player_roster_panel.bind_session()
+
+
+func _configure_interactive_cursor(node: Node) -> void:
+	var control: Control = node as Control
+	if control is BaseButton or control is InventorySlotControl:
+		control.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	for child: Node in node.get_children():
+		_configure_interactive_cursor(child)
 
 
 func _on_end_game_button_pressed() -> void:
 	end_game.emit()
 
 
-func _on_runtime_action_rejected(reason_code: String) -> void:
-	action_status_label.text = str(REJECTION_MESSAGES.get(reason_code, "Action rejected."))
-	action_status_deadline_msec = Time.get_ticks_msec() + 3000
+func _on_scene_tree_node_added(node: Node) -> void:
+	if is_ancestor_of(node):
+		_configure_interactive_cursor(node)
