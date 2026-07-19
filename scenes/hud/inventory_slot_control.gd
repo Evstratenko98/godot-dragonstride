@@ -2,15 +2,18 @@ class_name InventorySlotControl
 extends PanelContainer
 
 const SLOT_SIZE := Vector2(38.0, 38.0)
+const HOTKEY_HINT_COLOR := Color(0.7, 0.7, 0.75, 1.0)
 
 var inventory_bar: InventoryBar = null
 var inventory_kind: String = ""
 var slot_index: int = -1
+var shortcut_text: String = ""
 var is_trash: bool = false
 var is_selected: bool = false
 var is_exhausted: bool = false
 var inventory_item: InventoryItem = null
 var item_control: CtrlInventoryItem = null
+var shortcut_label: Label = null
 var usage_label: Label = null
 
 
@@ -28,24 +31,49 @@ func _ready() -> void:
 	item_control.item = inventory_item
 	add_child.call_deferred(item_control)
 
+	shortcut_label = Label.new()
+	shortcut_label.text = shortcut_text
+	shortcut_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	shortcut_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	shortcut_label.offset_top = 1.0
+	shortcut_label.offset_right = -2.0
+	shortcut_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	shortcut_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	shortcut_label.add_theme_font_size_override("font_size", 9)
+	shortcut_label.add_theme_color_override("font_color", HOTKEY_HINT_COLOR)
+	var shortcut_layer: Control = Control.new()
+	shortcut_layer.custom_minimum_size = SLOT_SIZE
+	shortcut_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	shortcut_layer.add_child.call_deferred(shortcut_label)
+	add_child.call_deferred(shortcut_layer)
+
 	usage_label = Label.new()
 	usage_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	usage_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	usage_label.offset_right = -2.0
+	usage_label.offset_bottom = -1.0
 	usage_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	usage_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	usage_label.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
 	usage_label.add_theme_font_size_override("font_size", 9)
 	usage_label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.35, 1.0))
-	add_child.call_deferred(usage_label)
+	var usage_layer: Control = Control.new()
+	usage_layer.custom_minimum_size = SLOT_SIZE
+	usage_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	usage_layer.add_child.call_deferred(usage_label)
+	add_child.call_deferred(usage_layer)
 
 
 func configure(
 	new_inventory_bar: InventoryBar,
 	new_inventory_kind: String,
 	new_slot_index: int,
+	new_shortcut_text: String,
 	should_be_trash: bool = false
 ) -> void:
 	inventory_bar = new_inventory_bar
 	inventory_kind = new_inventory_kind
 	slot_index = new_slot_index
+	shortcut_text = new_shortcut_text
 	is_trash = should_be_trash
 
 

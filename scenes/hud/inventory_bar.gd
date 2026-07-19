@@ -5,6 +5,20 @@ const SLOT_SIZE := Vector2(38.0, 38.0)
 const SLOT_SEPARATION := 5
 const ATTACK_MODE_ACTION := &"select_attack_mode"
 const INTERACTION_MODE_ACTION := &"select_interaction_mode"
+const SLOT_ACTIONS: Array[StringName] = [
+	&"use_inventory_slot_1",
+	&"use_inventory_slot_2",
+	&"use_inventory_slot_3",
+	&"use_inventory_slot_4",
+	&"use_inventory_slot_5",
+	&"use_inventory_slot_6",
+	&"use_inventory_slot_7",
+	&"use_inventory_slot_8",
+	&"use_inventory_slot_9",
+	&"use_inventory_slot_10",
+]
+const SLOT_SHORTCUT_TEXTS: Array[String] = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
+const HOTKEY_HINT_COLOR := Color(0.7, 0.7, 0.75, 1.0)
 const ATTACK_CURSOR_HOTSPOT := Vector2(3.0, 3.0)
 const INTERACTION_CURSOR_HOTSPOT := Vector2(18.0, 20.0)
 const INACTIVE_ACTION_CURSOR_HOTSPOT := Vector2(15.0, 4.0)
@@ -54,9 +68,18 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if event.is_action_pressed(ATTACK_MODE_ACTION):
 		_select_action_mode(PlayerCharacter.ActionMode.ATTACK)
 		get_viewport().set_input_as_handled()
-	elif event.is_action_pressed(INTERACTION_MODE_ACTION):
+		return
+	if event.is_action_pressed(INTERACTION_MODE_ACTION):
 		_select_action_mode(PlayerCharacter.ActionMode.INTERACT)
 		get_viewport().set_input_as_handled()
+		return
+
+	for hotbar_slot_index: int in range(SLOT_ACTIONS.size()):
+		if not event.is_action_pressed(SLOT_ACTIONS[hotbar_slot_index]):
+			continue
+		_activate_hotbar_slot(hotbar_slot_index)
+		get_viewport().set_input_as_handled()
+		return
 
 
 func configure_runtime(new_runtime: WorldRuntime) -> void:
@@ -125,18 +148,25 @@ func request_use(inventory_kind: String, slot_index: int) -> void:
 func _build_bar() -> void:
 	for slot_index: int in range(CharacterInventory.ITEM_SLOT_COUNT):
 		var item_slot: InventorySlotControl = InventorySlotControl.new()
-		item_slot.configure(self, CharacterInventory.INVENTORY_KIND_ITEM, slot_index)
+		item_slot.configure(
+			self,
+			CharacterInventory.INVENTORY_KIND_ITEM,
+			slot_index,
+			SLOT_SHORTCUT_TEXTS[slot_index]
+		)
 		item_slots.append(item_slot)
 		add_child.call_deferred(item_slot)
 
 	var attack_button: Button = _create_action_button(
 		ATTACK_CURSOR_TEXTURE,
 		"Attack (Q)",
+		"q",
 		PlayerCharacter.ActionMode.ATTACK
 	)
 	var interaction_button: Button = _create_action_button(
 		INTERACTION_CURSOR_TEXTURE,
 		"Interact (E)",
+		"e",
 		PlayerCharacter.ActionMode.INTERACT
 	)
 	action_buttons.append(attack_button)
@@ -146,7 +176,12 @@ func _build_bar() -> void:
 
 	for spell_index: int in range(CharacterInventory.SPELL_SLOT_COUNT):
 		var spell_slot: InventorySlotControl = InventorySlotControl.new()
-		spell_slot.configure(self, CharacterInventory.INVENTORY_KIND_SPELL, spell_index)
+		spell_slot.configure(
+			self,
+			CharacterInventory.INVENTORY_KIND_SPELL,
+			spell_index,
+			SLOT_SHORTCUT_TEXTS[CharacterInventory.ITEM_SLOT_COUNT + spell_index]
+		)
 		spell_slots.append(spell_slot)
 		add_child.call_deferred(spell_slot)
 
@@ -191,6 +226,7 @@ func _refresh_spell_states() -> void:
 func _create_action_button(
 	icon_texture: Texture2D,
 	button_tooltip_text: String,
+	shortcut_text: String,
 	action_mode: int
 ) -> Button:
 	var action_button: Button = Button.new()
@@ -203,8 +239,22 @@ func _create_action_button(
 	action_button.focus_mode = Control.FOCUS_NONE
 	action_button.mouse_filter = Control.MOUSE_FILTER_STOP
 	action_button.pressed.connect(_on_action_button_pressed.bind(action_mode))
+	action_button.add_child.call_deferred(_create_shortcut_label(shortcut_text))
 	_apply_action_button_style(action_button, false)
 	return action_button
+
+
+func _create_shortcut_label(shortcut_text: String) -> Label:
+	var shortcut_label: Label = Label.new()
+	shortcut_label.text = shortcut_text
+	shortcut_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	shortcut_label.offset_right = -3.0
+	shortcut_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	shortcut_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	shortcut_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	shortcut_label.add_theme_font_size_override("font_size", 9)
+	shortcut_label.add_theme_color_override("font_color", HOTKEY_HINT_COLOR)
+	return shortcut_label
 
 
 func _refresh_action_buttons(action_mode: int) -> void:
@@ -304,6 +354,26 @@ func _is_action_available(action_mode: int) -> bool:
 	if action_mode == PlayerCharacter.ActionMode.ATTACK:
 		return turn_manager.get_attacks_left() > 0
 	return turn_manager.get_interactions_left() > 0
+
+
+func _activate_hotbar_slot(hotbar_slot_index: int) -> void:
+	if character_inventory == null:
+		return
+
+	var inventory_kind: String = CharacterInventory.INVENTORY_KIND_ITEM
+	var inventory_slot_index: int = hotbar_slot_index
+	if hotbar_slot_index >= CharacterInventory.ITEM_SLOT_COUNT:
+		inventory_kind = CharacterInventory.INVENTORY_KIND_SPELL
+		inventory_slot_index -= CharacterInventory.ITEM_SLOT_COUNT
+
+	var inventory_item: InventoryItem = character_inventory.get_item_at_slot(
+		inventory_kind,
+		inventory_slot_index
+	)
+	if inventory_item == null:
+		return
+
+	request_use(inventory_kind, inventory_slot_index)
 
 
 func _is_text_input_focused() -> bool:
