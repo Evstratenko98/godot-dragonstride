@@ -53,6 +53,7 @@ var presenting_sequence_id: int = 0
 var next_local_request_id: int = 1
 var is_processing_authority: bool = false
 var is_processing_remote: bool = false
+var has_pending_remote_process_request: bool = false
 var is_remote_snapshot_ready: bool = true
 var pending_snapshot_peer_ids: Dictionary[int, Dictionary] = {}
 var current_subsequence_id: int = 0
@@ -415,7 +416,10 @@ func _process_authority_queue() -> void:
 
 
 func _process_remote_queue() -> void:
-	if is_processing_remote or _is_authority() or not is_remote_snapshot_ready or not is_inside_tree():
+	if is_processing_remote:
+		has_pending_remote_process_request = true
+		return
+	if _is_authority() or not is_remote_snapshot_ready or not is_inside_tree():
 		return
 
 	var scene_tree: SceneTree = get_tree()
@@ -475,6 +479,8 @@ func _process_remote_queue() -> void:
 		_finish_remote_sequence(action.sequence_id)
 
 	is_processing_remote = false
+	var should_process_again: bool = has_pending_remote_process_request
+	has_pending_remote_process_request = false
 	stream_idle_changed.emit(
 		remote_action_buffer.is_empty()
 		and remote_payload_buffer.is_empty()
@@ -482,7 +488,7 @@ func _process_remote_queue() -> void:
 		and completed_remote_sequences.is_empty()
 		and cancelled_remote_sequences.is_empty()
 	)
-	if is_remote_snapshot_ready and remote_action_buffer.has(next_remote_sequence_id):
+	if is_remote_snapshot_ready and should_process_again:
 		call_deferred("_process_remote_queue")
 	if is_remote_snapshot_ready and _has_future_remote_sequence():
 		_start_gap_watchdog()
@@ -932,6 +938,7 @@ func _clear_remote_state() -> void:
 	current_action = null
 	presenting_sequence_id = 0
 	is_processing_remote = false
+	has_pending_remote_process_request = false
 	active_sync_id = ""
 	sync_deadline_msec = 0
 	next_snapshot_request_msec = 0
