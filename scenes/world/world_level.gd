@@ -70,5 +70,27 @@ func get_death_sound_stream() -> AudioStream:
 	return definition.death_sound_stream
 
 
+func has_welcome_modal() -> bool:
+	return (
+		definition != null
+		and not definition.welcome_modal_title.is_empty()
+		and not definition.welcome_modal_text.is_empty()
+	)
+
+
+func get_welcome_modal_title() -> String:
+	if definition == null:
+		return ""
+
+	return definition.welcome_modal_title
+
+
+func get_welcome_modal_text() -> String:
+	if definition == null:
+		return ""
+
+	return definition.welcome_modal_text
+
+
 func allows_debug_commands() -> bool:
 	return definition != null and definition.allows_debug_commands

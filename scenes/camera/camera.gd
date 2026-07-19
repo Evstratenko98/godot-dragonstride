@@ -9,14 +9,23 @@ const MODE_FREE := "free"
 @export var edge_size: float = 16.0
 @export var free_speed: float = 500.0
 @export var follow_smoothing: float = 8.0
+@export_range(0.1, 1.0, 0.1) var minimum_zoom: float = 0.5
+@export_range(1.0, 4.0, 0.1) var maximum_zoom: float = 2.0
+@export_range(0.01, 1.0, 0.01) var zoom_step: float = 0.1
+@export var zoom_smoothing: float = 10.0
 
 var target: Node2D = null
 var allows_console_commands: bool = false
+var target_zoom_factor: float = 1.0
+var world_bounds: Rect2 = Rect2()
+var has_world_bounds: bool = false
 
 
 func _ready() -> void:
 	if not target_path.is_empty():
 		target = get_node_or_null(target_path) as Node2D
+	target_zoom_factor = clampf(zoom.x, minimum_zoom, maximum_zoom)
+	zoom = Vector2.ONE * target_zoom_factor
 	make_current()
 	if allows_console_commands:
 		_register_console_commands()
@@ -32,6 +41,7 @@ func _exit_tree() -> void:
 
 
 func _process(delta: float) -> void:
+	_update_zoom(delta)
 	if camera_mode == MODE_FOLLOW:
 		if target != null:
 			if follow_smoothing <= 0.0:
@@ -41,6 +51,35 @@ func _process(delta: float) -> void:
 				global_position = global_position.lerp(target.global_position, follow_weight)
 	else:
 		_move_free(delta)
+		_clamp_to_world_bounds()
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not is_current():
+		return
+
+	var mouse_button_event: InputEventMouseButton = event as InputEventMouseButton
+	if mouse_button_event == null or not mouse_button_event.pressed:
+		return
+
+	var zoom_direction: float = 0.0
+	if mouse_button_event.button_index == MOUSE_BUTTON_WHEEL_UP:
+		zoom_direction = 1.0
+	elif mouse_button_event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+		zoom_direction = -1.0
+	else:
+		return
+
+	var zoom_delta: float = zoom_direction * zoom_step * mouse_button_event.factor
+	target_zoom_factor = clampf(target_zoom_factor + zoom_delta, minimum_zoom, maximum_zoom)
+	get_viewport().set_input_as_handled()
+
+
+func configure_world_bounds(new_world_bounds: Rect2) -> void:
+	world_bounds = new_world_bounds
+	has_world_bounds = world_bounds.size.x > 0.0 and world_bounds.size.y > 0.0
+	if camera_mode == MODE_FREE:
+		_clamp_to_world_bounds()
 
 
 func set_camera_mode(new_mode: String) -> void:
@@ -49,6 +88,8 @@ func set_camera_mode(new_mode: String) -> void:
 		return
 
 	camera_mode = new_mode
+	if camera_mode == MODE_FREE:
+		_clamp_to_world_bounds()
 	ConsoleOutput.print_console("Camera mode: %s" % camera_mode)
 
 
@@ -81,6 +122,32 @@ func _move_free(delta: float) -> void:
 
 	if direction != Vector2.ZERO:
 		global_position += direction.normalized() * free_speed * delta
+
+
+func _update_zoom(delta: float) -> void:
+	if is_equal_approx(zoom.x, target_zoom_factor):
+		zoom = Vector2.ONE * target_zoom_factor
+		return
+
+	if zoom_smoothing <= 0.0:
+		zoom = Vector2.ONE * target_zoom_factor
+		return
+
+	var zoom_weight: float = 1.0 - exp(-zoom_smoothing * delta)
+	var zoom_factor: float = lerpf(zoom.x, target_zoom_factor, zoom_weight)
+	zoom = Vector2.ONE * zoom_factor
+
+
+func _clamp_to_world_bounds() -> void:
+	if not has_world_bounds:
+		return
+
+	var minimum_position: Vector2 = world_bounds.position
+	var maximum_position: Vector2 = world_bounds.end
+	global_position = Vector2(
+		clampf(global_position.x, minimum_position.x, maximum_position.x),
+		clampf(global_position.y, minimum_position.y, maximum_position.y)
+	)
 
 
 func _register_console_commands() -> void:

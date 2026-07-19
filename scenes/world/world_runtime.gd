@@ -362,6 +362,10 @@ func can_enter_cell(cell: Vector2i, moving_entity: Node = null) -> bool:
 	return registry.can_enter_cell(cell, moving_entity)
 
 
+func can_character_enter_cell(cell: Vector2i, ignored_entity: Entity = null) -> bool:
+	return registry.can_character_enter_cell(cell, ignored_entity)
+
+
 func get_reachable_cells_for_entity(entity: Entity, max_steps: int) -> Array[Vector2i]:
 	var reachable_cells: Array[Vector2i] = []
 	if entity == null or grid == null or registry == null or max_steps <= 0:
@@ -945,12 +949,21 @@ func get_action_schema_rejection_reason(action: WorldActionRecord) -> String:
 func get_action_acceptance_rejection_reason(action: WorldActionRecord) -> String:
 	if action == null:
 		return WorldActionStream.REJECTION_INVALID_ACTION
+	if action.request_id < 0:
+		return WorldActionStream.REJECTION_INVALID_ACTION
 	if GameSession.is_multiplayer() and action.match_id != GameSession.get_match_id():
 		return WorldActionStream.REJECTION_WRONG_MATCH
+	if action.request_id == 0:
+		if action.requester_steam_id != 0:
+			return WorldActionStream.REJECTION_INVALID_ACTION
+		return get_action_rejection_reason(action)
 	if GameSession.is_multiplayer() and not GameSession.has_committed_match():
 		return WorldActionStream.REJECTION_ACTOR_UNAVAILABLE
-	if GameSession.is_multiplayer() and not is_player_connected(action.requester_steam_id):
-		return WorldActionStream.REJECTION_ACTOR_DISCONNECTED
+	if GameSession.is_multiplayer():
+		if action.requester_steam_id <= 0:
+			return WorldActionStream.REJECTION_INVALID_ACTION
+		if not is_player_connected(action.requester_steam_id):
+			return WorldActionStream.REJECTION_ACTOR_DISCONNECTED
 	if not _is_turn_bound_action(action.action_type):
 		return get_action_rejection_reason(action)
 	if turn_manager != null and action.turn_revision != turn_manager.get_turn_revision():
@@ -1294,6 +1307,10 @@ func get_grid_size() -> Vector2i:
 
 func get_cell_size() -> int:
 	return _get_grid_service().get_cell_size()
+
+
+func get_grid_world_bounds() -> Rect2:
+	return _get_grid_service().get_world_bounds()
 
 
 func world_to_cell(world_position: Vector2) -> Vector2i:

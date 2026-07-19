@@ -1,6 +1,8 @@
 class_name CharacterModel
 extends Node
 
+signal spell_target_selected(target_cell: Vector2i)
+
 var character: PlayerCharacter = null
 
 
@@ -32,7 +34,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if character == null:
 		return
 
-	if not character.can_receive_input or character.runtime == null or _is_console_open():
+	if not character.can_process_local_input() or character.runtime == null or _is_console_open():
 		return
 
 	if event.is_action_pressed("ui_cancel") and character.runtime.has_selected_spell(character):
@@ -48,7 +50,11 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		var target_cell: Vector2i = character.runtime.world_to_cell(character.get_global_mouse_position())
-		if character.runtime.request_selected_spell_cast(character, target_cell):
+		if character.runtime.has_selected_spell(character):
+			if character.runtime.is_cell_inside(target_cell):
+				spell_target_selected.emit(target_cell)
+			else:
+				character.runtime.request_selected_spell_cast(character, target_cell)
 			get_viewport().set_input_as_handled()
 			return
 		if character.action_mode == PlayerCharacter.ActionMode.INTERACT:
@@ -88,7 +94,7 @@ func try_continue_moving() -> bool:
 
 func _can_read_movement_input() -> bool:
 	if (
-		not character.can_receive_input
+		not character.can_process_local_input()
 		or _is_console_open()
 	):
 		return false

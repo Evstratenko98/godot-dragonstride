@@ -292,6 +292,10 @@ func can_enter_cell(cell: Vector2i, moving_entity: Node = null) -> bool:
 	return _get_cell_error(moving_entity, cell) == RegistrationError.NONE
 
 
+func can_character_enter_cell(cell: Vector2i, ignored_entity: Entity = null) -> bool:
+	return _get_cell_error(ignored_entity, cell, true) == RegistrationError.NONE
+
+
 func is_cell_interactable(cell: Vector2i) -> bool:
 	return runtime.is_cell_inside(cell) and (
 		runtime.is_cell_walkable_for_character(cell)
@@ -313,12 +317,22 @@ func get_cell_display_name(cell: Vector2i) -> String:
 	return "ground"
 
 
-func _get_cell_error(node: Node, anchor_cell: Vector2i) -> int:
+func _get_cell_error(
+	node: Node,
+	anchor_cell: Vector2i,
+	should_use_character_walkability: bool = false
+) -> int:
 	var typed_entity: Entity = node as Entity
 	for cell: Vector2i in _get_node_occupied_cells(node, anchor_cell):
 		if not runtime.is_cell_inside(cell):
 			return RegistrationError.OUTSIDE_GRID
-		var is_walkable: bool = runtime.is_cell_walkable_for_entity(cell, typed_entity) if typed_entity != null else runtime.is_cell_walkable(cell)
+		var is_walkable: bool = false
+		if should_use_character_walkability:
+			is_walkable = runtime.is_cell_walkable_for_character(cell)
+		elif typed_entity != null:
+			is_walkable = runtime.is_cell_walkable_for_entity(cell, typed_entity)
+		else:
+			is_walkable = runtime.is_cell_walkable(cell)
 		if not is_walkable:
 			return RegistrationError.NOT_WALKABLE
 		var target_object: Node = occupied_cells.get(cell, null) as Node

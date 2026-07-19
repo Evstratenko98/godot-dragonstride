@@ -56,6 +56,9 @@ func broadcast_action_cancelled(record: Dictionary, reason_code: String) -> void
 func send_action_accepted(peer_id: int, request_id: int, sequence_id: int) -> void:
 	if not _can_host_send() or peer_id <= 0 or request_id <= 0 or sequence_id <= 0:
 		return
+	if peer_id == multiplayer.get_unique_id():
+		action_accepted.emit(request_id, sequence_id)
+		return
 	rpc_id(peer_id, "_receive_action_accepted", GameSession.get_match_id(), request_id, sequence_id)
 
 
@@ -66,6 +69,9 @@ func send_action_rejected(peer_id: int, request_id: int, reason_code: String) ->
 		or request_id <= 0
 		or not NetworkProtocol.is_safe_reason_code(reason_code)
 	):
+		return
+	if peer_id == multiplayer.get_unique_id():
+		action_rejected.emit(request_id, reason_code)
 		return
 	rpc_id(peer_id, "_receive_action_rejected", GameSession.get_match_id(), request_id, reason_code)
 

@@ -316,7 +316,12 @@ func enqueue_external_action(action: WorldActionRecord, requester_peer_id: int) 
 
 
 func enqueue_internal_action(action: WorldActionRecord) -> bool:
-	if action == null or not _is_authority():
+	if (
+		action == null
+		or not _is_authority()
+		or action.request_id != 0
+		or action.requester_steam_id != 0
+	):
 		return false
 	if _get_queued_internal_action_count() >= MAX_INTERNAL_QUEUED_ACTIONS:
 		push_error("Internal action queue capacity was exceeded")

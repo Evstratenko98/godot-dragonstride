@@ -520,6 +520,7 @@ func _configure_camera_for_player(camera: GameCamera, player: Node2D) -> void:
 	camera.target_path = camera.get_path_to(player)
 	camera.target = player
 	camera.global_position = player.global_position
+	camera.configure_world_bounds(runtime.get_grid_world_bounds())
 	camera.make_current()
 
 
@@ -659,9 +660,7 @@ func _is_spawn_cell_available(
 ) -> bool:
 	return (
 		not assigned_cells.has(cell)
-		and runtime.is_cell_inside(cell)
-		and runtime.is_cell_walkable_for_character(cell)
-		and runtime.can_enter_cell(cell, ignored_player)
+		and runtime.can_character_enter_cell(cell, ignored_player)
 	)
 
 

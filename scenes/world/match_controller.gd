@@ -55,6 +55,8 @@ func start_match() -> void:
 			LobbyMatchCoordinator.cancel_runtime_start(start_error)
 		return
 	hud.bind_session()
+	if level.has_welcome_modal():
+		hud.show_level_welcome(level.get_welcome_modal_title(), level.get_welcome_modal_text())
 	_play_level_music()
 
 

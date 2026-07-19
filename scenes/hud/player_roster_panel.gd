@@ -67,7 +67,7 @@ func _build_content() -> void:
 	toggle_button.offset_bottom = 25.0
 	toggle_button.text = "›"
 	toggle_button.add_theme_font_size_override("font_size", 14)
-	toggle_button.focus_mode = Control.FOCUS_ALL
+	toggle_button.focus_mode = Control.FOCUS_NONE
 	toggle_button.tooltip_text = "Свернуть список игроков"
 	toggle_button.pressed.connect(_on_toggle_button_pressed)
 	add_child.call_deferred(toggle_button)

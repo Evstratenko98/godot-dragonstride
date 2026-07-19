@@ -185,17 +185,17 @@
   },
   "active": "3993719399b7468a",
   "lastOpenFiles": [
+    "scenes/sandbox/sandbox.tscn1150112254.tmp",
+    "camera_smoke.tscn",
+    "camera_smoke.gd",
+    "addons/godotsteam/win64/~libgodotsteam.windows.template_debug.x86_64.dll~RF2db25c4.TMP",
+    "addons/godotsteam/win64/~libgodotsteam.windows.template_debug.x86_64.dll2535930.tmp",
+    "project.godot4498269.tmp",
     "addons/godotsteam/win64/~libgodotsteam.windows.template_debug.x86_64.dll",
+    "project.godot3764236.tmp",
     "art/pointers/hand_small_point_n.svg.import",
     "_codex_verify_runtime.tscn",
     "_codex_verify_runtime.gd",
-    "art/pointers/hand_small_point_n.svg",
-    "scenes/menu/main_menu/main_menu.tscn2622590396.tmp",
-    "hud_smoke.tscn",
-    "hud_smoke.gd",
-    "hud_turn_preview.gd.uid",
-    "hud_turn_preview.tscn",
-    "hud_turn_preview.gd",
-    "scenes/movement_range/movement_range_overlay.gd.uid"
+    "art/pointers/hand_small_point_n.svg"
   ]
 }

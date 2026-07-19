@@ -45,7 +45,7 @@ func _exit_tree() -> void:
 func _unhandled_key_input(event: InputEvent) -> void:
 	if (
 		bound_player == null
-		or not bound_player.can_receive_input
+		or not bound_player.can_process_local_input()
 		or _is_console_open()
 		or _is_text_input_focused()
 	):
@@ -93,21 +93,26 @@ func bind_character(player: PlayerCharacter) -> void:
 
 
 func request_move(inventory_kind: String, source_slot_index: int, target_slot_index: int) -> void:
-	if runtime == null or source_slot_index == target_slot_index:
+	if (
+		runtime == null
+		or bound_player == null
+		or not bound_player.can_process_local_input()
+		or source_slot_index == target_slot_index
+	):
 		return
 
 	runtime.request_inventory_move(inventory_kind, source_slot_index, target_slot_index)
 
 
 func request_delete(inventory_kind: String, source_slot_index: int) -> void:
-	if runtime == null:
+	if runtime == null or bound_player == null or not bound_player.can_process_local_input():
 		return
 
 	runtime.request_inventory_delete(inventory_kind, source_slot_index)
 
 
 func request_use(inventory_kind: String, slot_index: int) -> void:
-	if runtime == null or bound_player == null:
+	if runtime == null or bound_player == null or not bound_player.can_process_local_input():
 		return
 
 	if inventory_kind == CharacterInventory.INVENTORY_KIND_SPELL:
@@ -252,7 +257,12 @@ func _on_action_button_pressed(action_mode: int) -> void:
 
 
 func _select_action_mode(action_mode: int) -> void:
-	if bound_player == null or runtime == null or not _is_action_available(action_mode):
+	if (
+		bound_player == null
+		or not bound_player.can_process_local_input()
+		or runtime == null
+		or not _is_action_available(action_mode)
+	):
 		return
 
 	runtime.cancel_spell_targeting(bound_player)

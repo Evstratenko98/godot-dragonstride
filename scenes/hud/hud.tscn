@@ -1,10 +1,11 @@
-[gd_scene load_steps=6 format=3 uid="uid://3sy27o0yl7p"]
+[gd_scene load_steps=7 format=3 uid="uid://3sy27o0yl7p"]
 
 [ext_resource type="Script" uid="uid://uy07nb7ji2t3" path="res://scenes/hud/hud.gd" id="1_64ctp"]
 [ext_resource type="Script" path="res://scenes/hud/inventory_bar.gd" id="2_inventory_bar"]
 [ext_resource type="Script" path="res://scenes/hud/player_status_card.gd" id="3_player_status"]
 [ext_resource type="Script" path="res://scenes/hud/turn_status_panel.gd" id="4_turn_status"]
 [ext_resource type="Script" path="res://scenes/hud/player_roster_panel.gd" id="5_roster"]
+[ext_resource type="PackedScene" path="res://scenes/modal/modal_template.tscn" id="6_modal"]
 
 [node name="HUD" type="CanvasLayer" unique_id=207140631]
 script = ExtResource("1_64ctp")
@@ -65,5 +66,7 @@ offset_top = 96.0
 offset_bottom = 416.0
 grow_horizontal = 0
 script = ExtResource("5_roster")
+
+[node name="ModalDialog" parent="." instance=ExtResource("6_modal")]
 
 [connection signal="pressed" from="EndGameButton" to="." method="_on_end_game_button_pressed"]

@@ -55,6 +55,26 @@ func get_cell_size() -> int:
 	return CELL_SIZE
 
 
+func get_world_bounds() -> Rect2:
+	if level == null or grid_size.x <= 0 or grid_size.y <= 0:
+		return Rect2()
+
+	var local_size: Vector2 = Vector2(grid_size) * float(CELL_SIZE)
+	var top_left: Vector2 = level.to_global(Vector2.ZERO)
+	var top_right: Vector2 = level.to_global(Vector2(local_size.x, 0.0))
+	var bottom_left: Vector2 = level.to_global(Vector2(0.0, local_size.y))
+	var bottom_right: Vector2 = level.to_global(local_size)
+	var minimum_position: Vector2 = Vector2(
+		minf(minf(top_left.x, top_right.x), minf(bottom_left.x, bottom_right.x)),
+		minf(minf(top_left.y, top_right.y), minf(bottom_left.y, bottom_right.y))
+	)
+	var maximum_position: Vector2 = Vector2(
+		maxf(maxf(top_left.x, top_right.x), maxf(bottom_left.x, bottom_right.x)),
+		maxf(maxf(top_left.y, top_right.y), maxf(bottom_left.y, bottom_right.y))
+	)
+	return Rect2(minimum_position, maximum_position - minimum_position)
+
+
 func world_to_cell(world_position: Vector2) -> Vector2i:
 	var local_position: Vector2 = _get_level().to_local(world_position)
 	return Vector2i(floori(local_position.x / CELL_SIZE), floori(local_position.y / CELL_SIZE))

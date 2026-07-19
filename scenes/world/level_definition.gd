@@ -8,4 +8,6 @@ extends Resource
 @export var spawn_cells: Array[Vector2i] = []
 @export var music_stream: AudioStream = null
 @export var death_sound_stream: AudioStream = null
+@export var welcome_modal_title: String = ""
+@export_multiline var welcome_modal_text: String = ""
 @export var allows_debug_commands: bool = false

@@ -24,6 +24,7 @@ var facing_left: bool = false
 var steam_id: int = 0
 var is_local_player: bool = true
 var can_receive_input: bool = true
+var is_local_input_blocked: bool = false
 var action_mode: ActionMode = ActionMode.ATTACK
 var warrior_color: String = DEFAULT_WARRIOR_COLOR
 
@@ -73,6 +74,14 @@ func set_action_mode(new_action_mode: ActionMode) -> void:
 
 	action_mode = new_action_mode
 	action_mode_changed.emit(action_mode)
+
+
+func set_local_input_blocked(should_block: bool) -> void:
+	is_local_input_blocked = should_block
+
+
+func can_process_local_input() -> bool:
+	return is_local_player and can_receive_input and not is_local_input_blocked
 
 
 func get_max_movement_steps_per_turn() -> int:
