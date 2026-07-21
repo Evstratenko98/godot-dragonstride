@@ -2,7 +2,7 @@
 
 Этот документ предназначен для разработчика, который впервые открыл проект. Он описывает не только целевую архитектуру из `AGENTS.md`, но и фактически реализованное поведение текущего кода.
 
-Актуальность описания: состояние рабочей копии на 16 июля 2026 года. Проект использует Godot 4.6 и GDScript.
+Актуальность описания: состояние рабочей копии на 19 июля 2026 года. Проект использует Godot 4.6 и GDScript.
 
 ## 1. Что это за проект
 
@@ -313,6 +313,8 @@ sequenceDiagram
     participant Level as WorldLevel
     participant Match as MatchController
     participant Runtime as WorldRuntime
+    participant Startup as WorldMatchStartup
+    participant Snapshot as WorldStateSnapshot
     participant Players as WorldPlayers
 
     User->>Menu: Начать игру
@@ -337,11 +339,13 @@ sequenceDiagram
     PlayerNet-->>Coordinator: все участники готовы
     Coordinator->>PlayerNet: players_committed(match_id)
     Coordinator->>Session: commit_multiplayer_match()
-    Runtime-->>Match: start_game() завершён успешно
+    Runtime->>Startup: start_match_runtime()
+    Startup->>Snapshot: синхронизировать initial state
+    Startup-->>Match: запуск runtime завершён успешно
     Match->>Match: включить управление и музыку
 ```
 
-`LobbyMatchCoordinator` владеет orchestration до committed-состояния, а `MatchController` — lifecycle уже загруженного мира. `WorldRuntime.start_game()` является ожидаемой операцией: ошибка spawn/synchronization отменяет provisional-сессию и возвращает группу в lobby.
+`LobbyMatchCoordinator` владеет orchestration до committed-состояния, а `MatchController` — lifecycle уже загруженного мира. `WorldMatchStartup` выполняет подготовку runtime и initial sync; `WorldRuntime.start_match_runtime()` оставляет наружу только устойчивую точку входа. Ошибка spawn/synchronization отменяет provisional-сессию и возвращает группу в lobby.
 
 ## 6. Как проходит действие игрока
 
@@ -514,21 +518,29 @@ flowchart TB
 | `sandbox.tscn` | `scenes/sandbox/sandbox.tscn` | Песочницу для проверки функциональности и воспроизведения ошибок: Water/Ground/Clouds, размещённые House/Tree/Sheep/Warrior и разрешённые debug-команды. Не является production-уровнем. |
 | `MatchController` | `scenes/world/match_controller.gd` | Загрузку выбранного уровня, запуск/завершение матча, runtime-signals, музыку и переход в меню. |
 | `WorldRuntime` | `scenes/world/world_runtime.gd` | Устойчивый API мира для сущностей и компонентов. Связывает загруженный уровень с общими сервисами. |
+| `WorldMatchStartup` | `scenes/world/services/world_match_startup.gd` | Последовательность подготовки registry, игроков, initial sync и кэшированного состояния перед началом матча. |
+| `WorldActionRouter` | `scenes/world/services/world_action_router.gd` | Схему, доменную проверку, резервирование и исполнение записей общего action stream. |
+| `WorldStateSnapshot` | `scenes/world/services/world_state_snapshot.gd` | Создание, полную проверку и атомарное применение runtime snapshot. |
 | `WorldGrid` | `scenes/world/services/world_grid.gd` | Размер и координаты сетки, границы, размер клетки и проходимые TileMap-слои. |
 | `WorldRegistry` | `scenes/world/services/world_registry.gd` | ID, регистрацию, занятые и зарезервированные клетки, поиск сущностей/объектов и проверку размещения. |
 | `WorldPlayers` | `scenes/world/services/world_players.gd` | Создание игроков, spawn cells, цвета, локального игрока, камеру и multiplayer authority. |
 | `WorldCombat` | `scenes/world/services/world_combat.gd` | Выбор цели в клетке, применение урона, повреждение объектов и формирование результата боя. |
 | `WorldTurns` | `scenes/world/services/world_turns.gd` | Состояние раунда/хода, порядок игроков, лимиты действий, мировой ход и сетевые snapshots. |
 | `WorldSpawner` | `scenes/world/services/world_spawner.gd` | Каталог разрешённых типов, проверку размещения, создание, ID и сетевую репликацию runtime-spawn. |
+| `WorldSpawnSnapshotTransaction` | `scenes/world/services/world_spawn_snapshot_transaction.gd` | Staging, commit и rollback динамических spawn/removal при применении snapshot. |
 | `WorldSpells` | `scenes/world/services/world_spells.gd` | Выбор и применение заклинаний, лимиты свитков за ход и orchestration временных spell-эффектов. |
+| `WorldSpellUsageLedger` | `scenes/world/services/world_spell_usage_ledger.gd` | Использованные и зарезервированные spell slots, а также их snapshot-формат. |
 | `WorldAwareness` | `scenes/world/services/world_awareness.gd` | Уведомление NPC о появлении и изменении положения персонажей; решения конкретного AI остаются в NPC. |
 | `WorldNetwork` | `scenes/world/services/world_network.gd` | Перевод сетевых сигналов в операции текущего уровня и доменных событий в вызовы `NetworkManager`. |
+| `WorldNetworkSignalBindings` | `scenes/world/services/world_network_signal_bindings.gd` | Симметричное подключение и отключение transport-сигналов без смешивания с обработкой сообщений. |
+| `WorldActionStreamDiagnostics` | `scenes/world/services/world_action_stream_diagnostics.gd` | Ограниченные локальные счётчики resync, stale packet и watchdog без влияния на протокол. |
 
 ### 10.3. Сущности, модели и представления
 
 | Блок | Где находится | Что инкапсулирует |
 |---|---|---|
-| `Entity` | `scenes/entities/entity/entity.gd` | Общие характеристики сущности: ID, имя, тип, health/damage, клетку, движение, атаку, смерть и health bar. |
+| `Entity` | `scenes/entities/entity/entity.gd` | Общие характеристики сущности: ID, имя, тип, health/damage, клетку, движение, атаку и смерть. |
+| `EntityHealthPresenter` | `scenes/entities/entity/entity_health_presenter.gd` | Создание и обновление визуальной полоски здоровья без переноса UI-деталей в `Entity`. |
 | `PlayerCharacter` | `scenes/entities/character/character.gd` | Состояние игрока, Steam ID, remote state, цвет, анимацию атаки и особое возрождение вместо удаления. |
 | `CharacterModel` | `scenes/entities/character/character_model.gd` | Пользовательский ввод, продолжение движения, отправку сетевого состояния и запрос завершения хода. |
 | `CharacterView` | `scenes/entities/character/character_view.gd` | Цветной спрайт игрока, направление взгляда и анимации idle/walk/attack. |
@@ -536,7 +548,8 @@ flowchart TB
 | `NonPlayerView` | `scenes/entities/non_player_entity/non_player_view.gd` | Общий визуальный контракт NPC без игровых решений. |
 | `Sheep` | `scenes/entities/sheep/sheep.gd` | Нейтральную NPC с 25 HP и простым горизонтальным поведением. |
 | `SheepView` | `scenes/entities/sheep/sheep_view.gd` | Спрайт овцы, направление и idle/walk-анимации. |
-| `Warrior` | `scenes/entities/enemies/warrior/warrior.gd` | Вражеский AI, цель, BFS-путь, лимиты мирового хода, атаку и воспроизведение сетевых действий. |
+| `Warrior` | `scenes/entities/enemies/warrior/warrior.gd` | Вражеский AI, цель, лимиты мирового хода, атаку и воспроизведение сетевых действий. |
+| `WorldGridPathfinder` | `scenes/world/services/world_grid_pathfinder.gd` | Общий BFS-поиск пути по правилам `WorldRuntime`; конкретный NPC выбирает только цели и режим учёта занятости. |
 | `WarriorView` | `scenes/entities/enemies/warrior/warrior_view.gd` | Направление, idle/run/guard и двухчастную анимацию атаки воина. |
 | `HealthBar` | `scenes/entities/health_bar/health_bar.tscn` | Визуальную полоску здоровья, автоматически добавляемую каждой `Entity`. |
 
@@ -640,6 +653,12 @@ fonts/                         шрифты и лицензии
 ### `WorldRuntime` — фасад, а не склад всей логики
 
 Сущности обращаются к миру через него, но реализация остаётся в профильных сервисах. Новая операция добавляется в runtime только если это устойчивая возможность мира, нужная потребителям.
+
+Крупные внутренние операции фасада уже разделены: запуском владеет `WorldMatchStartup`, action-валидацией и исполнением — `WorldActionRouter`, snapshot-транзакцией — `WorldStateSnapshot`. Публичный метод runtime в таких случаях должен быть коротким типизированным делегатом.
+
+### Размер файла — сигнал для архитектурной проверки
+
+Стремитесь держать GDScript-файлы до 350 строк. После 400 строк перед расширением обязательно проверьте, не появились ли независимые группы состояния, разные жизненные циклы или смешение model/view/network/orchestration. Файл более 500 строк сначала уменьшают выделением предметного компонента и только затем добавляют функционал. Подробные обязательные правила и исключения находятся в `AGENTS.md`.
 
 ### Gameplay не должен владеть transport
 
@@ -759,30 +778,3 @@ Meteor использует уникальный `cast_id`: отмена до im
 Строковые ID и display name ограничены 64 символами, roster — четырьмя участниками, обычный intent — 8 KiB, world records — 512 записями. Входящие данные проверяются по типу, диапазону, `match_id`, размеру и verified sender до передачи World-сервису. По сети отправляются только причины из whitelist; локальные ошибки и пути остаются в диагностике.
 
 `NetworkReplicationStore` хранит состояние в keyed dictionaries и заменяет запись того же ID без роста массива. Removal удаляет связанные spawn/object/AI/vitality records. Store и все sequence/snapshot/request caches очищаются при cancel, match end, host loss и смене `match_id`. Для наблюдения доступны только агрегированные локальные счётчики; логирование каждого packet/frame запрещено.
-
-
-
-
- Хочу начинать создавать базовый ui шаблон для игры. Что необходимо отображать на экране. (Каждый пункт можно разделить на отдельные итерации)
- 1. Иконка игрока, а также его характеристики - здоровье и урон.
- 2. Какой раунд (день) идет сейчас. Раунд - это полный цикл все ходов игроков и мира по очереди.
- 3. Какой игрок ходит прямо сейчас и сколько ходов ему остается в течение его хода.
- 4. Чтобы показывался радиус клеток, до какой игрок, который ходит, может дойти. Например все доступные для него клетки будут иметь яркий желтый контур.
- 5. Окно, которое выезжает справа от экрана и его можно будет опять же сворачивать и оно будет уезжать за экран.
-	 1. В этом окне показаны иконки и характеристики всех игроков в мультиплеере. А также подсвечивается тот игрок, который совершает ход.
-
-
-
-
-
-
-Баги в мультиплеерном режиме:
-1. Пошаговый режим не включается в мультиплеерном режиме и не показывается верхняя панель отображения ходов. Точнее пошаговый режим включается, но эффекты этого режима не применяются на мир.  (в синглплеерном режиме такого нет)
-2. В свободном режиме хост почему то мог потерять возможность передвижения после атаки или после другого действия. Это происходит в мультиплеере.
-    (в синглплеерном режиме такого нет)
-   ERROR: RPC '_receive_action_rejected' on yourself is not allowed by selected mode.
-   at: (modules/multiplayer/scene_rpc_interface.cpp:487)
-3. Боковая панель то открывается, то закрывается при завершении хода в пошаговом режиме. Она должна быть независимой от менеджера ход и завершения ходов, кто бы это ни был.
-4. Клетки спауна игроков были изменены, нужно вернуть их на поля hay (в синглплеерном режиме такого нет)
-
-

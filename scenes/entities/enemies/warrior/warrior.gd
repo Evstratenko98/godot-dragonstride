@@ -13,13 +13,6 @@ const REASON_TARGET_UNREACHABLE := "target unreachable"
 const MAX_STEPS_PER_TURN := 3
 const MAX_ATTACKS_PER_TURN := 1
 const MAX_REMOTE_ACTIONS := 8
-const ORTHOGONAL_DIRECTIONS: Array[Vector2i] = [
-	Vector2i.RIGHT,
-	Vector2i.LEFT,
-	Vector2i.DOWN,
-	Vector2i.UP,
-]
-
 var incoming_guard_token: int = 0
 var ai_state: String = STATE_PASSIVE
 var target_entity_id: String = ""
@@ -484,14 +477,8 @@ func _get_attack_goal_cells(target: Node) -> Array[Vector2i]:
 	var cells: Array[Vector2i] = []
 	if target == null or target.get("current_cell") == null:
 		return cells
-
 	var target_cell: Vector2i = target.get("current_cell")
-	for direction in ORTHOGONAL_DIRECTIONS:
-		var attack_cell: Vector2i = target_cell + direction
-		if runtime.is_cell_inside(attack_cell) and runtime.is_cell_walkable(attack_cell):
-			cells.append(attack_cell)
-
-	return cells
+	return WorldGridPathfinder.get_adjacent_walkable_cells(runtime, target_cell)
 
 
 func _has_terrain_path_to_any(goal_cells: Array[Vector2i]) -> bool:
@@ -499,61 +486,13 @@ func _has_terrain_path_to_any(goal_cells: Array[Vector2i]) -> bool:
 
 
 func _find_path_to_any(goal_cells: Array[Vector2i], respect_current_occupancy: bool) -> Array[Vector2i]:
-	var empty_path: Array[Vector2i] = []
-	if runtime == null or goal_cells.is_empty():
-		return empty_path
-
-	var goals: Dictionary = {}
-	for goal_cell in goal_cells:
-		goals[goal_cell] = true
-
-	if goals.has(current_cell):
-		return empty_path
-
-	var frontier: Array[Vector2i] = [current_cell]
-	var came_from: Dictionary = {}
-	came_from[current_cell] = current_cell
-
-	while not frontier.is_empty():
-		var cell: Vector2i = frontier.pop_front()
-		for direction in ORTHOGONAL_DIRECTIONS:
-			var next_cell: Vector2i = cell + direction
-			if came_from.has(next_cell):
-				continue
-
-			if not _can_path_enter_cell(next_cell, respect_current_occupancy):
-				continue
-
-			came_from[next_cell] = cell
-			if goals.has(next_cell):
-				return _reconstruct_path(came_from, current_cell, next_cell)
-
-			frontier.append(next_cell)
-
-	return empty_path
-
-
-func _can_path_enter_cell(cell: Vector2i, respect_current_occupancy: bool) -> bool:
-	if not runtime.is_cell_inside(cell) or not runtime.is_cell_walkable(cell):
-		return false
-
-	if runtime.get_object_at_cell(cell) != null:
-		return false
-
-	if respect_current_occupancy:
-		return runtime.can_enter_cell(cell, self)
-
-	return true
-
-
-func _reconstruct_path(came_from: Dictionary, start_cell: Vector2i, end_cell: Vector2i) -> Array[Vector2i]:
-	var path: Array[Vector2i] = []
-	var cell: Vector2i = end_cell
-	while cell != start_cell:
-		path.push_front(cell)
-		cell = came_from[cell]
-
-	return path
+	return WorldGridPathfinder.find_path_to_any(
+		runtime,
+		self,
+		current_cell,
+		goal_cells,
+		respect_current_occupancy
+	)
 
 
 func _set_ai_state(new_state: String, new_target_entity_id: String, reason: String = REASON_NONE, should_broadcast: bool = true) -> void:

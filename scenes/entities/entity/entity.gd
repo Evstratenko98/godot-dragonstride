@@ -14,8 +14,6 @@ enum EntityType {
 	NEUTRAL,
 }
 
-const HEALTH_BAR_SCENE := preload("res://scenes/entities/health_bar/health_bar.tscn")
-
 @export var entity_id: String = ""
 @export var entity_name: String = ""
 @export var entity_type: EntityType = EntityType.NPC
@@ -32,19 +30,20 @@ var spawn_cell: Vector2i = Vector2i.ZERO
 var is_moving: bool = false
 var is_attacking: bool = false
 var attack_target_cell: Vector2i = Vector2i.ZERO
-var health_bar: Node2D = null
 var movement_tween: Tween = null
 var action_generation: int = 0
+var health_presenter: EntityHealthPresenter = EntityHealthPresenter.new()
 
 
 func _ready() -> void:
+	health_presenter.configure(self)
 	runtime = _find_runtime()
 	if runtime != null:
 		current_cell = runtime.world_to_cell(global_position)
 		spawn_cell = current_cell
 		global_position = runtime.cell_to_world(current_cell)
-	_ensure_health_bar()
-	_update_health_bar()
+	health_presenter.ensure_created(health_bar_offset)
+	health_presenter.update(health, max_health)
 
 
 func start_entity(
@@ -65,8 +64,8 @@ func start_entity(
 
 	health = max_health
 	show()
-	_ensure_health_bar()
-	_update_health_bar()
+	health_presenter.ensure_created(health_bar_offset)
+	health_presenter.update(health, max_health)
 
 
 func can_act() -> bool:
@@ -225,7 +224,7 @@ func respawn_at_cell(respawn_cell: Vector2i) -> bool:
 		global_position = runtime.cell_to_world(respawn_cell)
 
 	show()
-	_update_health_bar()
+	health_presenter.update(health, max_health)
 	_on_respawned()
 	return true
 
@@ -261,17 +260,7 @@ func get_display_name() -> String:
 
 
 func get_occupied_cells(anchor_cell: Vector2i) -> Array[Vector2i]:
-	var cells: Array[Vector2i] = []
-	if occupied_offsets.is_empty():
-		cells.append(anchor_cell)
-		return cells
-
-	for offset in occupied_offsets:
-		var occupied_cell: Vector2i = anchor_cell + offset
-		if not cells.has(occupied_cell):
-			cells.append(occupied_cell)
-
-	return cells
+	return EntityFootprint.get_occupied_cells(anchor_cell, occupied_offsets)
 
 
 func get_action_generation() -> int:
@@ -358,17 +347,8 @@ func _play_target_incoming_attack_guard(target_cell: Vector2i, duration: float) 
 		(target_entity as NonPlayerEntity).play_incoming_attack_guard(duration)
 
 
-func _is_adjacent_attack_direction(direction: Vector2i) -> bool:
-	return direction == Vector2i.RIGHT or direction == Vector2i.LEFT or direction == Vector2i.DOWN or direction == Vector2i.UP
-
-
 func _get_attack_direction_to_cell(target_cell: Vector2i) -> Vector2i:
-	for occupied_cell in get_occupied_cells(current_cell):
-		var direction: Vector2i = target_cell - occupied_cell
-		if _is_adjacent_attack_direction(direction):
-			return direction
-
-	return Vector2i.ZERO
+	return EntityFootprint.get_adjacent_direction(current_cell, target_cell, occupied_offsets)
 
 
 func _on_move_direction_selected(_direction: Vector2i) -> void:
@@ -396,7 +376,7 @@ func _try_continue_moving() -> bool:
 
 
 func _on_health_changed(_previous_health: int, _new_health: int) -> void:
-	_update_health_bar()
+	health_presenter.update(health, max_health)
 	vitality_changed.emit(health, max_health)
 
 
@@ -408,41 +388,5 @@ func _on_respawned() -> void:
 	pass
 
 
-func _ensure_health_bar() -> void:
-	if health_bar != null and is_instance_valid(health_bar):
-		health_bar.position = health_bar_offset
-		return
-
-	health_bar = HEALTH_BAR_SCENE.instantiate() as Node2D
-	if health_bar == null:
-		return
-
-	health_bar.position = health_bar_offset
-	add_child(health_bar)
-
-
-func _update_health_bar() -> void:
-	if health_bar == null or not is_instance_valid(health_bar):
-		return
-
-	var progress: TextureProgressBar = health_bar.get_node_or_null("Progress") as TextureProgressBar
-	if progress == null:
-		return
-
-	var safe_max_health: int = maxi(max_health, 1)
-	progress.max_value = safe_max_health
-	progress.value = clampi(health, 0, safe_max_health)
-
-
 func _find_runtime() -> WorldRuntime:
-	var node: Node = get_parent()
-	while node != null:
-		if node is WorldRuntime:
-			return node as WorldRuntime
-		if node is WorldLevel:
-			var found_runtime: WorldRuntime = (node as WorldLevel).get_runtime()
-			if found_runtime != null:
-				return found_runtime
-		node = node.get_parent()
-
-	return null
+	return WorldRuntimeResolver.from_node(self)

@@ -11,169 +11,21 @@ var pending_entity_messages: Dictionary[int, Array] = {}
 var pending_npc_action_messages: Dictionary[int, Array] = {}
 var pending_local_move_request_id: int = 0
 var pending_local_move_sequence_id: int = 0
+var signal_bindings: WorldNetworkSignalBindings = WorldNetworkSignalBindings.new()
 
 
 func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void:
 	runtime = new_runtime
 	level = new_level
+	signal_bindings.configure(self)
 
 
 func connect_signals() -> void:
-	if not GameSession.session_cleared.is_connected(_on_session_cleared):
-		GameSession.session_cleared.connect(_on_session_cleared)
-	if runtime.action_stream != null and not runtime.action_stream.action_started.is_connected(_on_stream_action_started):
-		runtime.action_stream.action_started.connect(_on_stream_action_started)
-	if runtime.action_stream != null and not runtime.action_stream.action_completed.is_connected(_on_stream_action_finished):
-		runtime.action_stream.action_completed.connect(_on_stream_action_finished)
-	if runtime.action_stream != null and not runtime.action_stream.action_cancelled.is_connected(_on_stream_action_cancelled):
-		runtime.action_stream.action_cancelled.connect(_on_stream_action_cancelled)
-	if runtime.action_stream != null and not runtime.action_stream.remote_snapshot_committed.is_connected(_on_remote_snapshot_committed):
-		runtime.action_stream.remote_snapshot_committed.connect(_on_remote_snapshot_committed)
-	if not NetworkManager.actions.action_accepted.is_connected(_on_action_accepted):
-		NetworkManager.actions.action_accepted.connect(_on_action_accepted)
-	if not NetworkManager.actions.action_rejected.is_connected(_on_action_rejected):
-		NetworkManager.actions.action_rejected.connect(_on_action_rejected)
-	if not NetworkManager.peers.peer_map_updated.is_connected(_on_peer_map_updated):
-		NetworkManager.peers.peer_map_updated.connect(_on_peer_map_updated)
-
-	if not NetworkManager.combat.attack_requested.is_connected(_on_attack_requested):
-		NetworkManager.combat.attack_requested.connect(_on_attack_requested)
-
-	if not NetworkManager.character.interaction_requested.is_connected(_on_interaction_requested):
-		NetworkManager.character.interaction_requested.connect(_on_interaction_requested)
-	if not NetworkManager.character.character_action_payload_received.is_connected(_on_action_profile_payload_received):
-		NetworkManager.character.character_action_payload_received.connect(_on_action_profile_payload_received)
-	if not NetworkManager.combat.combat_action_payload_received.is_connected(_on_action_profile_payload_received):
-		NetworkManager.combat.combat_action_payload_received.connect(_on_action_profile_payload_received)
-	if not NetworkManager.inventory.inventory_action_payload_received.is_connected(_on_action_profile_payload_received):
-		NetworkManager.inventory.inventory_action_payload_received.connect(_on_action_profile_payload_received)
-
-	if not NetworkManager.entity.object_state_received.is_connected(_on_object_state_received):
-		NetworkManager.entity.object_state_received.connect(_on_object_state_received)
-
-	if not NetworkManager.character.entity_move_received.is_connected(_on_entity_move_received):
-		NetworkManager.character.entity_move_received.connect(_on_entity_move_received)
-
-	if not NetworkManager.character.entity_move_requested.is_connected(_on_entity_move_requested):
-		NetworkManager.character.entity_move_requested.connect(_on_entity_move_requested)
-
-	if not NetworkManager.combat.entity_attack_received.is_connected(_on_entity_attack_received):
-		NetworkManager.combat.entity_attack_received.connect(_on_entity_attack_received)
-
-	if not NetworkManager.combat.entity_attack_result_received.is_connected(_on_entity_attack_result_received):
-		NetworkManager.combat.entity_attack_result_received.connect(_on_entity_attack_result_received)
-
-	if not NetworkManager.combat.entity_health_received.is_connected(_on_entity_health_received):
-		NetworkManager.combat.entity_health_received.connect(_on_entity_health_received)
-
-	if not NetworkManager.combat.entity_vitality_received.is_connected(_on_entity_vitality_received):
-		NetworkManager.combat.entity_vitality_received.connect(_on_entity_vitality_received)
-
-	if not NetworkManager.entity.entity_ai_state_received.is_connected(_on_entity_ai_state_received):
-		NetworkManager.entity.entity_ai_state_received.connect(_on_entity_ai_state_received)
-
-	if not NetworkManager.entity.entity_respawn_received.is_connected(_on_entity_respawn_received):
-		NetworkManager.entity.entity_respawn_received.connect(_on_entity_respawn_received)
-
-	if not NetworkManager.entity.entity_removed_received.is_connected(_on_entity_removed_received):
-		NetworkManager.entity.entity_removed_received.connect(_on_entity_removed_received)
-
-	if not NetworkManager.inventory.inventory_add_requested.is_connected(_on_inventory_add_requested):
-		NetworkManager.inventory.inventory_add_requested.connect(_on_inventory_add_requested)
-
-	if not NetworkManager.inventory.inventory_move_requested.is_connected(_on_inventory_move_requested):
-		NetworkManager.inventory.inventory_move_requested.connect(_on_inventory_move_requested)
-
-	if not NetworkManager.inventory.inventory_delete_requested.is_connected(_on_inventory_delete_requested):
-		NetworkManager.inventory.inventory_delete_requested.connect(_on_inventory_delete_requested)
-
-	if not NetworkManager.inventory.inventory_use_requested.is_connected(_on_inventory_use_requested):
-		NetworkManager.inventory.inventory_use_requested.connect(_on_inventory_use_requested)
-
-	if not NetworkManager.inventory.inventory_snapshot_received.is_connected(_on_inventory_snapshot_received):
-		NetworkManager.inventory.inventory_snapshot_received.connect(_on_inventory_snapshot_received)
-
-	if not NetworkManager.match_channel.match_end_requested.is_connected(_on_end_game_requested):
-		NetworkManager.match_channel.match_end_requested.connect(_on_end_game_requested)
+	signal_bindings.connect_signals()
 
 
 func disconnect_signals() -> void:
-	if GameSession.session_cleared.is_connected(_on_session_cleared):
-		GameSession.session_cleared.disconnect(_on_session_cleared)
-	if runtime.action_stream != null and runtime.action_stream.action_started.is_connected(_on_stream_action_started):
-		runtime.action_stream.action_started.disconnect(_on_stream_action_started)
-	if runtime.action_stream != null and runtime.action_stream.action_completed.is_connected(_on_stream_action_finished):
-		runtime.action_stream.action_completed.disconnect(_on_stream_action_finished)
-	if runtime.action_stream != null and runtime.action_stream.action_cancelled.is_connected(_on_stream_action_cancelled):
-		runtime.action_stream.action_cancelled.disconnect(_on_stream_action_cancelled)
-	if runtime.action_stream != null and runtime.action_stream.remote_snapshot_committed.is_connected(_on_remote_snapshot_committed):
-		runtime.action_stream.remote_snapshot_committed.disconnect(_on_remote_snapshot_committed)
-	if NetworkManager.actions.action_accepted.is_connected(_on_action_accepted):
-		NetworkManager.actions.action_accepted.disconnect(_on_action_accepted)
-	if NetworkManager.actions.action_rejected.is_connected(_on_action_rejected):
-		NetworkManager.actions.action_rejected.disconnect(_on_action_rejected)
-	if NetworkManager.peers.peer_map_updated.is_connected(_on_peer_map_updated):
-		NetworkManager.peers.peer_map_updated.disconnect(_on_peer_map_updated)
-
-	if NetworkManager.combat.attack_requested.is_connected(_on_attack_requested):
-		NetworkManager.combat.attack_requested.disconnect(_on_attack_requested)
-
-	if NetworkManager.character.interaction_requested.is_connected(_on_interaction_requested):
-		NetworkManager.character.interaction_requested.disconnect(_on_interaction_requested)
-	if NetworkManager.character.character_action_payload_received.is_connected(_on_action_profile_payload_received):
-		NetworkManager.character.character_action_payload_received.disconnect(_on_action_profile_payload_received)
-	if NetworkManager.combat.combat_action_payload_received.is_connected(_on_action_profile_payload_received):
-		NetworkManager.combat.combat_action_payload_received.disconnect(_on_action_profile_payload_received)
-	if NetworkManager.inventory.inventory_action_payload_received.is_connected(_on_action_profile_payload_received):
-		NetworkManager.inventory.inventory_action_payload_received.disconnect(_on_action_profile_payload_received)
-
-	if NetworkManager.entity.object_state_received.is_connected(_on_object_state_received):
-		NetworkManager.entity.object_state_received.disconnect(_on_object_state_received)
-
-	if NetworkManager.character.entity_move_received.is_connected(_on_entity_move_received):
-		NetworkManager.character.entity_move_received.disconnect(_on_entity_move_received)
-
-	if NetworkManager.character.entity_move_requested.is_connected(_on_entity_move_requested):
-		NetworkManager.character.entity_move_requested.disconnect(_on_entity_move_requested)
-
-	if NetworkManager.combat.entity_attack_received.is_connected(_on_entity_attack_received):
-		NetworkManager.combat.entity_attack_received.disconnect(_on_entity_attack_received)
-
-	if NetworkManager.combat.entity_attack_result_received.is_connected(_on_entity_attack_result_received):
-		NetworkManager.combat.entity_attack_result_received.disconnect(_on_entity_attack_result_received)
-
-	if NetworkManager.combat.entity_health_received.is_connected(_on_entity_health_received):
-		NetworkManager.combat.entity_health_received.disconnect(_on_entity_health_received)
-
-	if NetworkManager.combat.entity_vitality_received.is_connected(_on_entity_vitality_received):
-		NetworkManager.combat.entity_vitality_received.disconnect(_on_entity_vitality_received)
-
-	if NetworkManager.entity.entity_ai_state_received.is_connected(_on_entity_ai_state_received):
-		NetworkManager.entity.entity_ai_state_received.disconnect(_on_entity_ai_state_received)
-
-	if NetworkManager.entity.entity_respawn_received.is_connected(_on_entity_respawn_received):
-		NetworkManager.entity.entity_respawn_received.disconnect(_on_entity_respawn_received)
-
-	if NetworkManager.entity.entity_removed_received.is_connected(_on_entity_removed_received):
-		NetworkManager.entity.entity_removed_received.disconnect(_on_entity_removed_received)
-
-	if NetworkManager.inventory.inventory_add_requested.is_connected(_on_inventory_add_requested):
-		NetworkManager.inventory.inventory_add_requested.disconnect(_on_inventory_add_requested)
-
-	if NetworkManager.inventory.inventory_move_requested.is_connected(_on_inventory_move_requested):
-		NetworkManager.inventory.inventory_move_requested.disconnect(_on_inventory_move_requested)
-
-	if NetworkManager.inventory.inventory_delete_requested.is_connected(_on_inventory_delete_requested):
-		NetworkManager.inventory.inventory_delete_requested.disconnect(_on_inventory_delete_requested)
-
-	if NetworkManager.inventory.inventory_use_requested.is_connected(_on_inventory_use_requested):
-		NetworkManager.inventory.inventory_use_requested.disconnect(_on_inventory_use_requested)
-
-	if NetworkManager.inventory.inventory_snapshot_received.is_connected(_on_inventory_snapshot_received):
-		NetworkManager.inventory.inventory_snapshot_received.disconnect(_on_inventory_snapshot_received)
-
-	if NetworkManager.match_channel.match_end_requested.is_connected(_on_end_game_requested):
-		NetworkManager.match_channel.match_end_requested.disconnect(_on_end_game_requested)
+	signal_bindings.disconnect_signals()
 
 
 func apply_cached_object_states() -> void:
@@ -1079,21 +931,16 @@ func _send_inventory_snapshots_to_owners() -> void:
 
 func _can_buffer_profile_sequence(sequence_id: int) -> bool:
 	var expected_sequence_id: int = runtime.get_expected_remote_action_sequence_id()
-	return (
-		sequence_id >= expected_sequence_id
-		and sequence_id - expected_sequence_id <= NetworkProtocol.MAX_FUTURE_SEQUENCE_DISTANCE
-	)
+	return WorldNetworkBufferPolicy.can_buffer_sequence(sequence_id, expected_sequence_id)
 
 
 func _get_buffered_message_count() -> int:
-	var count: int = pending_inventory_snapshots.size()
-	for messages_value: Variant in pending_combat_messages.values():
-		count += (messages_value as Array).size()
-	for messages_value: Variant in pending_entity_messages.values():
-		count += (messages_value as Array).size()
-	for messages_value: Variant in pending_npc_action_messages.values():
-		count += (messages_value as Array).size()
-	return count
+	return WorldNetworkBufferPolicy.get_message_count(
+		pending_inventory_snapshots,
+		pending_combat_messages,
+		pending_entity_messages,
+		pending_npc_action_messages
+	)
 
 
 func _request_profile_resync() -> void:

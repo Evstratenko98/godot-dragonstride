@@ -1,9 +1,6 @@
 class_name WorldSpawner
 extends Node
 
-const COMMAND_NAME := "game_create"
-const CREATE_FULL_COMMAND_NAME := "game_create_full"
-const CLEAR_FULL_COMMAND_NAME := "game_clear_full"
 const SPAWN_KIND_ENTITY := "entity"
 const SPAWN_KIND_OBJECT := "object"
 
@@ -65,7 +62,8 @@ var runtime: WorldRuntime = null
 var level: WorldLevel = null
 var spawned_counter: int = 0
 var pending_remote_removals: Dictionary[int, Array] = {}
-var snapshot_committed_spawn_ids: Array[String] = []
+var debug_commands: WorldSpawnerDebugCommands = WorldSpawnerDebugCommands.new()
+var snapshot_transaction: WorldSpawnSnapshotTransaction = WorldSpawnSnapshotTransaction.new()
 
 
 func _ready() -> void:
@@ -77,15 +75,15 @@ func _ready() -> void:
 func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void:
 	runtime = new_runtime
 	level = new_level
-	if _can_use_debug_commands():
-		_register_console_commands()
+	snapshot_transaction.configure(self)
+	debug_commands.configure(self, _can_use_debug_commands(), CATALOG.keys())
 	if runtime.action_stream != null and not runtime.action_stream.action_started.is_connected(_on_stream_action_started):
 		runtime.action_stream.action_started.connect(_on_stream_action_started)
 	call_deferred("_apply_cached_world_spawns")
 
 
 func _exit_tree() -> void:
-	_unregister_console_commands()
+	debug_commands.unregister_commands()
 	_disconnect_network_signals()
 	if runtime != null and runtime.action_stream != null and runtime.action_stream.action_started.is_connected(_on_stream_action_started):
 		runtime.action_stream.action_started.disconnect(_on_stream_action_started)
@@ -95,7 +93,7 @@ func _exit_tree() -> void:
 
 func _on_session_cleared() -> void:
 	pending_remote_removals.clear()
-	snapshot_committed_spawn_ids.clear()
+	snapshot_transaction.commit()
 
 
 func console_create(type_key: String, x_text: String, y_text: String) -> void:
@@ -108,7 +106,7 @@ func console_create(type_key: String, x_text: String, y_text: String) -> void:
 		return
 
 	if not x_text.is_valid_int() or not y_text.is_valid_int():
-		_print_spawn_error("Usage: %s <type> <x> <y>. Coordinates must be integers." % COMMAND_NAME)
+		_print_spawn_error("Usage: %s <type> <x> <y>. Coordinates must be integers." % WorldSpawnerDebugCommands.CREATE_COMMAND)
 		return
 
 	var cell: Vector2i = Vector2i(x_text.to_int(), y_text.to_int())
@@ -467,130 +465,49 @@ func apply_action_stream_snapshot(
 	dynamic_spawn_records: Array[Dictionary],
 	removal_records: Array[Dictionary]
 ) -> bool:
-	snapshot_committed_spawn_ids.clear()
-	if dynamic_spawn_records.size() > NetworkProtocol.MAX_WORLD_RECORDS or removal_records.size() > NetworkProtocol.MAX_WORLD_RECORDS:
-		return false
-	var seen_spawn_ids: Dictionary[String, bool] = {}
-	for record: Dictionary in dynamic_spawn_records:
-		var type_key: String = _normalize_type_key(str(record.get("type_key", "")))
-		var spawn_id: String = str(record.get("spawn_id", ""))
-		var cell_value: Variant = record.get("cell")
-		if (
-			not CATALOG.has(type_key)
-			or not NetworkProtocol.is_valid_identifier(spawn_id)
-			or seen_spawn_ids.has(spawn_id)
-			or not (cell_value is Vector2i)
-			or not runtime.is_cell_inside(cell_value as Vector2i)
-		):
-			return false
-		seen_spawn_ids[spawn_id] = true
-	for record: Dictionary in removal_records:
-		var kind: String = str(record.get("kind", ""))
-		var removed_id: String = str(record.get("id", ""))
-		if not NetworkProtocol.is_valid_identifier(removed_id) or kind not in [SPAWN_KIND_ENTITY, SPAWN_KIND_OBJECT] or seen_spawn_ids.has(removed_id):
-			return false
-	var effective_removals: Array[Dictionary] = removal_records.duplicate(true)
-	for cached_record: Dictionary in NetworkManager.store.get_world_spawn_records():
-		var cached_spawn_id: String = str(cached_record.get("spawn_id", ""))
-		if seen_spawn_ids.has(cached_spawn_id):
-			continue
-		var cached_type_key: String = _normalize_type_key(str(cached_record.get("type_key", "")))
-		if not CATALOG.has(cached_type_key):
-			continue
-		var cached_definition: Dictionary = CATALOG[cached_type_key]
-		effective_removals.append({
-			"kind": str(cached_definition.get("kind", "")),
-			"id": cached_spawn_id,
-		})
-	var staged_records: Array[Dictionary] = []
-	var staged_cells: Dictionary[Vector2i, bool] = {}
-	for record: Dictionary in dynamic_spawn_records:
-		var spawn_id: String = str(record.get("spawn_id", ""))
-		if _has_spawn_id(spawn_id):
-			continue
-		var type_key: String = _normalize_type_key(str(record.get("type_key", "")))
-		var definition: Dictionary = CATALOG[type_key]
-		var scene: PackedScene = definition.get("scene") as PackedScene
-		if scene == null:
-			_free_staged_snapshot_records(staged_records)
-			return false
-		var instance: Node = scene.instantiate()
-		_assign_spawn_id(instance, str(definition.get("kind", "")), spawn_id)
-		var cell: Vector2i = record.get("cell", Vector2i.ZERO)
-		var occupied_cells: Array[Vector2i] = _get_staged_occupied_cells(instance, cell)
-		for occupied_cell: Vector2i in occupied_cells:
-			if staged_cells.has(occupied_cell):
-				instance.free()
-				_free_staged_snapshot_records(staged_records)
-				return false
-			staged_cells[occupied_cell] = true
-		var placement_error: String = runtime.get_placement_error(instance, cell)
-		if not placement_error.is_empty():
-			instance.free()
-			_free_staged_snapshot_records(staged_records)
-			return false
-		staged_records.append({
-			"instance": instance,
-			"definition": definition,
-			"type_key": type_key,
-			"spawn_id": spawn_id,
-			"cell": cell,
-		})
-	_apply_world_removals(effective_removals)
-	var committed_spawn_ids: Array[String] = []
-	for staged_record: Dictionary in staged_records:
-		var instance: Node = staged_record.get("instance") as Node
-		var spawn_error: String = _spawn_instance(
-			instance,
-			staged_record.get("definition", {}) as Dictionary,
-			str(staged_record.get("type_key", "")),
-			str(staged_record.get("spawn_id", "")),
-			staged_record.get("cell", Vector2i.ZERO)
-		)
-		if not spawn_error.is_empty():
-			_rollback_snapshot_spawns(committed_spawn_ids)
-			_free_staged_snapshot_records(staged_records)
-			return false
-		committed_spawn_ids.append(str(staged_record.get("spawn_id", "")))
-	snapshot_committed_spawn_ids = committed_spawn_ids.duplicate()
-	for spawn_id: String in seen_spawn_ids.keys():
-		if not _has_spawn_id(spawn_id):
-			rollback_action_stream_snapshot_spawns()
-			return false
-	return true
+	return snapshot_transaction.apply(dynamic_spawn_records, removal_records)
 
 
 func rollback_action_stream_snapshot_spawns() -> void:
-	_rollback_snapshot_spawns(snapshot_committed_spawn_ids)
-	snapshot_committed_spawn_ids.clear()
+	snapshot_transaction.rollback()
 
 
 func commit_action_stream_snapshot_spawns() -> void:
-	snapshot_committed_spawn_ids.clear()
+	snapshot_transaction.commit()
 
 
-func _get_staged_occupied_cells(instance: Node, anchor_cell: Vector2i) -> Array[Vector2i]:
-	if instance is Entity:
-		return (instance as Entity).get_occupied_cells(anchor_cell)
-	if instance is GridObject:
-		return (instance as GridObject).get_occupied_cells(anchor_cell)
-	return [anchor_cell]
+func normalize_type_key(type_key: String) -> String:
+	return _normalize_type_key(type_key)
 
 
-func _free_staged_snapshot_records(staged_records: Array[Dictionary]) -> void:
-	for staged_record: Dictionary in staged_records:
-		var instance: Node = staged_record.get("instance") as Node
-		if instance != null and not instance.is_inside_tree():
-			instance.free()
+func has_spawn_id(spawn_id: String) -> bool:
+	return _has_spawn_id(spawn_id)
 
 
-func _rollback_snapshot_spawns(spawn_ids: Array[String]) -> void:
-	for spawn_id: String in spawn_ids:
-		var instance: Node = runtime.get_entity_by_id(spawn_id)
-		if instance == null:
-			instance = runtime.get_object_by_id(spawn_id)
-		if instance != null:
-			_remove_world_item(instance)
+func assign_spawn_id(instance: Node, kind: String, spawn_id: String) -> void:
+	_assign_spawn_id(instance, kind, spawn_id)
+
+
+func apply_world_removals(records: Array[Dictionary]) -> void:
+	_apply_world_removals(records)
+
+
+func spawn_staged_instance(record: Dictionary) -> String:
+	return _spawn_instance(
+		record.get("instance") as Node,
+		record.get("definition", {}) as Dictionary,
+		str(record.get("type_key", "")),
+		str(record.get("spawn_id", "")),
+		record.get("cell", Vector2i.ZERO)
+	)
+
+
+func remove_spawn_by_id(spawn_id: String) -> void:
+	var instance: Node = runtime.get_entity_by_id(spawn_id)
+	if instance == null:
+		instance = runtime.get_object_by_id(spawn_id)
+	if instance != null:
+		_remove_world_item(instance)
 
 
 func _apply_cached_world_spawns() -> void:
@@ -691,52 +608,6 @@ func _report_spawn_error(message: String, requester_peer_id: int, reason_code: S
 		return
 
 	_print_spawn_error(message)
-
-
-func _register_console_commands() -> void:
-	var console: Node = get_node_or_null("/root/Console")
-	if console == null or not console.has_method("add_command"):
-		return
-
-	console.add_command(
-		COMMAND_NAME,
-		console_create,
-		["type", "x", "y"],
-		3,
-		"Create an allowed entity or object on a grid cell."
-	)
-	console.add_command(
-		CREATE_FULL_COMMAND_NAME,
-		console_create_full,
-		["type"],
-		1,
-		"Fill available ground cells with an allowed entity or object. My thanks to Kirill."
-	)
-	console.add_command(
-		CLEAR_FULL_COMMAND_NAME,
-		console_clear_full,
-		["type"],
-		0,
-		"Remove one allowed type, or all world items when type is omitted. My thanks to Kirill."
-	)
-
-	if console.has_method("add_command_autocomplete_list"):
-		var type_keys: PackedStringArray = PackedStringArray()
-		for type_key in CATALOG.keys():
-			type_keys.append(str(type_key))
-		console.add_command_autocomplete_list(COMMAND_NAME, type_keys)
-		console.add_command_autocomplete_list(CREATE_FULL_COMMAND_NAME, type_keys)
-		console.add_command_autocomplete_list(CLEAR_FULL_COMMAND_NAME, type_keys)
-
-
-func _unregister_console_commands() -> void:
-	var console: Node = get_node_or_null("/root/Console")
-	if console == null or not console.has_method("remove_command"):
-		return
-
-	console.remove_command(COMMAND_NAME)
-	console.remove_command(CREATE_FULL_COMMAND_NAME)
-	console.remove_command(CLEAR_FULL_COMMAND_NAME)
 
 
 func _connect_network_signals() -> void:

@@ -269,23 +269,7 @@ func get_registered_entities() -> Array:
 
 func get_placement_error(spawn_node: Node, anchor_cell: Vector2i) -> String:
 	var error: int = get_registration_error(spawn_node, anchor_cell)
-	match error:
-		RegistrationError.NONE:
-			return ""
-		RegistrationError.OUTSIDE_GRID:
-			return "Spawn is outside the grid."
-		RegistrationError.NOT_WALKABLE:
-			return "Spawn is not walkable."
-		RegistrationError.OBJECT_OCCUPIED:
-			return "Spawn is occupied by an object."
-		RegistrationError.ENTITY_OCCUPIED:
-			return "Spawn is occupied by an entity."
-		RegistrationError.RESERVED:
-			return "Spawn is reserved."
-		RegistrationError.DUPLICATE_ID:
-			return "Spawn identifier is already registered."
-		_:
-			return "Spawn identifier is invalid."
+	return WorldPlacementErrorText.from_registration_error(error)
 
 
 func can_enter_cell(cell: Vector2i, moving_entity: Node = null) -> bool:

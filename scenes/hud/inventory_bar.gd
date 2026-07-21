@@ -19,13 +19,6 @@ const SLOT_ACTIONS: Array[StringName] = [
 ]
 const SLOT_SHORTCUT_TEXTS: Array[String] = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
 const HOTKEY_HINT_COLOR := Color(0.7, 0.7, 0.75, 1.0)
-const ATTACK_CURSOR_HOTSPOT := Vector2(3.0, 3.0)
-const INTERACTION_CURSOR_HOTSPOT := Vector2(18.0, 20.0)
-const INACTIVE_ACTION_CURSOR_HOTSPOT := Vector2(15.0, 4.0)
-const ATTACK_CURSOR_TEXTURE: Texture2D = preload("res://art/pointers/tool_sword_a.svg")
-const INTERACTION_CURSOR_TEXTURE: Texture2D = preload("res://art/pointers/hand_open.svg")
-const INACTIVE_ACTION_CURSOR_TEXTURE: Texture2D = preload("res://art/pointers/hand_small_point_n.svg")
-
 var runtime: WorldRuntime = null
 var character_inventory: CharacterInventory = null
 var bound_player: PlayerCharacter = null
@@ -38,7 +31,7 @@ var selected_spell_slot_index: int = -1
 func _ready() -> void:
 	add_theme_constant_override("separation", SLOT_SEPARATION)
 	_build_bar()
-	_apply_action_cursor(PlayerCharacter.ActionMode.ATTACK)
+	InventoryBarCursor.apply(PlayerCharacter.ActionMode.ATTACK)
 
 
 func _exit_tree() -> void:
@@ -158,13 +151,13 @@ func _build_bar() -> void:
 		add_child.call_deferred(item_slot)
 
 	var attack_button: Button = _create_action_button(
-		ATTACK_CURSOR_TEXTURE,
+		InventoryBarCursor.ATTACK_CURSOR_TEXTURE,
 		"Attack (Q)",
 		"q",
 		PlayerCharacter.ActionMode.ATTACK
 	)
 	var interaction_button: Button = _create_action_button(
-		INTERACTION_CURSOR_TEXTURE,
+		InventoryBarCursor.INTERACTION_CURSOR_TEXTURE,
 		"Interact (E)",
 		"e",
 		PlayerCharacter.ActionMode.INTERACT
@@ -240,7 +233,7 @@ func _create_action_button(
 	action_button.mouse_filter = Control.MOUSE_FILTER_STOP
 	action_button.pressed.connect(_on_action_button_pressed.bind(action_mode))
 	action_button.add_child.call_deferred(_create_shortcut_label(shortcut_text))
-	_apply_action_button_style(action_button, false)
+	InventoryBarStyle.apply_action_button(action_button, false)
 	return action_button
 
 
@@ -276,30 +269,8 @@ func _refresh_action_buttons(action_mode: int) -> void:
 		var available_tooltip: String = "Attack (Q)" if button_index == PlayerCharacter.ActionMode.ATTACK else "Interact (E)"
 		action_buttons[button_index].disabled = not is_available
 		action_buttons[button_index].tooltip_text = available_tooltip if is_available else "Действие недоступно в текущем ходу"
-		_apply_action_button_style(action_buttons[button_index], is_selected)
-	_apply_action_cursor(next_action_mode, attack_is_available or interaction_is_available)
-
-
-func _apply_action_button_style(action_button: Button, is_selected: bool) -> void:
-	var style: StyleBoxFlat = StyleBoxFlat.new()
-	style.bg_color = Color(0.32, 0.24, 0.06, 0.78) if is_selected else Color(0.06, 0.06, 0.08, 0.70)
-	style.border_color = Color(1.0, 0.78, 0.18, 0.92) if is_selected else Color(0.3, 0.3, 0.35, 0.82)
-	style.set_border_width_all(2 if is_selected else 1)
-	style.set_corner_radius_all(3)
-	var disabled_style: StyleBoxFlat = StyleBoxFlat.new()
-	disabled_style.bg_color = Color(0.05, 0.05, 0.06, 0.50)
-	disabled_style.border_color = Color(0.22, 0.22, 0.25, 0.65)
-	disabled_style.set_border_width_all(1)
-	disabled_style.set_corner_radius_all(3)
-	action_button.add_theme_stylebox_override("normal", style)
-	action_button.add_theme_stylebox_override("hover", style)
-	action_button.add_theme_stylebox_override("pressed", style)
-	action_button.add_theme_stylebox_override("disabled", disabled_style)
-	action_button.add_theme_color_override(
-		"font_color",
-		Color(1.0, 0.93, 0.68, 1.0) if is_selected else Color(0.7, 0.7, 0.75, 1.0)
-	)
-	action_button.add_theme_color_override("icon_disabled_color", Color(0.42, 0.42, 0.45, 0.72))
+		InventoryBarStyle.apply_action_button(action_buttons[button_index], is_selected)
+	InventoryBarCursor.apply(next_action_mode, attack_is_available or interaction_is_available)
 
 
 func _on_action_button_pressed(action_mode: int) -> void:
@@ -318,29 +289,6 @@ func _select_action_mode(action_mode: int) -> void:
 	runtime.cancel_spell_targeting(bound_player)
 	bound_player.set_action_mode(action_mode)
 	_refresh_action_buttons(bound_player.action_mode)
-
-
-func _apply_action_cursor(action_mode: int, has_available_action: bool = true) -> void:
-	if not has_available_action:
-		Input.set_custom_mouse_cursor(
-			INACTIVE_ACTION_CURSOR_TEXTURE,
-			Input.CURSOR_ARROW,
-			INACTIVE_ACTION_CURSOR_HOTSPOT
-		)
-		return
-	if action_mode == PlayerCharacter.ActionMode.INTERACT:
-		Input.set_custom_mouse_cursor(
-			INTERACTION_CURSOR_TEXTURE,
-			Input.CURSOR_ARROW,
-			INTERACTION_CURSOR_HOTSPOT
-		)
-		return
-
-	Input.set_custom_mouse_cursor(
-		ATTACK_CURSOR_TEXTURE,
-		Input.CURSOR_ARROW,
-		ATTACK_CURSOR_HOTSPOT
-	)
 
 
 func _is_action_available(action_mode: int) -> bool:

@@ -260,12 +260,7 @@ func get_available_capacity(item_id: String) -> int:
 
 
 func create_snapshot() -> Dictionary:
-	return {
-		"entity_id": owner_entity_id,
-		"revision": revision,
-		"item_slots": _create_slot_records(INVENTORY_KIND_ITEM),
-		"spell_slots": _create_slot_records(INVENTORY_KIND_SPELL),
-	}
+	return CharacterInventorySnapshotCodec.create_snapshot(self)
 
 
 func apply_snapshot(snapshot: Dictionary) -> bool:
@@ -275,9 +270,9 @@ func apply_snapshot(snapshot: Dictionary) -> bool:
 
 	var item_slot_records: Array = snapshot.get("item_slots", []) as Array
 	var spell_slot_records: Array = snapshot.get("spell_slots", []) as Array
-	if not _is_valid_snapshot(item_slot_records, INVENTORY_KIND_ITEM):
+	if not CharacterInventorySnapshotCodec.is_valid_slot_records(self, item_slot_records, INVENTORY_KIND_ITEM):
 		return false
-	if not _is_valid_snapshot(spell_slot_records, INVENTORY_KIND_SPELL):
+	if not CharacterInventorySnapshotCodec.is_valid_slot_records(self, spell_slot_records, INVENTORY_KIND_SPELL):
 		return false
 
 	return _replace_with_snapshot(snapshot, true)
@@ -286,9 +281,9 @@ func apply_snapshot(snapshot: Dictionary) -> bool:
 func restore_snapshot(snapshot: Dictionary) -> bool:
 	var item_slot_records: Array = snapshot.get("item_slots", []) as Array
 	var spell_slot_records: Array = snapshot.get("spell_slots", []) as Array
-	if not _is_valid_snapshot(item_slot_records, INVENTORY_KIND_ITEM):
+	if not CharacterInventorySnapshotCodec.is_valid_slot_records(self, item_slot_records, INVENTORY_KIND_ITEM):
 		return false
-	if not _is_valid_snapshot(spell_slot_records, INVENTORY_KIND_SPELL):
+	if not CharacterInventorySnapshotCodec.is_valid_slot_records(self, spell_slot_records, INVENTORY_KIND_SPELL):
 		return false
 	return _replace_with_snapshot(snapshot, true)
 
@@ -302,21 +297,10 @@ func apply_authoritative_snapshot(snapshot: Dictionary) -> bool:
 
 
 func is_valid_authoritative_snapshot(snapshot: Dictionary, expected_entity_id: String) -> bool:
-	var item_slots_value: Variant = snapshot.get("item_slots")
-	var spell_slots_value: Variant = snapshot.get("spell_slots")
-	if (
-		str(snapshot.get("entity_id", "")) != expected_entity_id
-		or int(snapshot.get("revision", -1)) < 0
-		or not (item_slots_value is Array)
-		or not (spell_slots_value is Array)
-		or (item_slots_value as Array).size() > ITEM_SLOT_COUNT
-		or (spell_slots_value as Array).size() > SPELL_SLOT_COUNT
-		or not NetworkProtocol.is_valid_intent_payload(snapshot)
-	):
-		return false
-	return (
-		_is_valid_snapshot(item_slots_value as Array, INVENTORY_KIND_ITEM)
-		and _is_valid_snapshot(spell_slots_value as Array, INVENTORY_KIND_SPELL)
+	return CharacterInventorySnapshotCodec.is_valid_authoritative_snapshot(
+		self,
+		snapshot,
+		expected_entity_id
 	)
 
 
@@ -351,21 +335,6 @@ func _replace_with_snapshot(snapshot: Dictionary, should_emit: bool) -> bool:
 	if should_emit:
 		inventory_changed.emit()
 	return true
-
-
-func _create_slot_records(inventory_kind: String) -> Array[Dictionary]:
-	var records: Array[Dictionary] = []
-	for slot_index: int in range(_get_slot_count(inventory_kind)):
-		var target_item: InventoryItem = get_item_at_slot(inventory_kind, slot_index)
-		if target_item == null:
-			continue
-		records.append({
-			"slot_index": slot_index,
-			"item_id": _get_item_id(target_item),
-			"quantity": target_item.get_stack_size(),
-		})
-
-	return records
 
 
 func _apply_slot_records(slot_records: Array, inventory_kind: String) -> bool:
@@ -404,29 +373,7 @@ func _get_item_id(target_item: InventoryItem) -> String:
 	return target_item.get_prototype().get_prototype_id()
 
 
-func _is_valid_snapshot(slot_records: Array, inventory_kind: String) -> bool:
-	var occupied_slot_indices: Dictionary = {}
-	for record_variant: Variant in slot_records:
-		if not (record_variant is Dictionary):
-			return false
-		var record: Dictionary = record_variant as Dictionary
-		var slot_index: int = int(record.get("slot_index", -1))
-		var item_id: String = str(record.get("item_id", ""))
-		var quantity: int = int(record.get("quantity", 0))
-		if not _is_valid_slot_index(inventory_kind, slot_index):
-			return false
-		if occupied_slot_indices.has(slot_index):
-			return false
-		if not has_item_id(item_id) or get_inventory_kind_for_item_id(item_id) != inventory_kind:
-			return false
-		if quantity <= 0 or quantity > _get_max_stack_size(item_id):
-			return false
-		occupied_slot_indices[slot_index] = true
-
-	return true
-
-
-func _get_max_stack_size(item_id: String) -> int:
+func get_max_stack_size(item_id: String) -> int:
 	if not has_item_id(item_id):
 		return DEFAULT_MAX_STACK_SIZE
 
@@ -460,6 +407,14 @@ func _get_slot_count(inventory_kind: String) -> int:
 		return SPELL_SLOT_COUNT
 
 	return 0
+
+
+func get_slot_count(inventory_kind: String) -> int:
+	return _get_slot_count(inventory_kind)
+
+
+func get_item_id(target_item: InventoryItem) -> String:
+	return _get_item_id(target_item)
 
 
 func _clear_inventories() -> void:

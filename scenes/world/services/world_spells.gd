@@ -24,8 +24,7 @@ var runtime: WorldRuntime = null
 var level: WorldLevel = null
 var selected_player_entity_id: String = ""
 var selected_spell_slot_index: int = -1
-var used_spell_slots: Dictionary[String, Dictionary] = {}
-var reserved_spell_slots: Dictionary[String, bool] = {}
+var usage_ledger: WorldSpellUsageLedger = WorldSpellUsageLedger.new()
 var active_casts_by_entity_id: Dictionary[String, String] = {}
 var active_cast_target_cells_by_entity_id: Dictionary[String, Vector2i] = {}
 var impacted_cast_ids: Dictionary[String, bool] = {}
@@ -58,8 +57,7 @@ func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void
 func _on_session_cleared() -> void:
 	selected_player_entity_id = ""
 	selected_spell_slot_index = -1
-	used_spell_slots.clear()
-	reserved_spell_slots.clear()
+	usage_ledger.clear()
 	active_casts_by_entity_id.clear()
 	active_cast_target_cells_by_entity_id.clear()
 	impacted_cast_ids.clear()
@@ -178,18 +176,15 @@ func get_remaining_spell_slot_uses(player: PlayerCharacter, spell_slot_index: in
 		return 1
 
 	var entity_id: String = runtime.get_entity_id(player)
-	return 0 if _is_spell_slot_used(entity_id, spell_slot_index) or _is_spell_slot_reserved(entity_id, spell_slot_index) else 1
+	return usage_ledger.get_remaining_uses(entity_id, spell_slot_index, runtime.is_turn_mode_enabled())
 
 
 func reserve_action(action: WorldActionRecord) -> String:
 	if action == null or not runtime.is_turn_mode_enabled():
 		return ""
-	var spell_slot_index: int = int(action.payload.get("spell_slot_index", -1))
-	var reservation_key: String = _make_spell_slot_key(action.actor_entity_id, spell_slot_index)
-	if spell_slot_index < 0 or reserved_spell_slots.has(reservation_key):
-		return REJECTION_SPELL_UNAVAILABLE
-	reserved_spell_slots[reservation_key] = true
-	action.payload["reservation_key"] = reservation_key
+	var rejection_reason: String = usage_ledger.reserve(action)
+	if not rejection_reason.is_empty():
+		return rejection_reason
 	spell_usage_changed.emit()
 	return ""
 
@@ -197,16 +192,12 @@ func reserve_action(action: WorldActionRecord) -> String:
 func release_action_reservation(action: WorldActionRecord) -> void:
 	if action == null:
 		return
-	var reservation_key: String = str(action.payload.get("reservation_key", ""))
-	if reservation_key.is_empty():
-		return
-	reserved_spell_slots.erase(reservation_key)
-	action.payload.erase("reservation_key")
-	spell_usage_changed.emit()
+	if usage_ledger.release(action):
+		spell_usage_changed.emit()
 
 
 func create_action_stream_snapshot() -> Dictionary:
-	return {"used_spell_slots": used_spell_slots.duplicate(true)}
+	return usage_ledger.create_snapshot()
 
 
 func broadcast_action_payload(action: WorldActionRecord) -> void:
@@ -217,32 +208,12 @@ func broadcast_action_payload(action: WorldActionRecord) -> void:
 func apply_action_stream_snapshot(snapshot: Dictionary) -> void:
 	if not is_valid_action_stream_snapshot(snapshot):
 		return
-	var used_slots_value: Variant = snapshot.get("used_spell_slots", {})
-	used_spell_slots = (used_slots_value as Dictionary).duplicate(true)
-	reserved_spell_slots.clear()
+	usage_ledger.apply_snapshot(snapshot)
 	spell_usage_changed.emit()
 
 
 func is_valid_action_stream_snapshot(snapshot: Dictionary) -> bool:
-	var used_slots_value: Variant = snapshot.get("used_spell_slots", {})
-	if not (used_slots_value is Dictionary):
-		return false
-	var used_slots: Dictionary = used_slots_value as Dictionary
-	if used_slots.size() > NetworkProtocol.MAX_ROSTER_SIZE:
-		return false
-	for entity_id_value: Variant in used_slots.keys():
-		var entity_id: String = str(entity_id_value)
-		var slots_value: Variant = used_slots[entity_id_value]
-		if not NetworkProtocol.is_valid_identifier(entity_id) or not (slots_value is Dictionary):
-			return false
-		var slots: Dictionary = slots_value as Dictionary
-		if slots.size() > CharacterInventory.SPELL_SLOT_COUNT:
-			return false
-		for slot_index_value: Variant in slots.keys():
-			var slot_index: int = int(slot_index_value)
-			if slot_index < 0 or slot_index >= CharacterInventory.SPELL_SLOT_COUNT or not bool(slots[slot_index_value]):
-				return false
-	return true
+	return usage_ledger.is_valid_snapshot(snapshot)
 
 
 func get_action_rejection_reason(action: WorldActionRecord) -> String:
@@ -334,7 +305,7 @@ func _get_cast_rejection_reason(
 		if _is_spell_slot_used(entity_id, spell_slot_index):
 			return REJECTION_SPELL_UNAVAILABLE
 		var reservation_key: String = _make_spell_slot_key(entity_id, spell_slot_index)
-		if reserved_spell_slots.has(reservation_key) and reservation_key != ignored_reservation_key:
+		if usage_ledger.is_reservation_key_reserved(reservation_key) and reservation_key != ignored_reservation_key:
 			return REJECTION_SPELL_UNAVAILABLE
 
 	return ""
@@ -422,32 +393,24 @@ func _record_spell_slot_use(entity_id: String, spell_slot_index: int) -> void:
 	if not runtime.is_turn_mode_enabled():
 		return
 
-	var entity_slots: Dictionary = used_spell_slots.get(entity_id, {}) as Dictionary
-	entity_slots[spell_slot_index] = true
-	used_spell_slots[entity_id] = entity_slots
+	usage_ledger.record_use(entity_id, spell_slot_index)
 
 
 func _remove_spell_slot_use(entity_id: String, spell_slot_index: int) -> void:
-	var entity_slots: Dictionary = used_spell_slots.get(entity_id, {}) as Dictionary
-	entity_slots.erase(spell_slot_index)
-	if entity_slots.is_empty():
-		used_spell_slots.erase(entity_id)
-	else:
-		used_spell_slots[entity_id] = entity_slots
+	usage_ledger.remove_use(entity_id, spell_slot_index)
 	spell_usage_changed.emit()
 
 
 func _is_spell_slot_used(entity_id: String, spell_slot_index: int) -> bool:
-	var entity_slots: Dictionary = used_spell_slots.get(entity_id, {}) as Dictionary
-	return bool(entity_slots.get(spell_slot_index, false))
+	return usage_ledger.is_used(entity_id, spell_slot_index)
 
 
 func _is_spell_slot_reserved(entity_id: String, spell_slot_index: int) -> bool:
-	return reserved_spell_slots.has(_make_spell_slot_key(entity_id, spell_slot_index))
+	return usage_ledger.is_reserved(entity_id, spell_slot_index)
 
 
 func _make_spell_slot_key(entity_id: String, spell_slot_index: int) -> String:
-	return "%s:%d" % [entity_id, spell_slot_index]
+	return usage_ledger.make_key(entity_id, spell_slot_index)
 
 
 func _get_requesting_player(requester_peer_id: int) -> PlayerCharacter:
@@ -512,14 +475,12 @@ func _on_player_turn_started(_entity_id: String) -> void:
 
 
 func _on_round_started(_round_number: int) -> void:
-	used_spell_slots.clear()
-	reserved_spell_slots.clear()
+	usage_ledger.clear()
 	spell_usage_changed.emit()
 
 
 func _on_turn_mode_changed(_is_enabled: bool) -> void:
-	used_spell_slots.clear()
-	reserved_spell_slots.clear()
+	usage_ledger.clear()
 	spell_usage_changed.emit()
 
 

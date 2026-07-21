@@ -6,7 +6,6 @@ signal action_rejected(reason_code: String)
 signal runtime_sync_failed(reason_code: String)
 signal world_occupancy_changed
 
-const MAX_BLOCKING_EVENT_SECONDS := 10.0
 const CARDINAL_DIRECTIONS: Array[Vector2i] = [
 	Vector2i.LEFT,
 	Vector2i.RIGHT,
@@ -40,6 +39,9 @@ var interaction: WorldInteraction = null
 var item_usage: WorldItemUsage = null
 var spells: WorldSpells = null
 var action_stream: WorldActionStream = null
+var action_router: WorldActionRouter = WorldActionRouter.new()
+var state_snapshot: WorldStateSnapshot = WorldStateSnapshot.new()
+var match_startup: WorldMatchStartup = WorldMatchStartup.new()
 
 
 func configure_for_level(new_level: WorldLevel) -> void:
@@ -70,39 +72,9 @@ func is_configured_for(target_level: WorldLevel) -> bool:
 	)
 
 
-func start_game() -> String:
+func start_match_runtime() -> String:
 	_configure_services()
-	registry.collect_blockers()
-	network.apply_cached_object_states()
-	players_service.prepare_players_root()
-	_register_world_entities()
-
-	if GameSession.is_singleplayer():
-		players_service.start_singleplayer()
-	elif GameSession.is_multiplayer():
-		if not NetworkManager.connection.is_ready():
-			push_warning(
-				"Multiplayer session started before network became ready: "
-				+ NetworkManager.connection.last_error
-			)
-		var player_prepare_error: String = await players_service.prepare_multiplayer_players()
-		if not player_prepare_error.is_empty():
-			return player_prepare_error
-		var sync_error: String = await action_stream.synchronize_initial_state()
-		if not sync_error.is_empty():
-			NetworkManager.players.report_player_world_failed(GameSession.get_match_id(), sync_error)
-			return sync_error
-		var commit_error: String = await players_service.report_world_ready_and_wait_for_commit()
-		if not commit_error.is_empty():
-			return commit_error
-	else:
-		push_warning("Unknown game session mode: " + str(GameSession.mode))
-		players_service.start_singleplayer()
-
-	spawner.apply_cached_world_removals()
-	network.apply_cached_entity_ai_states()
-	network.apply_cached_entity_vitality_states()
-	return ""
+	return await match_startup.start_match_runtime()
 
 
 func connect_signals() -> void:
@@ -569,300 +541,11 @@ func request_action_stream_snapshot(peer_id: int) -> void:
 
 
 func create_action_stream_snapshot(next_stream_sequence_id: int) -> Dictionary:
-	return {
-		"next_sequence_id": next_stream_sequence_id,
-		"turn_revision": turn_manager.get_turn_revision() if turn_manager != null else 0,
-		"turn_state": turn_manager.create_action_stream_snapshot() if turn_manager != null else {},
-		"spell_state": spells.create_action_stream_snapshot() if spells != null else {},
-		"world_state": _create_world_state_snapshot(),
-	}
+	return state_snapshot.create_action_stream_snapshot(next_stream_sequence_id)
 
 
 func apply_action_stream_snapshot(snapshot: Dictionary) -> bool:
-	var turn_state_value: Variant = snapshot.get("turn_state", {})
-	var spell_state_value: Variant = snapshot.get("spell_state", {})
-	var world_state_value: Variant = snapshot.get("world_state", {})
-	if (
-		not (turn_state_value is Dictionary)
-		or not (spell_state_value is Dictionary)
-		or not (world_state_value is Dictionary)
-	):
-		return false
-	if turn_manager != null and not turn_manager.is_valid_remote_snapshot(turn_state_value as Dictionary):
-		return false
-	if spells != null and not spells.is_valid_action_stream_snapshot(spell_state_value as Dictionary):
-		return false
-	if not _validate_world_state_snapshot(world_state_value as Dictionary):
-		return false
-	if not _apply_world_state_snapshot(world_state_value as Dictionary):
-		return false
-	if turn_manager != null:
-		turn_manager.apply_remote_snapshot(turn_state_value as Dictionary)
-	if spells != null:
-		spells.apply_action_stream_snapshot(spell_state_value as Dictionary)
-	return true
-
-
-func _create_world_state_snapshot() -> Dictionary:
-	var entity_records: Array[Dictionary] = []
-	var inventory_records: Array[Dictionary] = []
-	for entity_value: Variant in get_registered_entities():
-		var entity: Entity = entity_value as Entity
-		if entity == null:
-			continue
-		entity_records.append({
-			"entity_id": entity.entity_id,
-			"cell": entity.current_cell,
-			"health": entity.health,
-			"max_health": entity.max_health,
-			"damage": entity.damage,
-		})
-	if GameSession.is_multiplayer():
-		for roster_player: Dictionary in GameSession.get_players():
-			var player: PlayerCharacter = get_player_by_steam_id(int(roster_player.get("steam_id", 0)))
-			if player != null and player.character_inventory != null:
-				inventory_records.append(player.character_inventory.create_snapshot())
-	else:
-		var local_player: PlayerCharacter = get_local_player()
-		if local_player != null and local_player.character_inventory != null:
-			inventory_records.append(local_player.character_inventory.create_snapshot())
-
-	var object_records: Array[Dictionary] = []
-	for object_value: Variant in get_registered_objects():
-		var grid_object: GridObject = object_value as GridObject
-		if grid_object == null:
-			continue
-		object_records.append({
-			"object_id": grid_object.object_id,
-			"object_state": int(grid_object.object_state),
-		})
-	return {
-		"entities": entity_records,
-		"objects": object_records,
-		"inventories": inventory_records,
-		"dynamic_spawns": NetworkManager.store.get_world_spawn_records(),
-		"removed_items": NetworkManager.store.get_removed_world_items(),
-		"ai_states": NetworkManager.store.get_entity_ai_states(),
-	}
-
-
-func _validate_world_state_snapshot(world_state: Dictionary) -> bool:
-	var entities_value: Variant = world_state.get("entities", [])
-	var objects_value: Variant = world_state.get("objects", [])
-	var inventories_value: Variant = world_state.get("inventories", [])
-	var dynamic_spawns_value: Variant = world_state.get("dynamic_spawns", [])
-	var removed_items_value: Variant = world_state.get("removed_items", [])
-	var ai_states_value: Variant = world_state.get("ai_states", {})
-	if (
-		not (entities_value is Array)
-		or not (objects_value is Array)
-		or not (inventories_value is Array)
-		or not (dynamic_spawns_value is Array)
-		or not (removed_items_value is Array)
-		or not (ai_states_value is Dictionary)
-	):
-		return false
-	var entities: Array = entities_value as Array
-	var objects: Array = objects_value as Array
-	var inventories: Array = inventories_value as Array
-	if (
-		entities.size() > NetworkProtocol.MAX_WORLD_RECORDS
-		or objects.size() > NetworkProtocol.MAX_WORLD_RECORDS
-		or inventories.size() > NetworkProtocol.MAX_ROSTER_SIZE
-		or (dynamic_spawns_value as Array).size() > NetworkProtocol.MAX_WORLD_RECORDS
-		or (removed_items_value as Array).size() > NetworkProtocol.MAX_WORLD_RECORDS
-		or (ai_states_value as Dictionary).size() > NetworkProtocol.MAX_WORLD_RECORDS
-	):
-		return false
-	var seen_entity_ids: Dictionary[String, bool] = {}
-	var entity_cells_by_id: Dictionary[String, Vector2i] = {}
-	var seen_cells: Dictionary[Vector2i, bool] = {}
-	for record_value: Variant in entities:
-		if not (record_value is Dictionary):
-			return false
-		var record: Dictionary = record_value as Dictionary
-		var entity_id: String = str(record.get("entity_id", ""))
-		var cell_value: Variant = record.get("cell")
-		if (
-			not NetworkProtocol.is_valid_identifier(entity_id)
-			or seen_entity_ids.has(entity_id)
-			or not (cell_value is Vector2i)
-			or not is_cell_inside(cell_value as Vector2i)
-			or seen_cells.has(cell_value as Vector2i)
-			or int(record.get("max_health", 0)) <= 0
-			or int(record.get("max_health", 0)) > NetworkProtocol.MAX_GAMEPLAY_VALUE
-			or int(record.get("health", -1)) < 0
-			or int(record.get("health", -1)) > int(record.get("max_health", 0))
-			or not NetworkProtocol.is_valid_nonnegative_value(int(record.get("damage", -1)))
-		):
-			return false
-		seen_entity_ids[entity_id] = true
-		entity_cells_by_id[entity_id] = cell_value as Vector2i
-		seen_cells[cell_value as Vector2i] = true
-	var seen_object_ids: Dictionary[String, bool] = {}
-	for record_value: Variant in objects:
-		if not (record_value is Dictionary):
-			return false
-		var record: Dictionary = record_value as Dictionary
-		var object_id: String = str(record.get("object_id", ""))
-		if (
-			not NetworkProtocol.is_valid_identifier(object_id)
-			or seen_object_ids.has(object_id)
-			or int(record.get("object_state", -1)) not in [0, 1]
-		):
-			return false
-		seen_object_ids[object_id] = true
-	var expected_inventory_count: int = GameSession.get_players().size() if GameSession.is_multiplayer() else 1
-	if inventories.size() != expected_inventory_count:
-		return false
-	var seen_inventory_entity_ids: Dictionary[String, bool] = {}
-	for snapshot_value: Variant in inventories:
-		if not (snapshot_value is Dictionary):
-			return false
-		var inventory_snapshot: Dictionary = snapshot_value as Dictionary
-		var inventory_entity_id: String = str(inventory_snapshot.get("entity_id", ""))
-		var player: PlayerCharacter = get_entity_by_id(inventory_entity_id) as PlayerCharacter
-		if player == null:
-			for roster_player: Dictionary in GameSession.get_players():
-				if str(roster_player.get("entity_id", "")) == inventory_entity_id:
-					player = get_player_by_steam_id(int(roster_player.get("steam_id", 0)))
-					break
-		if (
-			player == null
-			or player.character_inventory == null
-			or seen_inventory_entity_ids.has(inventory_entity_id)
-			or not player.character_inventory.is_valid_authoritative_snapshot(
-				inventory_snapshot,
-				inventory_entity_id
-			)
-		):
-			return false
-		seen_inventory_entity_ids[inventory_entity_id] = true
-	var seen_spawn_ids: Dictionary[String, bool] = {}
-	for record_value: Variant in dynamic_spawns_value as Array:
-		if not (record_value is Dictionary):
-			return false
-		var spawn_record: Dictionary = record_value as Dictionary
-		var spawn_id: String = str(spawn_record.get("spawn_id", ""))
-		var spawn_cell_value: Variant = spawn_record.get("cell")
-		var spawn_cell: Vector2i = spawn_record.get("cell", Vector2i(-1, -1))
-		var is_matching_entity_cell: bool = (
-			seen_entity_ids.has(spawn_id)
-			and spawn_cell_value is Vector2i
-			and entity_cells_by_id.get(spawn_id, Vector2i(-1, -1)) == spawn_cell
-		)
-		if (
-			not NetworkProtocol.is_valid_identifier(spawn_id)
-			or seen_spawn_ids.has(spawn_id)
-			or not NetworkProtocol.is_valid_identifier(str(spawn_record.get("type_key", "")))
-			or not (spawn_cell_value is Vector2i)
-			or not is_cell_inside(spawn_cell)
-			or (seen_cells.has(spawn_cell) and not is_matching_entity_cell)
-		):
-			return false
-		seen_spawn_ids[spawn_id] = true
-		if not is_matching_entity_cell:
-			seen_cells[spawn_cell] = true
-	for record_value: Variant in removed_items_value as Array:
-		if not (record_value is Dictionary):
-			return false
-		var removal_record: Dictionary = record_value as Dictionary
-		if (
-			str(removal_record.get("kind", "")) not in ["entity", "object"]
-			or not NetworkProtocol.is_valid_identifier(str(removal_record.get("id", "")))
-		):
-			return false
-	for entity_id_value: Variant in (ai_states_value as Dictionary).keys():
-		var entity_id: String = str(entity_id_value)
-		var state_value: Variant = (ai_states_value as Dictionary)[entity_id_value]
-		if not NetworkProtocol.is_valid_identifier(entity_id) or not (state_value is Dictionary):
-			return false
-		var state_record: Dictionary = state_value as Dictionary
-		if (
-			not NetworkProtocol.is_valid_bounded_text(str(state_record.get("state", "")))
-			or not NetworkProtocol.is_valid_optional_identifier(str(state_record.get("target_entity_id", "")))
-			or not NetworkProtocol.is_valid_bounded_text(str(state_record.get("reason", "")))
-		):
-			return false
-	return true
-
-
-func _apply_world_state_snapshot(world_state: Dictionary) -> bool:
-	var dynamic_spawn_records: Array[Dictionary] = []
-	for record_value: Variant in world_state.get("dynamic_spawns", []):
-		if record_value is Dictionary:
-			dynamic_spawn_records.append(record_value as Dictionary)
-	var removal_records: Array[Dictionary] = []
-	for record_value: Variant in world_state.get("removed_items", []):
-		if record_value is Dictionary:
-			removal_records.append(record_value as Dictionary)
-	if spawner != null:
-		if not spawner.apply_action_stream_snapshot(dynamic_spawn_records, removal_records):
-			return false
-	var cells_by_entity_id: Dictionary[String, Vector2i] = {}
-	for record_value: Variant in world_state.get("entities", []):
-		if record_value is Dictionary:
-			var cell_record: Dictionary = record_value as Dictionary
-			cells_by_entity_id[str(cell_record.get("entity_id", ""))] = cell_record.get("cell", Vector2i.ZERO)
-	if registry.apply_entity_cell_batch(cells_by_entity_id) != WorldRegistry.RegistrationError.NONE:
-		if spawner != null:
-			spawner.rollback_action_stream_snapshot_spawns()
-		return false
-	for record_value: Variant in world_state.get("entities", []):
-		if not (record_value is Dictionary):
-			continue
-		var record: Dictionary = record_value as Dictionary
-		var entity: Entity = get_entity_by_id(str(record.get("entity_id", ""))) as Entity
-		if entity == null:
-			return false
-		var cell: Vector2i = record.get("cell", entity.current_cell)
-		entity.max_health = maxi(int(record.get("max_health", entity.max_health)), 1)
-		entity.set_health(int(record.get("health", entity.health)))
-		entity.apply_attack_damage_state(int(record.get("damage", entity.damage)))
-		entity.current_cell = cell
-		entity.global_position = cell_to_world(cell)
-
-	for record_value: Variant in world_state.get("objects", []):
-		if not (record_value is Dictionary):
-			continue
-		var record: Dictionary = record_value as Dictionary
-		var grid_object: GridObject = get_object_by_id(str(record.get("object_id", ""))) as GridObject
-		if grid_object == null:
-			return false
-		grid_object.apply_network_state(int(record.get("object_state", int(grid_object.object_state))))
-
-	for snapshot_value: Variant in world_state.get("inventories", []):
-		if not (snapshot_value is Dictionary):
-			continue
-		var inventory_snapshot: Dictionary = snapshot_value as Dictionary
-		var player: PlayerCharacter = get_entity_by_id(str(inventory_snapshot.get("entity_id", ""))) as PlayerCharacter
-		if player == null:
-			for roster_player: Dictionary in GameSession.get_players():
-				if str(roster_player.get("entity_id", "")) == str(inventory_snapshot.get("entity_id", "")):
-					player = get_player_by_steam_id(int(roster_player.get("steam_id", 0)))
-					break
-		if player == null or player.character_inventory == null:
-			return false
-		if not player.character_inventory.apply_authoritative_snapshot(inventory_snapshot):
-			return false
-
-	var ai_states_value: Variant = world_state.get("ai_states", {})
-	if ai_states_value is Dictionary:
-		var ai_states: Dictionary = ai_states_value as Dictionary
-		for entity_id_value: Variant in ai_states.keys():
-			var entity_id: String = str(entity_id_value)
-			var entity: NonPlayerEntity = get_entity_by_id(entity_id) as NonPlayerEntity
-			var state: Dictionary = ai_states.get(entity_id, {}) as Dictionary
-			if entity != null:
-				entity.apply_remote_ai_state(
-					str(state.get("state", "")),
-					str(state.get("target_entity_id", "")),
-					str(state.get("reason", ""))
-				)
-	if spawner != null:
-		spawner.commit_action_stream_snapshot_spawns()
-	NetworkManager.store.replace_from_world_snapshot(world_state)
-	return true
+	return state_snapshot.apply_action_stream_snapshot(snapshot)
 
 
 func receive_action_profile_payload(sequence_id: int, payload: Dictionary) -> void:
@@ -871,350 +554,39 @@ func receive_action_profile_payload(sequence_id: int, payload: Dictionary) -> vo
 
 
 func broadcast_action_profile_payload(action: WorldActionRecord) -> void:
-	if action == null or network == null:
-		return
-	match action.action_type:
-		WorldActionRecord.ActionType.MOVE, WorldActionRecord.ActionType.INTERACTION:
-			network.broadcast_character_action_payload(action)
-		WorldActionRecord.ActionType.ATTACK:
-			network.broadcast_combat_action_payload(action)
-		WorldActionRecord.ActionType.SPELL_CAST:
-			spells.broadcast_action_payload(action)
-		WorldActionRecord.ActionType.INVENTORY_ADD, \
-		WorldActionRecord.ActionType.INVENTORY_MOVE, \
-		WorldActionRecord.ActionType.INVENTORY_DELETE, \
-		WorldActionRecord.ActionType.INVENTORY_USE:
-			network.broadcast_inventory_action_payload(action)
+	action_router.broadcast_action_profile_payload(action)
 
 
 func get_action_schema_rejection_reason(action: WorldActionRecord) -> String:
-	if action == null or action.request_id <= 0 or action.actor_entity_id.is_empty():
-		return WorldActionStream.REJECTION_INVALID_ACTION
-	if GameSession.is_multiplayer() and action.requester_steam_id <= 0:
-		return WorldActionStream.REJECTION_INVALID_ACTION
-	if not NetworkProtocol.is_valid_identifier(action.actor_entity_id):
-		return WorldActionStream.REJECTION_INVALID_ACTION
-	if not NetworkProtocol.is_valid_intent_payload(action.payload):
-		return "payload_too_large"
-
-	match action.action_type:
-		WorldActionRecord.ActionType.MOVE:
-			var direction_value: Variant = action.payload.get("direction")
-			if not (direction_value is Vector2i):
-				return WorldActionStream.REJECTION_INVALID_ACTION
-			var direction: Vector2i = direction_value as Vector2i
-			if absi(direction.x) + absi(direction.y) != 1:
-				return WorldActionStream.REJECTION_INVALID_ACTION
-		WorldActionRecord.ActionType.ATTACK, WorldActionRecord.ActionType.INTERACTION:
-			if not (action.payload.get("target_cell") is Vector2i):
-				return WorldActionStream.REJECTION_INVALID_ACTION
-		WorldActionRecord.ActionType.SPELL_CAST:
-			var target_kind: String = str(action.payload.get("target_kind", "cell"))
-			if target_kind == "cell" and not (action.payload.get("target_cell") is Vector2i):
-				return WorldActionStream.REJECTION_INVALID_ACTION
-			if target_kind == "entity" and str(action.payload.get("target_entity_id", "")).is_empty():
-				return WorldActionStream.REJECTION_INVALID_ACTION
-			if target_kind != "cell" and target_kind != "entity":
-				return WorldActionStream.REJECTION_INVALID_ACTION
-			if int(action.payload.get("spell_slot_index", -1)) < 0:
-				return WorldActionStream.REJECTION_INVALID_ACTION
-		WorldActionRecord.ActionType.INVENTORY_ADD:
-			if (
-				str(action.payload.get("item_id", "")).is_empty()
-				or int(action.payload.get("amount", 0)) <= 0
-				or int(action.payload.get("amount", 0)) > CharacterInventory.ITEM_SLOT_COUNT * CharacterInventory.DEFAULT_MAX_STACK_SIZE
-				or int(action.payload.get("expected_inventory_revision", -1)) < 0
-			):
-				return WorldActionStream.REJECTION_INVALID_ACTION
-		WorldActionRecord.ActionType.INVENTORY_MOVE:
-			if str(action.payload.get("inventory_kind", "")).is_empty() or int(action.payload.get("expected_inventory_revision", -1)) < 0:
-				return WorldActionStream.REJECTION_INVALID_ACTION
-			if int(action.payload.get("source_slot_index", -1)) < 0 or int(action.payload.get("target_slot_index", -1)) < 0:
-				return WorldActionStream.REJECTION_INVALID_ACTION
-		WorldActionRecord.ActionType.INVENTORY_DELETE:
-			if str(action.payload.get("inventory_kind", "")).is_empty() or int(action.payload.get("slot_index", -1)) < 0 or int(action.payload.get("expected_inventory_revision", -1)) < 0:
-				return WorldActionStream.REJECTION_INVALID_ACTION
-		WorldActionRecord.ActionType.INVENTORY_USE:
-			if int(action.payload.get("slot_index", -1)) < 0 or int(action.payload.get("expected_inventory_revision", -1)) < 0:
-				return WorldActionStream.REJECTION_INVALID_ACTION
-		WorldActionRecord.ActionType.CHARACTER_KILL:
-			pass
-		WorldActionRecord.ActionType.END_PLAYER_TURN:
-			pass
-		_:
-			return WorldActionStream.REJECTION_INVALID_ACTION
-	return ""
+	return action_router.get_schema_rejection_reason(action)
 
 
 func get_action_acceptance_rejection_reason(action: WorldActionRecord) -> String:
-	if action == null:
-		return WorldActionStream.REJECTION_INVALID_ACTION
-	if action.request_id < 0:
-		return WorldActionStream.REJECTION_INVALID_ACTION
-	if GameSession.is_multiplayer() and action.match_id != GameSession.get_match_id():
-		return WorldActionStream.REJECTION_WRONG_MATCH
-	if action.request_id == 0:
-		if action.requester_steam_id != 0:
-			return WorldActionStream.REJECTION_INVALID_ACTION
-		return get_action_rejection_reason(action)
-	if GameSession.is_multiplayer() and not GameSession.has_committed_match():
-		return WorldActionStream.REJECTION_ACTOR_UNAVAILABLE
-	if GameSession.is_multiplayer():
-		if action.requester_steam_id <= 0:
-			return WorldActionStream.REJECTION_INVALID_ACTION
-		if not is_player_connected(action.requester_steam_id):
-			return WorldActionStream.REJECTION_ACTOR_DISCONNECTED
-	if not _is_turn_bound_action(action.action_type):
-		return get_action_rejection_reason(action)
-	if turn_manager != null and action.turn_revision != turn_manager.get_turn_revision():
-		return WorldActionStream.REJECTION_STALE_TURN
-	var player: PlayerCharacter = get_entity_by_id(action.actor_entity_id) as PlayerCharacter
-	if player == null or player.health <= 0:
-		return WorldActionStream.REJECTION_ACTOR_UNAVAILABLE
-	if turn_manager != null and turn_manager.is_world_turn_active():
-		return WorldActionStream.REJECTION_WORLD_TURN
-	if (
-		action.action_type in [
-			WorldActionRecord.ActionType.SPELL_CAST,
-			WorldActionRecord.ActionType.INVENTORY_USE,
-		]
-		and (turn_manager == null or not turn_manager.is_entity_active_in_turn(player))
-	):
-		return WorldActionStream.REJECTION_NOT_ACTIVE_PLAYER
-	if (
-		turn_manager != null
-		and turn_manager.is_turn_mode_enabled()
-		and not turn_manager.is_entity_active_in_turn(player)
-	):
-		return WorldActionStream.REJECTION_NOT_ACTIVE_PLAYER
-	return get_action_rejection_reason(action)
-
-
-func _is_turn_bound_action(action_type: WorldActionRecord.ActionType) -> bool:
-	return action_type in [
-		WorldActionRecord.ActionType.MOVE,
-		WorldActionRecord.ActionType.ATTACK,
-		WorldActionRecord.ActionType.INTERACTION,
-		WorldActionRecord.ActionType.SPELL_CAST,
-		WorldActionRecord.ActionType.INVENTORY_USE,
-		WorldActionRecord.ActionType.END_PLAYER_TURN,
-	]
+	return action_router.get_acceptance_rejection_reason(action)
 
 
 func reserve_action_on_accept(action: WorldActionRecord) -> String:
-	if action != null and action.action_type == WorldActionRecord.ActionType.SPELL_CAST:
-		return spells.reserve_action(action)
-	return ""
+	return action_router.reserve_on_accept(action)
 
 
 func release_action_reservation(action: WorldActionRecord) -> void:
-	if action != null and action.action_type == WorldActionRecord.ActionType.SPELL_CAST:
-		spells.release_action_reservation(action)
+	action_router.release_reservation(action)
 
 
 func get_action_rejection_reason(action: WorldActionRecord) -> String:
-	if action == null:
-		return WorldActionStream.REJECTION_INVALID_ACTION
-	var player: PlayerCharacter = get_entity_by_id(action.actor_entity_id) as PlayerCharacter
-	if _is_player_action(action.action_type) and (player == null or player.health <= 0):
-		return WorldActionStream.REJECTION_ACTOR_UNAVAILABLE
-
-	match action.action_type:
-		WorldActionRecord.ActionType.MOVE:
-			var direction: Vector2i = action.payload.get("direction", Vector2i.ZERO)
-			if direction == Vector2i.ZERO or not can_entity_move_in_turn(player):
-				return WorldActionStream.REJECTION_INVALID_ACTION
-			var from_cell: Vector2i = world_to_cell(player.global_position)
-			var target_cell: Vector2i = from_cell + direction
-			if not can_enter_cell(target_cell, player):
-				return WorldActionStream.REJECTION_INVALID_ACTION
-			action.payload["from_cell"] = from_cell
-			action.payload["target_cell"] = target_cell
-		WorldActionRecord.ActionType.ATTACK:
-			var attack_cell: Vector2i = action.payload.get("target_cell", Vector2i.ZERO)
-			player.current_cell = world_to_cell(player.global_position)
-			if not player.can_attack_cell(attack_cell) or not can_entity_attack_in_turn(player, attack_cell):
-				return WorldActionStream.REJECTION_INVALID_ACTION
-		WorldActionRecord.ActionType.INTERACTION:
-			var interaction_cell: Vector2i = action.payload.get("target_cell", Vector2i.ZERO)
-			player.current_cell = world_to_cell(player.global_position)
-			if not player.can_act() or not player.can_attack_cell(interaction_cell) or not can_entity_interact_in_turn(player):
-				return WorldActionStream.REJECTION_INVALID_ACTION
-		WorldActionRecord.ActionType.SPELL_CAST:
-			return spells.get_action_rejection_reason(action)
-		WorldActionRecord.ActionType.INVENTORY_ADD, \
-		WorldActionRecord.ActionType.INVENTORY_MOVE, \
-		WorldActionRecord.ActionType.INVENTORY_DELETE:
-			if player.character_inventory == null:
-				return WorldActionStream.REJECTION_INVALID_ACTION
-			if not player.character_inventory.matches_revision(int(action.payload.get("expected_inventory_revision", -1))):
-				return "stale_inventory"
-		WorldActionRecord.ActionType.INVENTORY_USE:
-			if player.character_inventory == null or not can_entity_use_item_in_turn(player):
-				return WorldActionStream.REJECTION_INVALID_ACTION
-			if not player.character_inventory.matches_revision(int(action.payload.get("expected_inventory_revision", -1))):
-				return "stale_inventory"
-		WorldActionRecord.ActionType.END_PLAYER_TURN:
-			if not turn_manager.can_end_turn(player):
-				return WorldActionStream.REJECTION_INVALID_ACTION
-	return ""
+	return action_router.get_rejection_reason(action)
 
 
 func execute_authoritative_action(action: WorldActionRecord) -> bool:
-	if not is_inside_tree():
-		return false
-	var scene_tree: SceneTree = get_tree()
-	var player: PlayerCharacter = get_entity_by_id(action.actor_entity_id) as PlayerCharacter
-	match action.action_type:
-		WorldActionRecord.ActionType.MOVE:
-			var direction: Vector2i = action.payload.get("direction", Vector2i.ZERO)
-			if not player.execute_authoritative_move(direction):
-				return false
-			var move_deadline_msec: int = Time.get_ticks_msec() + int((player.move_time + 2.0) * 1000.0)
-			while is_instance_valid(player) and player.is_moving and Time.get_ticks_msec() < move_deadline_msec:
-				await scene_tree.process_frame
-				if not is_inside_tree():
-					return false
-			if not is_instance_valid(player):
-				return false
-			if player.is_moving:
-				player.force_cancel_movement(action.payload.get("from_cell", player.current_cell))
-				action.payload["cancellation_reason"] = WorldActionStream.REJECTION_PRESENTATION_TIMEOUT
-				return false
-			return true
-		WorldActionRecord.ActionType.ATTACK:
-			var attack_cell: Vector2i = action.payload.get("target_cell", Vector2i.ZERO)
-			player.play_remote_attack(attack_cell, false)
-			if not player.is_attacking:
-				return false
-			notify_entity_attacked_in_turn(player, attack_cell)
-			apply_attack_to_cell(player, attack_cell, true, false)
-			var expected_attack_duration: float = player.get_expected_attack_duration(attack_cell)
-			var attack_deadline_msec: int = Time.get_ticks_msec() + int((expected_attack_duration + 2.0) * 1000.0)
-			while is_instance_valid(player) and player.is_attacking and Time.get_ticks_msec() < attack_deadline_msec:
-				await scene_tree.process_frame
-				if not is_inside_tree():
-					return false
-			if not is_instance_valid(player):
-				return false
-			if player.is_attacking:
-				player.force_finish_attack_presentation()
-			return true
-		WorldActionRecord.ActionType.INTERACTION:
-			return try_character_interaction(player, action.payload.get("target_cell", Vector2i.ZERO))
-		WorldActionRecord.ActionType.SPELL_CAST:
-			return await spells.execute_action_cast(action, true)
-		WorldActionRecord.ActionType.INVENTORY_ADD:
-			var was_added: bool = player.character_inventory.try_add_item(str(action.payload.get("item_id", "")), int(action.payload.get("amount", 0)))
-			if not was_added:
-				action.payload["cancellation_reason"] = _get_inventory_mutation_reason(player.character_inventory)
-			return was_added
-		WorldActionRecord.ActionType.INVENTORY_MOVE:
-			var was_moved: bool = player.character_inventory.try_move_stack(
-				str(action.payload.get("inventory_kind", "")),
-				int(action.payload.get("source_slot_index", -1)),
-				int(action.payload.get("target_slot_index", -1))
-			)
-			if not was_moved:
-				action.payload["cancellation_reason"] = _get_inventory_mutation_reason(player.character_inventory)
-			return was_moved
-		WorldActionRecord.ActionType.INVENTORY_DELETE:
-			var was_deleted: bool = player.character_inventory.try_delete_stack(
-				str(action.payload.get("inventory_kind", "")),
-				int(action.payload.get("slot_index", -1))
-			)
-			if not was_deleted:
-				action.payload["cancellation_reason"] = _get_inventory_mutation_reason(player.character_inventory)
-			return was_deleted
-		WorldActionRecord.ActionType.INVENTORY_USE:
-			var was_used: bool = try_use_inventory_item(player, int(action.payload.get("slot_index", -1)))
-			if not was_used:
-				action.payload["cancellation_reason"] = "effect_failed"
-			return was_used
-		WorldActionRecord.ActionType.CHARACTER_KILL:
-			return players_service.execute_character_kill_action(player)
-		WorldActionRecord.ActionType.END_PLAYER_TURN:
-			return turn_manager.execute_end_turn_action(player)
-		WorldActionRecord.ActionType.PLAYER_TURN_STARTED:
-			return turn_manager.execute_player_turn_started_action(action.actor_entity_id)
-		WorldActionRecord.ActionType.WORLD_TURN_STARTED:
-			return await turn_manager.execute_world_turn_started_action()
-		WorldActionRecord.ActionType.WORLD_TURN_ENDED:
-			return turn_manager.execute_world_turn_ended_action()
-		WorldActionRecord.ActionType.SET_TURN_MODE:
-			return turn_manager.execute_set_turn_mode_action(bool(action.payload.get("is_enabled", false)))
-		WorldActionRecord.ActionType.PLAYER_TURN_SKIPPED:
-			return turn_manager.execute_player_turn_skipped_action(
-				action.actor_entity_id,
-				str(action.payload.get("reason", "unavailable"))
-			)
-		WorldActionRecord.ActionType.BLOCKING_EVENT:
-			var duration_seconds: float = clampf(float(action.payload.get("duration_seconds", 0.0)), 0.0, MAX_BLOCKING_EVENT_SECONDS)
-			if duration_seconds > 0.0:
-				await scene_tree.create_timer(duration_seconds).timeout
-				if not is_inside_tree():
-					return false
-			return true
-	return false
-
-
-func _get_inventory_mutation_reason(character_inventory: CharacterInventory) -> String:
-	if character_inventory == null:
-		return WorldActionStream.REJECTION_INVALID_ACTION
-	match character_inventory.get_last_mutation_result():
-		CharacterInventory.MutationResult.STALE_REVISION:
-			return "stale_inventory"
-		CharacterInventory.MutationResult.EFFECT_FAILED:
-			return "effect_failed"
-		_:
-			return WorldActionStream.REJECTION_INVALID_ACTION
+	return await action_router.execute_authoritative(action)
 
 
 func play_remote_action(action: WorldActionRecord) -> void:
-	if not is_inside_tree():
-		return
-	var scene_tree: SceneTree = get_tree()
-	var player: PlayerCharacter = get_entity_by_id(action.actor_entity_id) as PlayerCharacter
-	if player == null:
-		return
-	match action.action_type:
-		WorldActionRecord.ActionType.MOVE:
-			var from_cell: Vector2i = action.payload.get("from_cell", player.current_cell)
-			var target_cell: Vector2i = action.payload.get("target_cell", player.current_cell)
-			if player.play_remote_move(from_cell, target_cell):
-				var move_deadline_msec: int = Time.get_ticks_msec() + int((player.move_time + 2.0) * 1000.0)
-				while is_instance_valid(player) and player.is_moving and Time.get_ticks_msec() < move_deadline_msec:
-					await scene_tree.process_frame
-					if not is_inside_tree():
-						return
-				if not is_instance_valid(player):
-					return
-				if player.is_moving:
-					player.force_cancel_movement(from_cell)
-		WorldActionRecord.ActionType.ATTACK:
-			var attack_cell: Vector2i = action.payload.get("target_cell", player.current_cell)
-			player.play_remote_attack(attack_cell, false)
-			var expected_attack_duration: float = player.get_expected_attack_duration(attack_cell)
-			var attack_deadline_msec: int = Time.get_ticks_msec() + int((expected_attack_duration + 2.0) * 1000.0)
-			while is_instance_valid(player) and player.is_attacking and Time.get_ticks_msec() < attack_deadline_msec:
-				await scene_tree.process_frame
-				if not is_inside_tree():
-					return
-			if not is_instance_valid(player):
-				return
-			if player.is_attacking:
-				player.force_finish_attack_presentation()
-		WorldActionRecord.ActionType.SPELL_CAST:
-			await spells.execute_action_cast(action, false)
-		WorldActionRecord.ActionType.BLOCKING_EVENT:
-			var duration_seconds: float = clampf(float(action.payload.get("duration_seconds", 0.0)), 0.0, MAX_BLOCKING_EVENT_SECONDS)
-			if duration_seconds > 0.0:
-				await scene_tree.create_timer(duration_seconds).timeout
+	await action_router.play_remote(action)
 
 
 func finalize_authoritative_action(action: WorldActionRecord) -> void:
-	if network != null:
-		network.finalize_authoritative_action(action)
+	action_router.finalize_authoritative(action)
 
 
 func is_turn_mode_enabled() -> bool:
@@ -1378,20 +750,23 @@ func _bind_services() -> void:
 		spells.configure_context(self, level)
 	if action_stream != null:
 		action_stream.configure_context(self, level)
-
-
-func _is_player_action(action_type: WorldActionRecord.ActionType) -> bool:
-	return action_type in [
-		WorldActionRecord.ActionType.MOVE,
-		WorldActionRecord.ActionType.ATTACK,
-		WorldActionRecord.ActionType.INTERACTION,
-		WorldActionRecord.ActionType.SPELL_CAST,
-		WorldActionRecord.ActionType.INVENTORY_ADD,
-		WorldActionRecord.ActionType.INVENTORY_MOVE,
-		WorldActionRecord.ActionType.INVENTORY_DELETE,
-		WorldActionRecord.ActionType.INVENTORY_USE,
-		WorldActionRecord.ActionType.CHARACTER_KILL,
-	]
+	action_router.configure_context(self, players_service, network, turn_manager, spells)
+	state_snapshot.configure_context(
+		self,
+		registry,
+		spawner,
+		turn_manager,
+		spells,
+		NetworkManager.store
+	)
+	match_startup.configure_context(
+		self,
+		registry,
+		network,
+		players_service,
+		action_stream,
+		spawner
+	)
 
 
 func _configure_services() -> void:
@@ -1408,7 +783,7 @@ func _configure_services() -> void:
 		players_service.configure(level.get_spawn_cells())
 
 
-func _register_world_entities() -> void:
+func register_level_entities() -> void:
 	if level == null:
 		return
 

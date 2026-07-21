@@ -65,14 +65,7 @@ var terminal_deadline_msec: int = 0
 var is_initial_sync: bool = false
 var has_sync_failed: bool = false
 var last_sync_failure_reason: String = ""
-var diagnostic_counters: Dictionary[String, int] = {
-	"resync_attempts": 0,
-	"resync_successes": 0,
-	"resync_failures": 0,
-	"stale_packets": 0,
-	"buffer_rejections": 0,
-	"watchdog_activations": 0,
-}
+var diagnostics: WorldActionStreamDiagnostics = WorldActionStreamDiagnostics.new()
 
 
 func _ready() -> void:
@@ -134,11 +127,11 @@ func is_synchronizing() -> bool:
 
 
 func get_diagnostic_counters() -> Dictionary:
-	var counters: Dictionary = diagnostic_counters.duplicate()
-	counters["buffered_sequences"] = remote_action_buffer.size()
-	counters["buffered_payloads"] = remote_payload_buffer.size()
-	counters["buffered_auxiliary_profiles"] = remote_auxiliary_profiles.size()
-	return counters
+	return diagnostics.create_snapshot(
+		remote_action_buffer.size(),
+		remote_payload_buffer.size(),
+		remote_auxiliary_profiles.size()
+	)
 
 
 func create_local_request_id() -> int:
@@ -561,12 +554,7 @@ func _on_session_cleared() -> void:
 	intent_refill_msec_by_steam_id.clear()
 	_clear_remote_state()
 	pending_snapshot_peer_ids.clear()
-	diagnostic_counters["resync_attempts"] = 0
-	diagnostic_counters["resync_successes"] = 0
-	diagnostic_counters["resync_failures"] = 0
-	diagnostic_counters["stale_packets"] = 0
-	diagnostic_counters["buffer_rejections"] = 0
-	diagnostic_counters["watchdog_activations"] = 0
+	diagnostics.reset()
 
 
 func _accept_request(peer_id: int, request_id: int, sequence_id: int) -> void:
@@ -950,7 +938,7 @@ func _clear_remote_state() -> void:
 
 
 func _increment_diagnostic(counter_name: String) -> void:
-	diagnostic_counters[counter_name] = int(diagnostic_counters.get(counter_name, 0)) + 1
+	diagnostics.increment(counter_name)
 
 
 func _is_external_player_action(action_type: WorldActionRecord.ActionType) -> bool:

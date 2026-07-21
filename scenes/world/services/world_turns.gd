@@ -48,6 +48,7 @@ var world_turn_generation: int = 0
 var behavior_deadline_by_entity_id: Dictionary[String, int] = {}
 var watchdog_activation_count: int = 0
 var pending_remote_snapshots: Dictionary[int, Dictionary] = {}
+var debug_commands: WorldTurnsDebugCommands = WorldTurnsDebugCommands.new()
 
 
 func _ready() -> void:
@@ -59,14 +60,13 @@ func _ready() -> void:
 func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void:
 	runtime = new_runtime
 	level = new_level
-	if level != null and level.allows_debug_commands():
-		_register_console_commands()
+	debug_commands.configure(self, level != null and level.allows_debug_commands())
 	if runtime.action_stream != null and not runtime.action_stream.action_started.is_connected(_on_stream_action_started):
 		runtime.action_stream.action_started.connect(_on_stream_action_started)
 
 
 func _exit_tree() -> void:
-	_unregister_console_commands()
+	debug_commands.unregister_commands()
 	_disconnect_network_signals()
 	if runtime != null and runtime.action_stream != null and runtime.action_stream.action_started.is_connected(_on_stream_action_started):
 		runtime.action_stream.action_started.disconnect(_on_stream_action_started)
@@ -988,23 +988,3 @@ func handle_player_disconnected(steam_id: int) -> void:
 			"actor_entity_id": active_entity_id,
 			"reason": "disconnected",
 		})
-
-
-func _register_console_commands() -> void:
-	var console: Node = get_node_or_null("/root/Console")
-	if console == null or not console.has_method("add_command"):
-		return
-
-	console.add_command("game_turns_enable", enable_turn_mode, 0, 0, "Enable turn-based mode.")
-	console.add_command("game_turns_disable", disable_turn_mode, 0, 0, "Disable turn-based mode.")
-	console.add_command("game_turns_status", print_turn_status, 0, 0, "Print turn-based mode status.")
-
-
-func _unregister_console_commands() -> void:
-	var console: Node = get_node_or_null("/root/Console")
-	if console == null or not console.has_method("remove_command"):
-		return
-
-	console.remove_command("game_turns_enable")
-	console.remove_command("game_turns_disable")
-	console.remove_command("game_turns_status")

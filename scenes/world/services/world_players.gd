@@ -10,10 +10,7 @@ enum ConnectionState {
 
 const CHARACTER_SCENE := preload("res://scenes/entities/character/character.tscn")
 const CAMERA_SCENE := preload("res://scenes/camera/camera.tscn")
-const KILL_COMMAND_NAME := "game_character_kill"
-const INVENTORY_ADD_COMMAND_NAME := "game_inventory_add"
 const SINGLEPLAYER_WARRIOR_COLOR := "Purple"
-const MULTIPLAYER_WARRIOR_COLORS := ["Blue", "Purple", "Red", "Yellow"]
 const PLAYER_SNAPSHOT_RETRY_MSEC := 500
 const PLAYER_COMMIT_TIMEOUT_MSEC := 10000
 const INVALID_SPAWN_CELL := Vector2i(-1, -1)
@@ -38,6 +35,7 @@ var received_spawn_snapshot: Dictionary = {}
 var are_players_committed: bool = false
 var pending_respawn_players: Dictionary[String, PlayerCharacter] = {}
 var connection_state_by_steam_id: Dictionary[int, ConnectionState] = {}
+var debug_commands: WorldPlayersDebugCommands = WorldPlayersDebugCommands.new()
 
 
 func _ready() -> void:
@@ -54,7 +52,7 @@ func _process(_delta: float) -> void:
 		if player == null or not is_instance_valid(player):
 			pending_respawn_players.erase(entity_id)
 			continue
-		var target_cell: Vector2i = _find_available_spawn_cell(player.spawn_cell, true, {}, player)
+		var target_cell: Vector2i = WorldPlayerSpawnPlanner.find_available_cell(runtime, player.spawn_cell, true, {}, player)
 		if target_cell == INVALID_SPAWN_CELL:
 			continue
 		if player.respawn_at_cell(target_cell):
@@ -64,7 +62,7 @@ func _process(_delta: float) -> void:
 
 
 func _exit_tree() -> void:
-	_unregister_console_commands()
+	debug_commands.unregister_commands()
 	_disconnect_network_signals()
 	_disconnect_player_channel_signals()
 
@@ -72,8 +70,7 @@ func _exit_tree() -> void:
 func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void:
 	runtime = new_runtime
 	level = new_level
-	if _can_use_debug_commands():
-		_register_console_commands()
+	debug_commands.configure_context(self, runtime, level)
 
 
 func configure(new_spawn_cells: Array[Vector2i]) -> void:
@@ -101,7 +98,7 @@ func start_singleplayer() -> void:
 		"name": "Player",
 		"is_host": true,
 		"is_local": true,
-	}, _get_spawn_cell(0), SINGLEPLAYER_WARRIOR_COLOR, "patrick")
+	}, WorldPlayerSpawnPlanner.get_default_spawn_cell(runtime, spawn_cells, 0), SINGLEPLAYER_WARRIOR_COLOR, "patrick")
 	connection_state_by_steam_id[0] = ConnectionState.CONNECTED
 
 
@@ -214,7 +211,7 @@ func get_players_root() -> Node2D:
 func request_player_respawn(player: PlayerCharacter) -> bool:
 	if player == null or runtime == null:
 		return false
-	var target_cell: Vector2i = _find_available_spawn_cell(player.spawn_cell, true, {}, player)
+	var target_cell: Vector2i = WorldPlayerSpawnPlanner.find_available_cell(runtime, player.spawn_cell, true, {}, player)
 	if target_cell == INVALID_SPAWN_CELL:
 		runtime.unregister_entity(player)
 		player.can_receive_input = false
@@ -233,64 +230,11 @@ func request_player_respawn(player: PlayerCharacter) -> bool:
 	return was_respawned
 
 
-func console_kill_character() -> void:
-	if not _can_use_debug_commands():
-		ConsoleOutput.print_console("ERROR: Debug mutations are unavailable for this level.", runtime)
-		return
-	if local_player == null:
-		ConsoleOutput.print_console("ERROR: Local character is not ready.", runtime)
-		return
-	if GameSession.is_multiplayer() and not NetworkManager.connection.is_ready():
-		ConsoleOutput.print_console("ERROR: Cannot kill character: network is not ready.", runtime)
-		return
-
-	var request_id: int = runtime.create_action_request_id()
-	if GameSession.is_multiplayer() and not GameSession.is_host():
-		NetworkManager.character.request_character_kill(GameSession.get_match_id(), runtime.get_turn_revision(), request_id)
-		return
-	runtime.enqueue_player_action(
-		WorldActionRecord.ActionType.CHARACTER_KILL,
-		local_player,
-		{},
-		request_id,
-		0
-	)
-
-
 func execute_character_kill_action(player: PlayerCharacter) -> bool:
 	if player == null:
 		return false
 	_kill_and_respawn_player(player)
 	return true
-
-
-func console_inventory_add(item_id: String, amount_text: String) -> void:
-	if not _can_use_debug_commands():
-		ConsoleOutput.print_console("ERROR: Debug mutations are unavailable for this level.", runtime)
-		return
-	if local_player == null:
-		ConsoleOutput.print_console("ERROR: Local character is not ready.", runtime)
-		return
-	if not local_player.character_inventory.has_item_id(item_id):
-		ConsoleOutput.print_console("ERROR: Unknown inventory item: %s." % item_id, runtime)
-		return
-	if (
-		not amount_text.is_valid_int()
-		or amount_text.to_int() <= 0
-		or amount_text.to_int() > CharacterInventory.ITEM_SLOT_COUNT * CharacterInventory.DEFAULT_MAX_STACK_SIZE
-	):
-		ConsoleOutput.print_console(
-			"ERROR: Usage: %s <item_id> <positive_amount>." % INVENTORY_ADD_COMMAND_NAME,
-			runtime
-		)
-		return
-	if GameSession.is_multiplayer() and not NetworkManager.connection.is_ready():
-		ConsoleOutput.print_console("ERROR: Cannot add inventory item: network is not ready.", runtime)
-		return
-
-	var amount: int = amount_text.to_int()
-	runtime.request_inventory_add(item_id, amount)
-	ConsoleOutput.print_console("Requested %d %s inventory item(s)." % [amount, item_id], runtime)
 
 
 func _kill_and_respawn_player(player: PlayerCharacter) -> void:
@@ -311,46 +255,6 @@ func _broadcast_player_respawn(player: PlayerCharacter) -> void:
 		player.health,
 		runtime.get_current_action_sequence_id()
 	)
-
-
-func _can_use_debug_commands() -> bool:
-	return level != null and level.allows_debug_commands()
-
-
-func _register_console_commands() -> void:
-	var console: Node = get_node_or_null("/root/Console")
-	if console == null or not console.has_method("add_command"):
-		return
-
-	console.add_command(
-		KILL_COMMAND_NAME,
-		console_kill_character,
-		0,
-		0,
-		"Kill and immediately respawn the local character."
-	)
-	console.add_command(
-		INVENTORY_ADD_COMMAND_NAME,
-		console_inventory_add,
-		["item_id", "amount"],
-		2,
-		"Add a complete item amount to the local character inventory."
-	)
-
-	if console.has_method("add_command_autocomplete_list"):
-		console.add_command_autocomplete_list(
-			INVENTORY_ADD_COMMAND_NAME,
-			CharacterInventory.KNOWN_ITEM_IDS
-		)
-
-
-func _unregister_console_commands() -> void:
-	var console: Node = get_node_or_null("/root/Console")
-	if console == null or not console.has_method("remove_command"):
-		return
-
-	console.remove_command(KILL_COMMAND_NAME)
-	console.remove_command(INVENTORY_ADD_COMMAND_NAME)
 
 
 func _connect_network_signals() -> void:
@@ -437,7 +341,7 @@ func _on_character_kill_requested(
 	request_id: int,
 	requester_peer_id: int
 ) -> void:
-	if not GameSession.is_host() or not _can_use_debug_commands():
+	if not GameSession.is_host() or not debug_commands.allows_commands():
 		return
 
 	var target_player: PlayerCharacter = local_player
@@ -469,7 +373,7 @@ func _spawn_player(
 	if player == null:
 		return null
 
-	player.name = _get_player_node_name(player_info)
+	player.name = WorldPlayerSpawnPlanner.get_player_node_name(player_info)
 	players_root.add_child(player)
 	player.setup_multiplayer_player(player_info)
 	player.start(runtime.cell_to_world(spawn_cell), bool(player_info.get("is_local", false)), entity_id)
@@ -500,7 +404,7 @@ func _spawn_camera_for_player(player: Node2D) -> void:
 	if camera == null:
 		return
 
-	camera.allows_console_commands = _can_use_debug_commands()
+	camera.allows_console_commands = debug_commands.allows_commands()
 	local_camera = camera
 	players_root.add_child.call_deferred(camera)
 	call_deferred("_configure_camera_for_player", camera, player)
@@ -524,20 +428,6 @@ func _configure_camera_for_player(camera: GameCamera, player: Node2D) -> void:
 	camera.make_current()
 
 
-func _get_spawn_cell(index: int) -> Vector2i:
-	if index < spawn_cells.size():
-		return spawn_cells[index]
-
-	var grid_size: Vector2i = runtime.get_grid_size()
-	for y in range(grid_size.y):
-		for x in range(grid_size.x):
-			var cell: Vector2i = Vector2i(x, y)
-			if runtime.is_cell_walkable_for_character(cell):
-				return cell
-
-	return Vector2i(1, 1)
-
-
 func _spawn_authoritative_players(session_players: Array[Dictionary]) -> String:
 	var spawn_records: Array[Dictionary] = []
 	var assigned_cells: Dictionary[Vector2i, bool] = {}
@@ -547,11 +437,11 @@ func _spawn_authoritative_players(session_players: Array[Dictionary]) -> String:
 		var has_preferred_cell: bool = index < spawn_cells.size()
 		if has_preferred_cell:
 			preferred_cell = spawn_cells[index]
-		var spawn_cell: Vector2i = _find_available_spawn_cell(preferred_cell, has_preferred_cell, assigned_cells)
+		var spawn_cell: Vector2i = WorldPlayerSpawnPlanner.find_available_cell(runtime, preferred_cell, has_preferred_cell, assigned_cells)
 		if spawn_cell == INVALID_SPAWN_CELL:
 			return "spawn_unavailable"
 		var entity_id: String = str(player_info.get("entity_id", ""))
-		var warrior_color: String = _get_multiplayer_warrior_color(int(player_info.get("color_index", index)))
+		var warrior_color: String = WorldPlayerSpawnPlanner.get_warrior_color(int(player_info.get("color_index", index)))
 		var player: PlayerCharacter = _spawn_player(player_info, spawn_cell, warrior_color, entity_id)
 		if player == null:
 			return "spawn_registration_failed"
@@ -621,59 +511,3 @@ func _spawn_players_from_snapshot(session_players: Array[Dictionary], snapshot: 
 		if player == null:
 			return false
 	return true
-
-
-func _find_available_spawn_cell(
-	preferred_cell: Vector2i,
-	has_preferred_cell: bool,
-	assigned_cells: Dictionary[Vector2i, bool],
-	ignored_player: PlayerCharacter = null
-) -> Vector2i:
-	if has_preferred_cell and _is_spawn_cell_available(preferred_cell, assigned_cells, ignored_player):
-		return preferred_cell
-	var candidates: Array[Vector2i] = []
-	var grid_size: Vector2i = runtime.get_grid_size()
-	for y: int in range(grid_size.y):
-		for x: int in range(grid_size.x):
-			var cell: Vector2i = Vector2i(x, y)
-			if _is_spawn_cell_available(cell, assigned_cells, ignored_player):
-				candidates.append(cell)
-	if has_preferred_cell:
-		candidates.sort_custom(func(first: Vector2i, second: Vector2i) -> bool:
-			var first_distance: int = absi(first.x - preferred_cell.x) + absi(first.y - preferred_cell.y)
-			var second_distance: int = absi(second.x - preferred_cell.x) + absi(second.y - preferred_cell.y)
-			if first_distance != second_distance:
-				return first_distance < second_distance
-			if first.y != second.y:
-				return first.y < second.y
-			return first.x < second.x
-		)
-	if candidates.is_empty():
-		return INVALID_SPAWN_CELL
-	return candidates[0]
-
-
-func _is_spawn_cell_available(
-	cell: Vector2i,
-	assigned_cells: Dictionary[Vector2i, bool],
-	ignored_player: PlayerCharacter = null
-) -> bool:
-	return (
-		not assigned_cells.has(cell)
-		and runtime.can_character_enter_cell(cell, ignored_player)
-	)
-
-
-func _get_multiplayer_warrior_color(player_index: int) -> String:
-	if player_index >= 0 and player_index < MULTIPLAYER_WARRIOR_COLORS.size():
-		return str(MULTIPLAYER_WARRIOR_COLORS[player_index])
-
-	return str(MULTIPLAYER_WARRIOR_COLORS[0])
-
-
-func _get_player_node_name(player_info: Dictionary) -> String:
-	var steam_id: int = int(player_info.get("steam_id", 0))
-	if steam_id == 0:
-		return "Character"
-
-	return "Character_%s" % steam_id

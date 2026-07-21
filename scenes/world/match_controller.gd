@@ -48,7 +48,7 @@ func start_match() -> void:
 		return
 
 	has_started_match = true
-	var start_error: String = await runtime.start_game()
+	var start_error: String = await runtime.start_match_runtime()
 	if not start_error.is_empty():
 		has_started_match = false
 		if GameSession.is_multiplayer():
