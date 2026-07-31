@@ -19,7 +19,7 @@ func clear() -> void:
 func cache_object_state(object_id: String, object_state: int) -> void:
 	if (
 		NetworkProtocol.is_valid_identifier(object_id)
-		and object_state in [0, 1]
+		and object_state in [0, 1, 2]
 		and (object_states.has(object_id) or object_states.size() < NetworkProtocol.MAX_WORLD_RECORDS)
 	):
 		object_states[object_id] = object_state

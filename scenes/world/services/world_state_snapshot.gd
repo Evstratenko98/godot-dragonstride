@@ -6,6 +6,7 @@ var registry: WorldRegistry = null
 var spawner: WorldSpawner = null
 var turns: WorldTurns = null
 var spells: WorldSpells = null
+var loot: WorldLoot = null
 var replication_store: NetworkReplicationStore = null
 
 
@@ -15,6 +16,7 @@ func configure_context(
 	new_spawner: WorldSpawner,
 	new_turns: WorldTurns,
 	new_spells: WorldSpells,
+	new_loot: WorldLoot,
 	new_replication_store: NetworkReplicationStore
 ) -> void:
 	runtime = new_runtime
@@ -22,6 +24,7 @@ func configure_context(
 	spawner = new_spawner
 	turns = new_turns
 	spells = new_spells
+	loot = new_loot
 	replication_store = new_replication_store
 
 
@@ -31,6 +34,7 @@ func create_action_stream_snapshot(next_stream_sequence_id: int) -> Dictionary:
 		"turn_revision": turns.get_turn_revision() if turns != null else 0,
 		"turn_state": turns.create_action_stream_snapshot() if turns != null else {},
 		"spell_state": spells.create_action_stream_snapshot() if spells != null else {},
+		"loot_state": loot.create_snapshot() if loot != null else {},
 		"world_state": _create_world_state_snapshot(),
 	}
 
@@ -38,16 +42,20 @@ func create_action_stream_snapshot(next_stream_sequence_id: int) -> Dictionary:
 func apply_action_stream_snapshot(snapshot: Dictionary) -> bool:
 	var turn_state_value: Variant = snapshot.get("turn_state", {})
 	var spell_state_value: Variant = snapshot.get("spell_state", {})
+	var loot_state_value: Variant = snapshot.get("loot_state", {})
 	var world_state_value: Variant = snapshot.get("world_state", {})
 	if (
 		not (turn_state_value is Dictionary)
 		or not (spell_state_value is Dictionary)
+		or not (loot_state_value is Dictionary)
 		or not (world_state_value is Dictionary)
 	):
 		return false
 	if turns != null and not turns.is_valid_remote_snapshot(turn_state_value as Dictionary):
 		return false
 	if spells != null and not spells.is_valid_action_stream_snapshot(spell_state_value as Dictionary):
+		return false
+	if loot != null and not loot.is_valid_snapshot(loot_state_value as Dictionary):
 		return false
 	if not _validate_world_state_snapshot(world_state_value as Dictionary):
 		return false
@@ -57,6 +65,8 @@ func apply_action_stream_snapshot(snapshot: Dictionary) -> bool:
 		turns.apply_remote_snapshot(turn_state_value as Dictionary)
 	if spells != null:
 		spells.apply_action_stream_snapshot(spell_state_value as Dictionary)
+	if loot != null and not loot.apply_snapshot(loot_state_value as Dictionary):
+		return false
 	return true
 
 
@@ -165,7 +175,7 @@ func _validate_world_state_snapshot(world_state: Dictionary) -> bool:
 		if (
 			not NetworkProtocol.is_valid_identifier(object_id)
 			or seen_object_ids.has(object_id)
-			or int(record.get("object_state", -1)) not in [0, 1]
+			or int(record.get("object_state", -1)) not in [0, 1, 2]
 		):
 			return false
 		seen_object_ids[object_id] = true
@@ -320,4 +330,3 @@ func _apply_world_state_snapshot(world_state: Dictionary) -> bool:
 		spawner.commit_action_stream_snapshot_spawns()
 	replication_store.replace_from_world_snapshot(world_state)
 	return true
-

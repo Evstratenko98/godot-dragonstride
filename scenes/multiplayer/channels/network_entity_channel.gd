@@ -85,7 +85,7 @@ func _receive_entity_removed(match_id: String, sequence_id: int, entity_id: Stri
 
 
 func _is_valid_object_state(object_id: String, object_state: int, sequence_id: int) -> bool:
-	return NetworkProtocol.is_valid_identifier(object_id) and object_state in [0, 1] and sequence_id >= 0
+	return NetworkProtocol.is_valid_identifier(object_id) and object_state in [0, 1, 2] and sequence_id >= 0
 
 
 func _is_valid_ai_state(entity_id: String, state: String, target_entity_id: String, reason: String, sequence_id: int) -> bool:

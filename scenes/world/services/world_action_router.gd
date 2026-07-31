@@ -8,6 +8,7 @@ var players: WorldPlayers = null
 var network: WorldNetwork = null
 var turns: WorldTurns = null
 var spells: WorldSpells = null
+var loot: WorldLoot = null
 
 
 func configure_context(
@@ -15,13 +16,15 @@ func configure_context(
 	new_players: WorldPlayers,
 	new_network: WorldNetwork,
 	new_turns: WorldTurns,
-	new_spells: WorldSpells
+	new_spells: WorldSpells,
+	new_loot: WorldLoot
 ) -> void:
 	runtime = new_runtime
 	players = new_players
 	network = new_network
 	turns = new_turns
 	spells = new_spells
+	loot = new_loot
 
 
 func broadcast_action_profile_payload(action: WorldActionRecord) -> void:
@@ -43,60 +46,7 @@ func broadcast_action_profile_payload(action: WorldActionRecord) -> void:
 
 
 func get_schema_rejection_reason(action: WorldActionRecord) -> String:
-	if action == null or action.request_id <= 0 or action.actor_entity_id.is_empty():
-		return WorldActionStream.REJECTION_INVALID_ACTION
-	if GameSession.is_multiplayer() and action.requester_steam_id <= 0:
-		return WorldActionStream.REJECTION_INVALID_ACTION
-	if not NetworkProtocol.is_valid_identifier(action.actor_entity_id):
-		return WorldActionStream.REJECTION_INVALID_ACTION
-	if not NetworkProtocol.is_valid_intent_payload(action.payload):
-		return "payload_too_large"
-
-	match action.action_type:
-		WorldActionRecord.ActionType.MOVE:
-			var direction_value: Variant = action.payload.get("direction")
-			if not (direction_value is Vector2i):
-				return WorldActionStream.REJECTION_INVALID_ACTION
-			var direction: Vector2i = direction_value as Vector2i
-			if absi(direction.x) + absi(direction.y) != 1:
-				return WorldActionStream.REJECTION_INVALID_ACTION
-		WorldActionRecord.ActionType.ATTACK, WorldActionRecord.ActionType.INTERACTION:
-			if not (action.payload.get("target_cell") is Vector2i):
-				return WorldActionStream.REJECTION_INVALID_ACTION
-		WorldActionRecord.ActionType.SPELL_CAST:
-			var target_kind: String = str(action.payload.get("target_kind", "cell"))
-			if target_kind == "cell" and not (action.payload.get("target_cell") is Vector2i):
-				return WorldActionStream.REJECTION_INVALID_ACTION
-			if target_kind == "entity" and str(action.payload.get("target_entity_id", "")).is_empty():
-				return WorldActionStream.REJECTION_INVALID_ACTION
-			if target_kind != "cell" and target_kind != "entity":
-				return WorldActionStream.REJECTION_INVALID_ACTION
-			if int(action.payload.get("spell_slot_index", -1)) < 0:
-				return WorldActionStream.REJECTION_INVALID_ACTION
-		WorldActionRecord.ActionType.INVENTORY_ADD:
-			if (
-				str(action.payload.get("item_id", "")).is_empty()
-				or int(action.payload.get("amount", 0)) <= 0
-				or int(action.payload.get("amount", 0)) > CharacterInventory.ITEM_SLOT_COUNT * CharacterInventory.DEFAULT_MAX_STACK_SIZE
-				or int(action.payload.get("expected_inventory_revision", -1)) < 0
-			):
-				return WorldActionStream.REJECTION_INVALID_ACTION
-		WorldActionRecord.ActionType.INVENTORY_MOVE:
-			if str(action.payload.get("inventory_kind", "")).is_empty() or int(action.payload.get("expected_inventory_revision", -1)) < 0:
-				return WorldActionStream.REJECTION_INVALID_ACTION
-			if int(action.payload.get("source_slot_index", -1)) < 0 or int(action.payload.get("target_slot_index", -1)) < 0:
-				return WorldActionStream.REJECTION_INVALID_ACTION
-		WorldActionRecord.ActionType.INVENTORY_DELETE:
-			if str(action.payload.get("inventory_kind", "")).is_empty() or int(action.payload.get("slot_index", -1)) < 0 or int(action.payload.get("expected_inventory_revision", -1)) < 0:
-				return WorldActionStream.REJECTION_INVALID_ACTION
-		WorldActionRecord.ActionType.INVENTORY_USE:
-			if int(action.payload.get("slot_index", -1)) < 0 or int(action.payload.get("expected_inventory_revision", -1)) < 0:
-				return WorldActionStream.REJECTION_INVALID_ACTION
-		WorldActionRecord.ActionType.CHARACTER_KILL, WorldActionRecord.ActionType.END_PLAYER_TURN:
-			pass
-		_:
-			return WorldActionStream.REJECTION_INVALID_ACTION
-	return ""
+	return WorldActionSchemaValidator.get_rejection_reason(action)
 
 
 func get_acceptance_rejection_reason(action: WorldActionRecord) -> String:
@@ -142,12 +92,16 @@ func get_acceptance_rejection_reason(action: WorldActionRecord) -> String:
 func reserve_on_accept(action: WorldActionRecord) -> String:
 	if action != null and action.action_type == WorldActionRecord.ActionType.SPELL_CAST and spells != null:
 		return spells.reserve_action(action)
+	if loot != null:
+		return loot.reserve_action(action)
 	return ""
 
 
 func release_reservation(action: WorldActionRecord) -> void:
 	if action != null and action.action_type == WorldActionRecord.ActionType.SPELL_CAST and spells != null:
 		spells.release_action_reservation(action)
+	if loot != null:
+		loot.release_action_reservation(action)
 
 
 func get_rejection_reason(action: WorldActionRecord) -> String:
@@ -178,6 +132,8 @@ func get_rejection_reason(action: WorldActionRecord) -> String:
 			player.current_cell = runtime.world_to_cell(player.global_position)
 			if not player.can_act() or not player.can_attack_cell(interaction_cell) or not runtime.can_entity_interact_in_turn(player):
 				return WorldActionStream.REJECTION_INVALID_ACTION
+			if loot != null:
+				return loot.get_action_rejection_reason(action)
 		WorldActionRecord.ActionType.SPELL_CAST:
 			return spells.get_action_rejection_reason(action) if spells != null else WorldActionStream.REJECTION_INVALID_ACTION
 		WorldActionRecord.ActionType.INVENTORY_ADD, \
@@ -187,6 +143,8 @@ func get_rejection_reason(action: WorldActionRecord) -> String:
 				return WorldActionStream.REJECTION_INVALID_ACTION
 			if not player.character_inventory.matches_revision(int(action.payload.get("expected_inventory_revision", -1))):
 				return "stale_inventory"
+			if action.action_type == WorldActionRecord.ActionType.INVENTORY_ADD and loot != null:
+				return loot.get_action_rejection_reason(action)
 		WorldActionRecord.ActionType.INVENTORY_USE:
 			if player.character_inventory == null or not runtime.can_entity_use_item_in_turn(player):
 				return WorldActionStream.REJECTION_INVALID_ACTION
@@ -241,12 +199,22 @@ func execute_authoritative(action: WorldActionRecord) -> bool:
 				player.force_finish_attack_presentation()
 			return true
 		WorldActionRecord.ActionType.INTERACTION:
+			if loot != null and loot.is_chest_interaction_action(action):
+				var was_opened: bool = await loot.execute_open_action(action, player)
+				if was_opened:
+					runtime.notify_entity_interacted_in_turn(player)
+				return was_opened
 			return runtime.try_character_interaction(player, action.payload.get("target_cell", Vector2i.ZERO))
 		WorldActionRecord.ActionType.SPELL_CAST:
 			if spells == null:
 				return false
 			return await spells.execute_action_cast(action, true)
 		WorldActionRecord.ActionType.INVENTORY_ADD:
+			if loot != null and loot.is_chest_claim_action(action):
+				var was_claimed: bool = loot.execute_claim_action(action, player)
+				if not was_claimed:
+					action.payload["cancellation_reason"] = _get_inventory_mutation_reason(null if player == null else player.character_inventory)
+				return was_claimed
 			var was_added: bool = player != null and player.character_inventory.try_add_item(str(action.payload.get("item_id", "")), int(action.payload.get("amount", 0)))
 			if not was_added:
 				action.payload["cancellation_reason"] = _get_inventory_mutation_reason(null if player == null else player.character_inventory)
@@ -340,6 +308,9 @@ func play_remote(action: WorldActionRecord) -> void:
 				return
 			if player.is_attacking:
 				player.force_finish_attack_presentation()
+		WorldActionRecord.ActionType.INTERACTION:
+			if loot != null:
+				await loot.play_remote_open_action(action)
 		WorldActionRecord.ActionType.SPELL_CAST:
 			if spells != null:
 				await spells.execute_action_cast(action, false)

@@ -6,13 +6,6 @@ signal action_rejected(reason_code: String)
 signal runtime_sync_failed(reason_code: String)
 signal world_occupancy_changed
 
-const CARDINAL_DIRECTIONS: Array[Vector2i] = [
-	Vector2i.LEFT,
-	Vector2i.RIGHT,
-	Vector2i.UP,
-	Vector2i.DOWN,
-]
-
 @export var grid_path: NodePath = ^"../Grid"
 @export var registry_path: NodePath = ^"../Registry"
 @export var players_service_path: NodePath = ^"../PlayersService"
@@ -24,6 +17,7 @@ const CARDINAL_DIRECTIONS: Array[Vector2i] = [
 @export var interaction_path: NodePath = ^"../Interaction"
 @export var item_usage_path: NodePath = ^"../ItemUsage"
 @export var spells_path: NodePath = ^"../Spells"
+@export var loot_path: NodePath = ^"../Loot"
 @export var action_stream_path: NodePath = ^"../ActionStream"
 
 var level: WorldLevel = null
@@ -38,6 +32,7 @@ var awareness: WorldAwareness = null
 var interaction: WorldInteraction = null
 var item_usage: WorldItemUsage = null
 var spells: WorldSpells = null
+var loot: WorldLoot = null
 var action_stream: WorldActionStream = null
 var action_router: WorldActionRouter = WorldActionRouter.new()
 var state_snapshot: WorldStateSnapshot = WorldStateSnapshot.new()
@@ -68,6 +63,7 @@ func is_configured_for(target_level: WorldLevel) -> bool:
 		and interaction != null
 		and item_usage != null
 		and spells != null
+		and loot != null
 		and action_stream != null
 	)
 
@@ -339,31 +335,7 @@ func can_character_enter_cell(cell: Vector2i, ignored_entity: Entity = null) -> 
 
 
 func get_reachable_cells_for_entity(entity: Entity, max_steps: int) -> Array[Vector2i]:
-	var reachable_cells: Array[Vector2i] = []
-	if entity == null or grid == null or registry == null or max_steps <= 0:
-		return reachable_cells
-
-	var start_cell: Vector2i = world_to_cell(entity.global_position)
-	var maximum_distance: int = mini(max_steps, grid.get_grid_size().x * grid.get_grid_size().y)
-	var frontier: Array[Vector2i] = [start_cell]
-	var distances: Dictionary[Vector2i, int] = {start_cell: 0}
-	var frontier_index: int = 0
-	while frontier_index < frontier.size():
-		var current_cell: Vector2i = frontier[frontier_index]
-		frontier_index += 1
-		var current_distance: int = distances[current_cell]
-		if current_distance >= maximum_distance:
-			continue
-
-		for direction: Vector2i in CARDINAL_DIRECTIONS:
-			var next_cell: Vector2i = current_cell + direction
-			if distances.has(next_cell) or not registry.can_enter_cell(next_cell, entity):
-				continue
-			distances[next_cell] = current_distance + 1
-			frontier.append(next_cell)
-			reachable_cells.append(next_cell)
-
-	return reachable_cells
+	return WorldGridPathfinder.get_reachable_cells_for_entity(self, entity, max_steps)
 
 
 func is_cell_interactable(cell: Vector2i) -> bool:
@@ -720,6 +692,7 @@ func _bind_services() -> void:
 	interaction = get_node_or_null(interaction_path) as WorldInteraction
 	item_usage = get_node_or_null(item_usage_path) as WorldItemUsage
 	spells = get_node_or_null(spells_path) as WorldSpells
+	loot = get_node_or_null(loot_path) as WorldLoot
 	action_stream = get_node_or_null(action_stream_path) as WorldActionStream
 
 	if grid != null:
@@ -748,15 +721,18 @@ func _bind_services() -> void:
 		item_usage.configure_context(self, level)
 	if spells != null:
 		spells.configure_context(self, level)
+	if loot != null:
+		loot.configure_context(self, level)
 	if action_stream != null:
 		action_stream.configure_context(self, level)
-	action_router.configure_context(self, players_service, network, turn_manager, spells)
+	action_router.configure_context(self, players_service, network, turn_manager, spells, loot)
 	state_snapshot.configure_context(
 		self,
 		registry,
 		spawner,
 		turn_manager,
 		spells,
+		loot,
 		NetworkManager.store
 	)
 	match_startup.configure_context(

@@ -40,12 +40,16 @@ func collect_blockers() -> void:
 		if blocker == null or not level.is_ancestor_of(blocker):
 			continue
 		var anchor_cell: Vector2i = runtime.world_to_cell(blocker.global_position)
-		var result: int = register_object(blocker, anchor_cell)
+		var result: int = register_object(blocker, anchor_cell, false)
 		if result != RegistrationError.NONE:
 			push_warning("Level blocker registration failed with code %d" % result)
 
 
-func register_object(blocker: Node, anchor_cell: Vector2i) -> int:
+func register_object(
+	blocker: Node,
+	anchor_cell: Vector2i,
+	should_require_walkable_surface: bool = true
+) -> int:
 	if blocker == null:
 		return RegistrationError.INVALID_ID
 	var object_id: String = _get_candidate_object_id(blocker)
@@ -57,7 +61,7 @@ func register_object(blocker: Node, anchor_cell: Vector2i) -> int:
 	if existing_object != null:
 		return RegistrationError.DUPLICATE_ID
 	var cells: Array[Vector2i] = _get_node_occupied_cells(blocker, anchor_cell)
-	var error: int = get_registration_error(blocker, anchor_cell)
+	var error: int = _get_cell_error(blocker, anchor_cell, false, should_require_walkable_surface)
 	if error != RegistrationError.NONE:
 		return error
 	if _get_object_id(blocker).is_empty() and blocker.get("object_id") != null:
@@ -304,21 +308,23 @@ func get_cell_display_name(cell: Vector2i) -> String:
 func _get_cell_error(
 	node: Node,
 	anchor_cell: Vector2i,
-	should_use_character_walkability: bool = false
+	should_use_character_walkability: bool = false,
+	should_require_walkable_surface: bool = true
 ) -> int:
 	var typed_entity: Entity = node as Entity
 	for cell: Vector2i in _get_node_occupied_cells(node, anchor_cell):
 		if not runtime.is_cell_inside(cell):
 			return RegistrationError.OUTSIDE_GRID
-		var is_walkable: bool = false
-		if should_use_character_walkability:
-			is_walkable = runtime.is_cell_walkable_for_character(cell)
-		elif typed_entity != null:
-			is_walkable = runtime.is_cell_walkable_for_entity(cell, typed_entity)
-		else:
-			is_walkable = runtime.is_cell_walkable(cell)
-		if not is_walkable:
-			return RegistrationError.NOT_WALKABLE
+		if should_require_walkable_surface:
+			var is_walkable: bool = false
+			if should_use_character_walkability:
+				is_walkable = runtime.is_cell_walkable_for_character(cell)
+			elif typed_entity != null:
+				is_walkable = runtime.is_cell_walkable_for_entity(cell, typed_entity)
+			else:
+				is_walkable = runtime.is_cell_walkable(cell)
+			if not is_walkable:
+				return RegistrationError.NOT_WALKABLE
 		var target_object: Node = occupied_cells.get(cell, null) as Node
 		if target_object != null and target_object != node:
 			return RegistrationError.OBJECT_OCCUPIED

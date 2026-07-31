@@ -26,6 +26,8 @@ var item_slots: Array[InventorySlotControl] = []
 var spell_slots: Array[InventorySlotControl] = []
 var action_buttons: Array[Button] = []
 var selected_spell_slot_index: int = -1
+var is_loot_modal_mode: bool = false
+var loot_drop_controller: ChestLootInventoryDropController = ChestLootInventoryDropController.new()
 
 
 func _ready() -> void:
@@ -84,6 +86,10 @@ func configure_runtime(new_runtime: WorldRuntime) -> void:
 	_connect_spell_signals()
 
 
+func configure_loot_dialog(dialog: ChestLootDialog) -> void:
+	loot_drop_controller.configure_dialog(dialog)
+
+
 func bind_character(player: PlayerCharacter) -> void:
 	if player == null:
 		return
@@ -99,6 +105,7 @@ func bind_character(player: PlayerCharacter) -> void:
 
 	bound_player = player
 	character_inventory = player.character_inventory
+	loot_drop_controller.bind_inventory(character_inventory)
 	if not character_inventory.inventory_changed.is_connected(_refresh_items):
 		character_inventory.inventory_changed.connect(_refresh_items)
 	if not bound_player.action_mode_changed.is_connected(_on_player_action_mode_changed):
@@ -109,12 +116,7 @@ func bind_character(player: PlayerCharacter) -> void:
 
 
 func request_move(inventory_kind: String, source_slot_index: int, target_slot_index: int) -> void:
-	if (
-		runtime == null
-		or bound_player == null
-		or not bound_player.can_process_local_input()
-		or source_slot_index == target_slot_index
-	):
+	if runtime == null or bound_player == null or not can_rearrange_inventory() or source_slot_index == target_slot_index:
 		return
 
 	runtime.request_inventory_move(inventory_kind, source_slot_index, target_slot_index)
@@ -136,6 +138,29 @@ func request_use(inventory_kind: String, slot_index: int) -> void:
 		return
 
 	runtime.request_inventory_use(slot_index)
+
+
+func set_loot_modal_mode(should_enable: bool) -> void:
+	is_loot_modal_mode = should_enable
+	alignment = BoxContainer.ALIGNMENT_CENTER if should_enable else BoxContainer.ALIGNMENT_BEGIN
+	for action_button: Button in action_buttons:
+		action_button.visible = not should_enable
+
+
+func can_rearrange_inventory() -> bool:
+	return runtime != null and bound_player != null and (
+		bound_player.can_process_local_input()
+		or (is_loot_modal_mode and not loot_drop_controller.is_request_pending())
+	)
+
+
+func can_accept_chest_loot(data: ChestLootDragData, inventory_kind: String, target_slot_index: int) -> bool:
+	return is_loot_modal_mode and loot_drop_controller.can_drop(data, inventory_kind, target_slot_index)
+
+
+func request_chest_loot_drop(data: ChestLootDragData, inventory_kind: String, target_slot_index: int) -> void:
+	if is_loot_modal_mode:
+		loot_drop_controller.request_drop(data, inventory_kind, target_slot_index)
 
 
 func _build_bar() -> void:

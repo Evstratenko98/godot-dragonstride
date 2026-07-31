@@ -92,5 +92,9 @@ func get_welcome_modal_text() -> String:
 	return definition.welcome_modal_text
 
 
+func starts_in_turn_mode() -> bool:
+	return definition != null and definition.starts_in_turn_mode
+
+
 func allows_debug_commands() -> bool:
 	return definition != null and definition.allows_debug_commands

@@ -7,6 +7,12 @@ const ORTHOGONAL_DIRECTIONS: Array[Vector2i] = [
 	Vector2i.DOWN,
 	Vector2i.UP,
 ]
+const REACHABILITY_DIRECTIONS: Array[Vector2i] = [
+	Vector2i.LEFT,
+	Vector2i.RIGHT,
+	Vector2i.UP,
+	Vector2i.DOWN,
+]
 
 
 static func get_adjacent_walkable_cells(runtime: WorldRuntime, target_cell: Vector2i) -> Array[Vector2i]:
@@ -18,6 +24,39 @@ static func get_adjacent_walkable_cells(runtime: WorldRuntime, target_cell: Vect
 		if runtime.is_cell_inside(candidate_cell) and runtime.is_cell_walkable(candidate_cell):
 			cells.append(candidate_cell)
 	return cells
+
+
+static func get_reachable_cells_for_entity(
+	runtime: WorldRuntime,
+	entity: Entity,
+	max_steps: int
+) -> Array[Vector2i]:
+	var reachable_cells: Array[Vector2i] = []
+	if runtime == null or entity == null or max_steps <= 0:
+		return reachable_cells
+
+	var start_cell: Vector2i = runtime.world_to_cell(entity.global_position)
+	var grid_size: Vector2i = runtime.get_grid_size()
+	var maximum_distance: int = mini(max_steps, grid_size.x * grid_size.y)
+	var frontier: Array[Vector2i] = [start_cell]
+	var distances: Dictionary[Vector2i, int] = {start_cell: 0}
+	var frontier_index: int = 0
+	while frontier_index < frontier.size():
+		var current_cell: Vector2i = frontier[frontier_index]
+		frontier_index += 1
+		var current_distance: int = distances[current_cell]
+		if current_distance >= maximum_distance:
+			continue
+
+		for direction: Vector2i in REACHABILITY_DIRECTIONS:
+			var next_cell: Vector2i = current_cell + direction
+			if distances.has(next_cell) or not runtime.can_enter_cell(next_cell, entity):
+				continue
+			distances[next_cell] = current_distance + 1
+			frontier.append(next_cell)
+			reachable_cells.append(next_cell)
+
+	return reachable_cells
 
 
 static func find_path_to_any(

@@ -1,10 +1,13 @@
 class_name LevelCatalog
 extends RefCounted
 
-const DEFAULT_LEVEL_ID := "sandbox"
+const SANDBOX_LEVEL_ID := "sandbox"
+const LEVEL_1_ID := "level_1"
+const DEFAULT_LEVEL_ID := SANDBOX_LEVEL_ID
+const MULTIPLAYER_LEVEL_ID := SANDBOX_LEVEL_ID
 const LEVEL_SCENE_PATHS := {
-	"sandbox": "res://scenes/sandbox/sandbox.tscn",
-	"level_1": "res://scenes/levels/level_1/level_1.tscn",
+	SANDBOX_LEVEL_ID: "res://scenes/sandbox/sandbox.tscn",
+	LEVEL_1_ID: "res://scenes/levels/level_1/level_1.tscn",
 }
 
 

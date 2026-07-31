@@ -4,6 +4,7 @@ extends StaticBody2D
 enum ObjectState {
 	NORMAL,
 	DESTROYED,
+	OPENED,
 }
 
 @export var occupied_offsets: Array[Vector2i] = [Vector2i.ZERO]

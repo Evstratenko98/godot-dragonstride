@@ -1,4 +1,4 @@
-[gd_scene load_steps=19 format=3]
+[gd_scene load_steps=20 format=3]
 
 [ext_resource type="Script" path="res://scenes/world/services/world_grid.gd" id="1_grid"]
 [ext_resource type="Script" path="res://scenes/world/services/world_registry.gd" id="2_registry"]
@@ -11,6 +11,7 @@
 [ext_resource type="Script" path="res://scenes/world/services/world_interaction.gd" id="9_interaction"]
 [ext_resource type="Script" path="res://scenes/world/services/world_item_usage.gd" id="9_item_usage"]
 [ext_resource type="Script" path="res://scenes/world/services/world_spells.gd" id="9_spells"]
+[ext_resource type="Script" path="res://scenes/world/services/world_loot.gd" id="9_loot"]
 [ext_resource type="Script" path="res://scenes/world/services/world_action_stream.gd" id="9_stream"]
 [ext_resource type="Script" path="res://scenes/world/world_runtime.gd" id="9_runtime"]
 [ext_resource type="Script" path="res://scenes/world/match_controller.gd" id="10_match"]
@@ -54,6 +55,9 @@ script = ExtResource("9_item_usage")
 
 [node name="Spells" type="Node" parent="."]
 script = ExtResource("9_spells")
+
+[node name="Loot" type="Node" parent="."]
+script = ExtResource("9_loot")
 
 [node name="ActionStream" type="Node" parent="."]
 script = ExtResource("9_stream")

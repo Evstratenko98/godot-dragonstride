@@ -1,123 +1,469 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=18 format=3]
 
 [ext_resource type="Script" path="res://scenes/levels/level_1/level_1_level.gd" id="1_level"]
-[ext_resource type="Texture2D" path="res://art/Tiny Swords (Update 010)/Terrain/Ground/Tilemap_Flat.png" id="3_ground"]
+[ext_resource type="Script" path="res://scenes/levels/level_1/level_1_prototype_tile_layer.gd" id="2_tile_layer"]
+[ext_resource type="Texture2D" path="res://art/Tiny Swords (Free Pack)/Terrain/Tileset/Water Background color.png" id="3_water"]
+[ext_resource type="Texture2D" path="res://art/Tiny Swords (Update 010)/Terrain/Ground/Tilemap_Flat.png" id="4_ground"]
+[ext_resource type="Texture2D" path="res://art/Tiny Swords (Free Pack)/Terrain/Tileset/Tilemap_color3.png" id="5_hay"]
+[ext_resource type="PackedScene" path="res://scenes/objects/tree/tree.tscn" id="6_tree"]
+[ext_resource type="PackedScene" path="res://scenes/objects/house/house.tscn" id="7_house"]
+[ext_resource type="PackedScene" path="res://scenes/entities/sheep/sheep.tscn" id="8_sheep"]
+[ext_resource type="PackedScene" path="res://scenes/entities/enemies/warrior/warrior.tscn" id="9_warrior"]
+[ext_resource type="PackedScene" path="res://scenes/objects/meat/meat.tscn" id="10_meat"]
+[ext_resource type="PackedScene" path="res://scenes/objects/meteor_scroll/meteor_scroll.tscn" id="11_meteor_scroll"]
+
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_water"]
+texture = ExtResource("3_water")
+texture_region_size = Vector2i(64, 64)
+0:0/0 = 0
+
+[sub_resource type="TileSet" id="TileSet_water"]
+tile_size = Vector2i(64, 64)
+sources/0 = SubResource("TileSetAtlasSource_water")
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_ground"]
-texture = ExtResource("3_ground")
+texture = ExtResource("4_ground")
 texture_region_size = Vector2i(64, 64)
-5:0/0 = 0
-5:0/0/terrain_set = 0
-5:0/0/terrain = 0
-5:0/0/terrains_peering_bit/right_side = 0
-5:0/0/terrains_peering_bit/bottom_right_corner = 0
-5:0/0/terrains_peering_bit/bottom_side = 0
-6:0/0 = 0
-6:0/0/terrain_set = 0
-6:0/0/terrain = 0
-6:0/0/terrains_peering_bit/right_side = 0
-6:0/0/terrains_peering_bit/bottom_right_corner = 0
-6:0/0/terrains_peering_bit/bottom_side = 0
-6:0/0/terrains_peering_bit/bottom_left_corner = 0
-6:0/0/terrains_peering_bit/left_side = 0
-7:0/0 = 0
-7:0/0/terrain_set = 0
-7:0/0/terrain = 0
-7:0/0/terrains_peering_bit/bottom_side = 0
-7:0/0/terrains_peering_bit/bottom_left_corner = 0
-7:0/0/terrains_peering_bit/left_side = 0
-7:1/0 = 0
-7:1/0/terrain_set = 0
-7:1/0/terrain = 0
-7:1/0/terrains_peering_bit/bottom_side = 0
-7:1/0/terrains_peering_bit/bottom_left_corner = 0
-7:1/0/terrains_peering_bit/left_side = 0
-7:1/0/terrains_peering_bit/top_left_corner = 0
-7:1/0/terrains_peering_bit/top_side = 0
-7:2/0 = 0
-7:2/0/terrain_set = 0
-7:2/0/terrain = 0
-7:2/0/terrains_peering_bit/left_side = 0
-7:2/0/terrains_peering_bit/top_left_corner = 0
-7:2/0/terrains_peering_bit/top_side = 0
-6:2/0 = 0
-6:2/0/terrain_set = 0
-6:2/0/terrain = 0
-6:2/0/terrains_peering_bit/right_side = 0
-6:2/0/terrains_peering_bit/left_side = 0
-6:2/0/terrains_peering_bit/top_left_corner = 0
-6:2/0/terrains_peering_bit/top_side = 0
-6:2/0/terrains_peering_bit/top_right_corner = 0
-5:2/0 = 0
-5:2/0/terrain_set = 0
-5:2/0/terrain = 0
-5:2/0/terrains_peering_bit/right_side = 0
-5:2/0/terrains_peering_bit/top_side = 0
-5:2/0/terrains_peering_bit/top_right_corner = 0
-5:1/0 = 0
-5:1/0/terrain_set = 0
-5:1/0/terrain = 0
-5:1/0/terrains_peering_bit/right_side = 0
-5:1/0/terrains_peering_bit/bottom_right_corner = 0
-5:1/0/terrains_peering_bit/bottom_side = 0
-5:1/0/terrains_peering_bit/top_side = 0
-5:1/0/terrains_peering_bit/top_right_corner = 0
 6:1/0 = 0
-6:1/0/terrain_set = 0
-6:1/0/terrain = 0
-6:1/0/terrains_peering_bit/right_side = 0
-6:1/0/terrains_peering_bit/bottom_right_corner = 0
-6:1/0/terrains_peering_bit/bottom_side = 0
-6:1/0/terrains_peering_bit/bottom_left_corner = 0
-6:1/0/terrains_peering_bit/left_side = 0
-6:1/0/terrains_peering_bit/top_left_corner = 0
-6:1/0/terrains_peering_bit/top_side = 0
-6:1/0/terrains_peering_bit/top_right_corner = 0
-8:0/0 = 0
-8:0/0/terrain_set = 0
-8:0/0/terrain = 0
-8:0/0/terrains_peering_bit/bottom_side = 0
-8:1/0 = 0
-8:1/0/terrain_set = 0
-8:1/0/terrain = 0
-8:1/0/terrains_peering_bit/bottom_side = 0
-8:1/0/terrains_peering_bit/top_side = 0
-8:2/0 = 0
-8:2/0/terrain_set = 0
-8:2/0/terrain = 0
-8:2/0/terrains_peering_bit/top_side = 0
-8:3/0 = 0
-8:3/0/terrain_set = 0
-8:3/0/terrain = 0
-7:3/0 = 0
-7:3/0/terrain_set = 0
-7:3/0/terrain = 0
-7:3/0/terrains_peering_bit/left_side = 0
-6:3/0 = 0
-6:3/0/terrain_set = 0
-6:3/0/terrain = 0
-6:3/0/terrains_peering_bit/right_side = 0
-6:3/0/terrains_peering_bit/left_side = 0
-5:3/0 = 0
-5:3/0/terrain_set = 0
-5:3/0/terrain = 0
-5:3/0/terrains_peering_bit/right_side = 0
 
 [sub_resource type="TileSet" id="TileSet_ground"]
 tile_size = Vector2i(64, 64)
-terrain_set_0/mode = 0
-terrain_set_0/terrain_0/name = "Ground"
-terrain_set_0/terrain_0/color = Color(0.5, 0.34375, 0.25, 1)
 sources/0 = SubResource("TileSetAtlasSource_ground")
+
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_hay"]
+texture = ExtResource("5_hay")
+texture_region_size = Vector2i(64, 64)
+1:1/0 = 0
+
+[sub_resource type="TileSet" id="TileSet_hay"]
+tile_size = Vector2i(64, 64)
+sources/0 = SubResource("TileSetAtlasSource_hay")
 
 [node name="Level1" type="Node2D"]
 y_sort_enabled = true
 script = ExtResource("1_level")
 
-[node name="Ground" type="TileMapLayer" parent="."]
-tile_map_data = PackedByteArray("AAAJAAEAAAAGAAEAAAAKAAEAAAAHAAEAAAAKAAIAAAAHAAIAAAAIAAEAAAAFAAEAAAAIAAAAAAAFAAAAAAAJAAAAAAAGAAAAAAAKAAAAAAAHAAAAAAAJAAIAAAAGAAIAAAAIAAIAAAAFAAIAAAA=")
+[node name="Water" type="TileMapLayer" parent="."]
+z_index = -10
+script = ExtResource("2_tile_layer")
+fill_rects = Array[Rect2i]([Rect2i(0, 0, 52, 34)])
+tile_set = SubResource("TileSet_water")
+
+[node name="InfiltrationGround" type="TileMapLayer" parent="."]
+z_index = -5
+script = ExtResource("2_tile_layer")
+fill_rects = Array[Rect2i]([Rect2i(2, 24, 12, 8), Rect2i(11, 27, 6, 2)])
 tile_set = SubResource("TileSet_ground")
+atlas_coordinates = Vector2i(6, 1)
+
+[node name="BarracksGround" type="TileMapLayer" parent="."]
+z_index = -4
+self_modulate = Color(0.94, 0.9, 0.82, 1)
+script = ExtResource("2_tile_layer")
+fill_rects = Array[Rect2i]([Rect2i(15, 22, 13, 10), Rect2i(26, 22, 5, 3)])
+cutout_rects = Array[Rect2i]([Rect2i(19, 25, 3, 2)])
+tile_set = SubResource("TileSet_ground")
+atlas_coordinates = Vector2i(6, 1)
+
+[node name="TempleGround" type="TileMapLayer" parent="."]
+z_index = -4
+self_modulate = Color(0.96, 0.98, 1, 1)
+script = ExtResource("2_tile_layer")
+fill_rects = Array[Rect2i]([Rect2i(16, 13, 13, 9), Rect2i(26, 17, 4, 4)])
+cutout_rects = Array[Rect2i]([Rect2i(20, 16, 2, 2)])
+tile_set = SubResource("TileSet_hay")
+atlas_coordinates = Vector2i(1, 1)
+
+[node name="UndercroftGround" type="TileMapLayer" parent="."]
+z_index = -4
+self_modulate = Color(0.78, 0.82, 0.76, 1)
+script = ExtResource("2_tile_layer")
+fill_rects = Array[Rect2i]([Rect2i(5, 6, 12, 7), Rect2i(10, 12, 4, 5), Rect2i(15, 8, 13, 4), Rect2i(27, 10, 8, 3)])
+cutout_rects = Array[Rect2i]([Rect2i(8, 8, 2, 2)])
+tile_set = SubResource("TileSet_ground")
+atlas_coordinates = Vector2i(6, 1)
+
+[node name="CrossroadsGround" type="TileMapLayer" parent="."]
+z_index = -4
+self_modulate = Color(0.9, 0.96, 0.88, 1)
+script = ExtResource("2_tile_layer")
+fill_rects = Array[Rect2i]([Rect2i(29, 18, 8, 9), Rect2i(34, 9, 7, 9), Rect2i(35, 16, 3, 4)])
+tile_set = SubResource("TileSet_ground")
+atlas_coordinates = Vector2i(6, 1)
+
+[node name="VaultGround" type="TileMapLayer" parent="."]
+z_index = -3
+self_modulate = Color(0.9, 0.94, 0.8, 1)
+script = ExtResource("2_tile_layer")
+fill_rects = Array[Rect2i]([Rect2i(40, 4, 10, 10)])
+cutout_rects = Array[Rect2i]([Rect2i(43, 9, 2, 2)])
+tile_set = SubResource("TileSet_hay")
+atlas_coordinates = Vector2i(1, 1)
+
+[node name="EscapeGround" type="TileMapLayer" parent="."]
+z_index = -4
+self_modulate = Color(0.9, 0.88, 0.8, 1)
+script = ExtResource("2_tile_layer")
+fill_rects = Array[Rect2i]([Rect2i(35, 25, 4, 5), Rect2i(38, 27, 12, 5)])
+tile_set = SubResource("TileSet_ground")
+atlas_coordinates = Vector2i(6, 1)
+
+[node name="ZoneLabels" type="Node2D" parent="."]
+z_index = 20
+
+[node name="InfiltrationLabel" type="Label" parent="ZoneLabels"]
+offset_left = 160.0
+offset_top = 1540.0
+offset_right = 620.0
+offset_bottom = 1585.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.95, 1, 0.9, 1)
+theme_override_colors/font_outline_color = Color(0.08, 0.12, 0.08, 0.9)
+theme_override_constants/outline_size = 8
+theme_override_font_sizes/font_size = 26
+text = "I · ПРОНИКНОВЕНИЕ"
+
+[node name="BarracksLabel" type="Label" parent="ZoneLabels"]
+offset_left = 1010.0
+offset_top = 1420.0
+offset_right = 1400.0
+offset_bottom = 1465.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(1, 0.92, 0.78, 1)
+theme_override_colors/font_outline_color = Color(0.14, 0.1, 0.07, 0.9)
+theme_override_constants/outline_size = 8
+theme_override_font_sizes/font_size = 26
+text = "КАЗАРМЫ"
+
+[node name="TempleLabel" type="Label" parent="ZoneLabels"]
+offset_left = 1070.0
+offset_top = 820.0
+offset_right = 1450.0
+offset_bottom = 865.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.9, 0.96, 1, 1)
+theme_override_colors/font_outline_color = Color(0.08, 0.1, 0.16, 0.9)
+theme_override_constants/outline_size = 8
+theme_override_font_sizes/font_size = 26
+text = "ХРАМ"
+
+[node name="UndercroftLabel" type="Label" parent="ZoneLabels"]
+offset_left = 300.0
+offset_top = 300.0
+offset_right = 800.0
+offset_bottom = 345.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.86, 0.92, 0.82, 1)
+theme_override_colors/font_outline_color = Color(0.06, 0.09, 0.06, 0.9)
+theme_override_constants/outline_size = 8
+theme_override_font_sizes/font_size = 26
+text = "ПОДЗЕМНЫЙ САД"
+
+[node name="CrossroadsLabel" type="Label" parent="ZoneLabels"]
+offset_left = 1820.0
+offset_top = 1110.0
+offset_right = 2280.0
+offset_bottom = 1155.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.9, 1, 0.88, 1)
+theme_override_colors/font_outline_color = Color(0.06, 0.12, 0.06, 0.9)
+theme_override_constants/outline_size = 8
+theme_override_font_sizes/font_size = 26
+text = "ПЕРЕКРЁСТОК"
+
+[node name="VaultLabel" type="Label" parent="ZoneLabels"]
+offset_left = 2520.0
+offset_top = 180.0
+offset_right = 3200.0
+offset_bottom = 225.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(1, 0.95, 0.68, 1)
+theme_override_colors/font_outline_color = Color(0.16, 0.1, 0.02, 0.92)
+theme_override_constants/outline_size = 8
+theme_override_font_sizes/font_size = 26
+text = "III · ХРАНИЛИЩЕ СЕРДЦА"
+
+[node name="EscapeLabel" type="Label" parent="ZoneLabels"]
+offset_left = 2400.0
+offset_top = 1660.0
+offset_right = 3160.0
+offset_bottom = 1705.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(1, 0.9, 0.78, 1)
+theme_override_colors/font_outline_color = Color(0.14, 0.07, 0.04, 0.92)
+theme_override_constants/outline_size = 8
+theme_override_font_sizes/font_size = 26
+text = "IV · ПУТЬ ЭВАКУАЦИИ"
 
 [node name="WorldEntities" type="Node2D" parent="."]
+
+[node name="InfiltrationTree01" parent="WorldEntities" instance=ExtResource("6_tree")]
+position = Vector2(224, 1632)
+object_id = "level_1_tree_01"
+
+[node name="InfiltrationTree02" parent="WorldEntities" instance=ExtResource("6_tree")]
+position = Vector2(416, 1568)
+object_id = "level_1_tree_02"
+
+[node name="InfiltrationTree03" parent="WorldEntities" instance=ExtResource("6_tree")]
+position = Vector2(672, 1632)
+object_id = "level_1_tree_03"
+
+[node name="InfiltrationTree04" parent="WorldEntities" instance=ExtResource("6_tree")]
+position = Vector2(800, 1760)
+object_id = "level_1_tree_04"
+
+[node name="InfiltrationHouse" parent="WorldEntities" instance=ExtResource("7_house")]
+position = Vector2(544, 1824)
+object_id = "level_1_house_01"
+
+[node name="InfiltrationSheep01" parent="WorldEntities" instance=ExtResource("8_sheep")]
+position = Vector2(416, 1760)
+entity_id = "level_1_sheep_01"
+
+[node name="InfiltrationSheep02" parent="WorldEntities" instance=ExtResource("8_sheep")]
+position = Vector2(736, 1888)
+entity_id = "level_1_sheep_02"
+
+[node name="BarracksHouse01" parent="WorldEntities" instance=ExtResource("7_house")]
+position = Vector2(1120, 1568)
+object_id = "level_1_house_02"
+
+[node name="BarracksHouse02" parent="WorldEntities" instance=ExtResource("7_house")]
+position = Vector2(1504, 1824)
+object_id = "level_1_house_03"
+
+[node name="BarracksTree01" parent="WorldEntities" instance=ExtResource("6_tree")]
+position = Vector2(1056, 1952)
+object_id = "level_1_tree_05"
+
+[node name="BarracksTree02" parent="WorldEntities" instance=ExtResource("6_tree")]
+position = Vector2(1696, 1632)
+object_id = "level_1_tree_06"
+
+[node name="BarracksWarrior01" parent="WorldEntities" instance=ExtResource("9_warrior")]
+position = Vector2(1440, 1696)
+entity_id = "level_1_warrior_01"
+
+[node name="BarracksWarrior02" parent="WorldEntities" instance=ExtResource("9_warrior")]
+position = Vector2(1568, 1568)
+entity_id = "level_1_warrior_02"
+
+[node name="BarracksWarrior03" parent="WorldEntities" instance=ExtResource("9_warrior")]
+position = Vector2(1632, 1888)
+entity_id = "level_1_warrior_03"
+
+[node name="BarracksMeat" parent="WorldEntities" instance=ExtResource("10_meat")]
+position = Vector2(1184, 1888)
+object_id = "level_1_meat_01"
+
+[node name="BarracksScroll" parent="WorldEntities" instance=ExtResource("11_meteor_scroll")]
+position = Vector2(1568, 1760)
+object_id = "level_1_scroll_01"
+
+[node name="TempleTree01" parent="WorldEntities" instance=ExtResource("6_tree")]
+position = Vector2(1120, 928)
+object_id = "level_1_tree_07"
+
+[node name="TempleTree02" parent="WorldEntities" instance=ExtResource("6_tree")]
+position = Vector2(1696, 928)
+object_id = "level_1_tree_08"
+
+[node name="TempleTree03" parent="WorldEntities" instance=ExtResource("6_tree")]
+position = Vector2(1184, 1312)
+object_id = "level_1_tree_09"
+
+[node name="TempleTree04" parent="WorldEntities" instance=ExtResource("6_tree")]
+position = Vector2(1760, 1248)
+object_id = "level_1_tree_10"
+
+[node name="TempleSheep01" parent="WorldEntities" instance=ExtResource("8_sheep")]
+position = Vector2(1312, 1184)
+entity_id = "level_1_sheep_03"
+
+[node name="TempleSheep02" parent="WorldEntities" instance=ExtResource("8_sheep")]
+position = Vector2(1568, 1056)
+entity_id = "level_1_sheep_04"
+
+[node name="TempleWarrior" parent="WorldEntities" instance=ExtResource("9_warrior")]
+position = Vector2(1760, 1184)
+entity_id = "level_1_warrior_04"
+
+[node name="TempleScroll" parent="WorldEntities" instance=ExtResource("11_meteor_scroll")]
+position = Vector2(1440, 992)
+object_id = "level_1_scroll_02"
+
+[node name="UndercroftTree01" parent="WorldEntities" instance=ExtResource("6_tree")]
+position = Vector2(352, 416)
+object_id = "level_1_tree_11"
+
+[node name="UndercroftTree02" parent="WorldEntities" instance=ExtResource("6_tree")]
+position = Vector2(544, 416)
+object_id = "level_1_tree_12"
+
+[node name="UndercroftTree03" parent="WorldEntities" instance=ExtResource("6_tree")]
+position = Vector2(736, 480)
+object_id = "level_1_tree_13"
+
+[node name="UndercroftTree04" parent="WorldEntities" instance=ExtResource("6_tree")]
+position = Vector2(992, 416)
+object_id = "level_1_tree_14"
+
+[node name="UndercroftTree05" parent="WorldEntities" instance=ExtResource("6_tree")]
+position = Vector2(416, 736)
+object_id = "level_1_tree_15"
+
+[node name="UndercroftTree06" parent="WorldEntities" instance=ExtResource("6_tree")]
+position = Vector2(992, 736)
+object_id = "level_1_tree_16"
+
+[node name="UpperRouteTree01" parent="WorldEntities" instance=ExtResource("6_tree")]
+position = Vector2(1248, 608)
+object_id = "level_1_tree_17"
+
+[node name="UpperRouteTree02" parent="WorldEntities" instance=ExtResource("6_tree")]
+position = Vector2(1632, 544)
+object_id = "level_1_tree_18"
+
+[node name="UndercroftSheep01" parent="WorldEntities" instance=ExtResource("8_sheep")]
+position = Vector2(544, 672)
+entity_id = "level_1_sheep_05"
+
+[node name="UndercroftSheep02" parent="WorldEntities" instance=ExtResource("8_sheep")]
+position = Vector2(864, 608)
+entity_id = "level_1_sheep_06"
+
+[node name="UpperRouteSheep" parent="WorldEntities" instance=ExtResource("8_sheep")]
+position = Vector2(1184, 672)
+entity_id = "level_1_sheep_07"
+
+[node name="UpperRouteWarrior" parent="WorldEntities" instance=ExtResource("9_warrior")]
+position = Vector2(1824, 736)
+entity_id = "level_1_warrior_05"
+
+[node name="CrossroadsHouse01" parent="WorldEntities" instance=ExtResource("7_house")]
+position = Vector2(1952, 1248)
+object_id = "level_1_house_04"
+
+[node name="CrossroadsHouse02" parent="WorldEntities" instance=ExtResource("7_house")]
+position = Vector2(2208, 1504)
+object_id = "level_1_house_05"
+
+[node name="CrossroadsTree01" parent="WorldEntities" instance=ExtResource("6_tree")]
+position = Vector2(1888, 1632)
+object_id = "level_1_tree_19"
+
+[node name="CrossroadsTree02" parent="WorldEntities" instance=ExtResource("6_tree")]
+position = Vector2(2336, 1312)
+object_id = "level_1_tree_20"
+
+[node name="CrossroadsTree03" parent="WorldEntities" instance=ExtResource("6_tree")]
+position = Vector2(2080, 1696)
+object_id = "level_1_tree_21"
+
+[node name="CrossroadsWarrior01" parent="WorldEntities" instance=ExtResource("9_warrior")]
+position = Vector2(2016, 1440)
+entity_id = "level_1_warrior_06"
+
+[node name="CrossroadsWarrior02" parent="WorldEntities" instance=ExtResource("9_warrior")]
+position = Vector2(2272, 1248)
+entity_id = "level_1_warrior_07"
+
+[node name="CrossroadsWarrior03" parent="WorldEntities" instance=ExtResource("9_warrior")]
+position = Vector2(2336, 1568)
+entity_id = "level_1_warrior_08"
+
+[node name="CrossroadsMeat" parent="WorldEntities" instance=ExtResource("10_meat")]
+position = Vector2(2144, 1376)
+object_id = "level_1_meat_02"
+
+[node name="GateHouse01" parent="WorldEntities" instance=ExtResource("7_house")]
+position = Vector2(2272, 672)
+object_id = "level_1_house_06"
+
+[node name="GateHouse02" parent="WorldEntities" instance=ExtResource("7_house")]
+position = Vector2(2464, 992)
+object_id = "level_1_house_07"
+
+[node name="GateWarrior01" parent="WorldEntities" instance=ExtResource("9_warrior")]
+position = Vector2(2336, 864)
+entity_id = "level_1_warrior_09"
+
+[node name="GateWarrior02" parent="WorldEntities" instance=ExtResource("9_warrior")]
+position = Vector2(2528, 736)
+entity_id = "level_1_warrior_10"
+
+[node name="GateWarrior03" parent="WorldEntities" instance=ExtResource("9_warrior")]
+position = Vector2(2592, 1120)
+entity_id = "level_1_warrior_11"
+
+[node name="VaultHouse01" parent="WorldEntities" instance=ExtResource("7_house")]
+position = Vector2(2720, 352)
+object_id = "level_1_house_08"
+
+[node name="VaultHouse02" parent="WorldEntities" instance=ExtResource("7_house")]
+position = Vector2(3040, 672)
+object_id = "level_1_house_09"
+
+[node name="VaultWarrior01" parent="WorldEntities" instance=ExtResource("9_warrior")]
+position = Vector2(2848, 480)
+entity_id = "level_1_warrior_12"
+
+[node name="VaultWarrior02" parent="WorldEntities" instance=ExtResource("9_warrior")]
+position = Vector2(3040, 416)
+entity_id = "level_1_warrior_13"
+
+[node name="VaultWarrior03" parent="WorldEntities" instance=ExtResource("9_warrior")]
+position = Vector2(2976, 800)
+entity_id = "level_1_warrior_14"
+
+[node name="VaultWarrior04" parent="WorldEntities" instance=ExtResource("9_warrior")]
+position = Vector2(3168, 608)
+entity_id = "level_1_warrior_15"
+
+[node name="DragonHeartPrototype" parent="WorldEntities" instance=ExtResource("11_meteor_scroll")]
+position = Vector2(2720, 544)
+scale = Vector2(1.25, 1.25)
+object_id = "level_1_dragon_heart_prototype"
+
+[node name="VaultMeat" parent="WorldEntities" instance=ExtResource("10_meat")]
+position = Vector2(3104, 352)
+object_id = "level_1_meat_03"
+
+[node name="EscapeTree01" parent="WorldEntities" instance=ExtResource("6_tree")]
+position = Vector2(2464, 1824)
+object_id = "level_1_tree_22"
+
+[node name="EscapeTree02" parent="WorldEntities" instance=ExtResource("6_tree")]
+position = Vector2(2720, 1760)
+object_id = "level_1_tree_23"
+
+[node name="EscapeTree03" parent="WorldEntities" instance=ExtResource("6_tree")]
+position = Vector2(3168, 1952)
+object_id = "level_1_tree_24"
+
+[node name="EscapeTree04" parent="WorldEntities" instance=ExtResource("6_tree")]
+position = Vector2(2912, 2016)
+object_id = "level_1_tree_25"
+
+[node name="EscapeHouse" parent="WorldEntities" instance=ExtResource("7_house")]
+position = Vector2(2784, 1824)
+object_id = "level_1_house_10"
+
+[node name="EscapeSheep" parent="WorldEntities" instance=ExtResource("8_sheep")]
+position = Vector2(2592, 1760)
+entity_id = "level_1_sheep_08"
+
+[node name="EscapeWarrior01" parent="WorldEntities" instance=ExtResource("9_warrior")]
+position = Vector2(2592, 1888)
+entity_id = "level_1_warrior_16"
+
+[node name="EscapeWarrior02" parent="WorldEntities" instance=ExtResource("9_warrior")]
+position = Vector2(3040, 1824)
+entity_id = "level_1_warrior_17"
+
+[node name="EscapeWarrior03" parent="WorldEntities" instance=ExtResource("9_warrior")]
+position = Vector2(3104, 2016)
+entity_id = "level_1_warrior_18"
 
 [node name="SpawnedObjects" type="Node2D" parent="."]

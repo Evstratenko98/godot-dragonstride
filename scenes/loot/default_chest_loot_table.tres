@@ -1,0 +1,7 @@
+[gd_resource type="Resource" script_class="ChestLootTable" format=3]
+
+[ext_resource type="Script" path="res://scenes/loot/chest_loot_table.gd" id="1_table"]
+
+[resource]
+script = ExtResource("1_table")
+reward_item_ids = PackedStringArray("meat", "precision_stone", "meteor_scroll")

@@ -108,6 +108,46 @@ func try_add_item(item_id: String, amount: int) -> bool:
 	return true
 
 
+func can_add_item_at(item_id: String, amount: int, target_slot_index: int) -> bool:
+	return _get_add_item_at_validation_result(item_id, amount, target_slot_index) == MutationResult.NONE
+
+
+func try_add_item_at(item_id: String, amount: int, target_slot_index: int) -> bool:
+	var validation_result: MutationResult = _get_add_item_at_validation_result(
+		item_id,
+		amount,
+		target_slot_index
+	)
+	if validation_result != MutationResult.NONE:
+		last_mutation_result = validation_result
+		return false
+
+	var inventory_kind: String = get_inventory_kind_for_item_id(item_id)
+	var target_inventory: Inventory = _get_inventory(inventory_kind)
+	var target_grid: GridConstraint = _get_grid_constraint(inventory_kind)
+	var rollback_snapshot: Dictionary = create_snapshot()
+
+	var target_item: InventoryItem = get_item_at_slot(inventory_kind, target_slot_index)
+	if target_item != null:
+		if not target_item.set_stack_size(target_item.get_stack_size() + amount):
+			restore_snapshot(rollback_snapshot)
+			last_mutation_result = MutationResult.MUTATION_FAILED
+			return false
+	else:
+		var new_stack: InventoryItem = InventoryItem.new(target_inventory.protoset, item_id)
+		if (
+			not new_stack.set_stack_size(amount)
+			or not target_grid.add_item_at(new_stack, Vector2i(target_slot_index, 0))
+		):
+			restore_snapshot(rollback_snapshot)
+			last_mutation_result = MutationResult.MUTATION_FAILED
+			return false
+
+	_commit_change()
+	last_mutation_result = MutationResult.NONE
+	return true
+
+
 func try_move_stack(inventory_kind: String, source_slot_index: int, target_slot_index: int) -> bool:
 	if not _is_valid_slot_index(inventory_kind, source_slot_index):
 		last_mutation_result = MutationResult.INVALID_SLOT
@@ -360,6 +400,34 @@ func _find_free_slot_index(inventory_kind: String) -> int:
 			return slot_index
 
 	return -1
+
+
+func _get_add_item_at_validation_result(
+	item_id: String,
+	amount: int,
+	target_slot_index: int
+) -> MutationResult:
+	if not has_item_id(item_id) or amount <= 0:
+		return MutationResult.UNKNOWN_ITEM
+
+	var inventory_kind: String = get_inventory_kind_for_item_id(item_id)
+	if not _is_valid_slot_index(inventory_kind, target_slot_index):
+		return MutationResult.INVALID_SLOT
+	var target_inventory: Inventory = _get_inventory(inventory_kind)
+	var target_grid: GridConstraint = _get_grid_constraint(inventory_kind)
+	if target_inventory == null or target_grid == null:
+		return MutationResult.INVALID_KIND
+
+	var target_item: InventoryItem = get_item_at_slot(inventory_kind, target_slot_index)
+	if target_item != null:
+		if _get_item_id(target_item) != item_id or target_item.get_free_stack_space() < amount:
+			return MutationResult.INSUFFICIENT_CAPACITY
+		return MutationResult.NONE
+
+	var prototype_item: InventoryItem = InventoryItem.new(target_inventory.protoset, item_id)
+	if amount > prototype_item.get_max_stack_size():
+		return MutationResult.INSUFFICIENT_CAPACITY
+	return MutationResult.NONE
 
 
 func _is_valid_slot_index(inventory_kind: String, slot_index: int) -> bool:

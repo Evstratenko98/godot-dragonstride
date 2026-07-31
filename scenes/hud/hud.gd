@@ -20,11 +20,14 @@ enum ModalContext {
 @onready var player_roster_panel: PlayerRosterPanel = get_node("PlayerRosterPanel") as PlayerRosterPanel
 @onready var end_turn_button: Button = get_node("EndTurnButton") as Button
 @onready var modal_dialog: GameModalDialog = get_node("ModalDialog") as GameModalDialog
+@onready var chest_loot_dialog: ChestLootDialog = get_node("ChestLootDialog") as ChestLootDialog
 
 var runtime: WorldRuntime = null
 var bound_player: PlayerCharacter = null
 var modal_context: ModalContext = ModalContext.NONE
 var pending_spell_target_cell: Vector2i = Vector2i.ZERO
+var inventory_bar_default_z_index: int = 0
+var inventory_bar_default_child_index: int = 0
 
 
 func _ready() -> void:
@@ -49,18 +52,25 @@ func _ready() -> void:
 		POINTING_HAND_CURSOR_HOTSPOT
 	)
 	_configure_interactive_cursor(self)
+	inventory_bar_default_z_index = inventory_bar.z_index
+	inventory_bar_default_child_index = inventory_bar.get_index()
+	inventory_bar.configure_loot_dialog(chest_loot_dialog)
 	if not get_tree().node_added.is_connected(_on_scene_tree_node_added):
 		get_tree().node_added.connect(_on_scene_tree_node_added)
 	if not modal_dialog.open_state_changed.is_connected(_on_modal_open_state_changed):
 		modal_dialog.open_state_changed.connect(_on_modal_open_state_changed)
 	if not modal_dialog.resolved.is_connected(_on_modal_resolved):
 		modal_dialog.resolved.connect(_on_modal_resolved)
+	if not chest_loot_dialog.open_state_changed.is_connected(_on_chest_loot_open_state_changed):
+		chest_loot_dialog.open_state_changed.connect(_on_chest_loot_open_state_changed)
 
 
 func _exit_tree() -> void:
 	_disconnect_bound_player_signal()
 	_disconnect_spell_targeting_signal()
 	_disconnect_turn_signal()
+	inventory_bar.set_loot_modal_mode(false)
+	inventory_bar.z_index = inventory_bar_default_z_index
 	if bound_player != null and is_instance_valid(bound_player):
 		bound_player.set_local_input_blocked(false)
 	if get_tree().node_added.is_connected(_on_scene_tree_node_added):
@@ -75,6 +85,7 @@ func configure_runtime(new_runtime: WorldRuntime) -> void:
 	_disconnect_spell_targeting_signal()
 	_disconnect_turn_signal()
 	runtime = new_runtime
+	chest_loot_dialog.configure_runtime(runtime)
 	if runtime == null:
 		_refresh_end_turn_button()
 		return
@@ -94,6 +105,7 @@ func bind_session() -> void:
 	local_player_card.bind_player(local_player, "", true)
 	if local_player != null:
 		inventory_bar.bind_character(local_player)
+	chest_loot_dialog.bind_character(local_player)
 	turn_status_panel.bind_session()
 	player_roster_panel.bind_session()
 	_refresh_end_turn_button()
@@ -110,7 +122,7 @@ func show_level_welcome(title_text: String, body_text: String) -> bool:
 
 
 func is_modal_open() -> bool:
-	return modal_dialog.is_open()
+	return modal_dialog.is_open() or chest_loot_dialog.is_open()
 
 
 func _configure_interactive_cursor(node: Node) -> void:
@@ -122,7 +134,7 @@ func _configure_interactive_cursor(node: Node) -> void:
 
 
 func _on_end_game_button_pressed() -> void:
-	if modal_dialog.is_open():
+	if is_modal_open():
 		return
 	end_game.emit()
 
@@ -222,7 +234,7 @@ func _refresh_end_turn_button() -> void:
 func _apply_modal_input_block() -> void:
 	if bound_player == null or not is_instance_valid(bound_player):
 		return
-	bound_player.set_local_input_blocked(modal_dialog.is_open())
+	bound_player.set_local_input_blocked(is_modal_open())
 
 
 func _on_player_spell_target_selected(target_cell: Vector2i) -> void:
@@ -230,7 +242,7 @@ func _on_player_spell_target_selected(target_cell: Vector2i) -> void:
 		runtime == null
 		or bound_player == null
 		or not is_instance_valid(bound_player)
-		or modal_dialog.is_open()
+		or is_modal_open()
 	):
 		return
 
@@ -251,6 +263,22 @@ func _on_player_spell_target_selected(target_cell: Vector2i) -> void:
 
 func _on_modal_open_state_changed(_is_open: bool) -> void:
 	_apply_modal_input_block()
+
+
+func _on_chest_loot_open_state_changed(is_open: bool) -> void:
+	inventory_bar.set_loot_modal_mode(is_open)
+	_set_loot_inventory_layer(is_open)
+	_apply_modal_input_block()
+
+
+func _set_loot_inventory_layer(is_open: bool) -> void:
+	if is_open:
+		move_child(inventory_bar, get_child_count() - 1)
+		inventory_bar.z_index = chest_loot_dialog.z_index + 1
+		return
+
+	move_child(inventory_bar, inventory_bar_default_child_index)
+	inventory_bar.z_index = inventory_bar_default_z_index
 
 
 func _on_modal_resolved(result: GameModalDialog.Result) -> void:

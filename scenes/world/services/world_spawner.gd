@@ -19,6 +19,7 @@ const HOUSE_SCENE := preload("res://scenes/objects/house/house.tscn")
 const MEAT_SCENE := preload("res://scenes/objects/meat/meat.tscn")
 const PRECISION_STONE_SCENE := preload("res://scenes/objects/precision_stone/precision_stone.tscn")
 const METEOR_SCROLL_SCENE := preload("res://scenes/objects/meteor_scroll/meteor_scroll.tscn")
+const CHEST_SCENE := preload("res://scenes/objects/chest/chest.tscn")
 
 const CATALOG := {
 	"sheep": {
@@ -55,6 +56,11 @@ const CATALOG := {
 		"kind": SPAWN_KIND_OBJECT,
 		"scene": METEOR_SCROLL_SCENE,
 		"display_name": "Meteor Scroll",
+	},
+	"chest": {
+		"kind": SPAWN_KIND_OBJECT,
+		"scene": CHEST_SCENE,
+		"display_name": "Chest",
 	},
 }
 

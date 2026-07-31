@@ -5,7 +5,10 @@
 [resource]
 script = ExtResource("1_definition")
 level_id = "level_1"
-grid_size = Vector2i(12, 4)
-walkable_layer_names = PackedStringArray("Ground")
+grid_size = Vector2i(52, 34)
+walkable_layer_names = PackedStringArray("InfiltrationGround", "BarracksGround", "TempleGround", "UndercroftGround", "CrossroadsGround", "VaultGround", "EscapeGround")
 character_walkable_layer_names = PackedStringArray()
-spawn_cells = Array[Vector2i]([Vector2i(8, 0), Vector2i(10, 2)])
+spawn_cells = Array[Vector2i]([Vector2i(4, 29)])
+welcome_modal_title = "Прототип: Сердце дракона"
+welcome_modal_text = "Оцените масштаб сетки 52 × 34, плотность объектов и переходы между семью визуальными зонами. Это прототип компоновки без финальной цели миссии."
+starts_in_turn_mode = true

@@ -34,7 +34,12 @@ func start_singleplayer(settings: Dictionary = {}) -> void:
 
 
 func prepare_host_match(new_match_id: String, level_id: String) -> bool:
-	if not SteamManager.is_lobby_owner() or new_match_id.is_empty() or not LevelCatalog.has_level(level_id):
+	if (
+		not SteamManager.is_lobby_owner()
+		or new_match_id.is_empty()
+		or level_id != LevelCatalog.MULTIPLAYER_LEVEL_ID
+		or not LevelCatalog.has_level(level_id)
+	):
 		return false
 	var roster: Array[Dictionary] = _build_frozen_roster(SteamManager.get_current_lobby_members())
 	if not _is_valid_roster(roster, SteamManager.get_lobby_owner_id()):
@@ -51,6 +56,7 @@ func prepare_remote_match(payload: Dictionary) -> bool:
 	var roster_value: Variant = payload.get("players", [])
 	if (
 		new_match_id.is_empty()
+		or level_id != LevelCatalog.MULTIPLAYER_LEVEL_ID
 		or not LevelCatalog.has_level(level_id)
 		or payload_revision != ROSTER_REVISION
 		or not (roster_value is Array)

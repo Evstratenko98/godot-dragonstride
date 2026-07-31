@@ -64,7 +64,10 @@ func request_start_match() -> void:
 		SteamManager.get_current_lobby_id(),
 		Time.get_ticks_usec(),
 	]
-	var level_id: String = SteamManager.get_lobby_level_id()
+	var level_id: String = LevelCatalog.MULTIPLAYER_LEVEL_ID
+	if not SteamManager.set_lobby_level_id(level_id):
+		status_changed.emit("lobby_update_failed")
+		return
 	if not GameSession.prepare_host_match(new_match_id, level_id):
 		status_changed.emit("invalid_roster")
 		return

@@ -6,6 +6,7 @@ extends Node
 @onready var entity: NetworkEntityChannel = get_node(^"Entity") as NetworkEntityChannel
 @onready var world: NetworkWorldChannel = get_node(^"World") as NetworkWorldChannel
 @onready var inventory: NetworkInventoryChannel = get_node(^"Inventory") as NetworkInventoryChannel
+@onready var loot: NetworkLootChannel = get_node(^"Loot") as NetworkLootChannel
 @onready var turns: NetworkTurnChannel = get_node(^"Turns") as NetworkTurnChannel
 @onready var spells: NetworkSpellChannel = get_node(^"Spells") as NetworkSpellChannel
 @onready var actions: NetworkActionChannel = get_node(^"Actions") as NetworkActionChannel
@@ -23,6 +24,7 @@ func _ready() -> void:
 	entity.configure_context(connection, peers, store)
 	world.configure_context(connection, peers, store)
 	inventory.configure_context(connection, peers, store)
+	loot.configure_context(connection, peers, store)
 	turns.configure_context(connection, peers, store)
 	spells.configure_context(connection, peers, store)
 	actions.configure_context(connection, peers, store)

@@ -73,7 +73,7 @@ func _on_lobby_created(result: int, created_lobby_id: int) -> void:
 	Steam.setLobbyData(lobby_id, "name", Steam.getPersonaName() + "'s Lobby")
 	Steam.setLobbyData(lobby_id, LOBBY_GAME_KEY, LOBBY_GAME_VALUE)
 	Steam.setLobbyData(lobby_id, LOBBY_STATUS_KEY, LOBBY_STATUS_WAITING)
-	Steam.setLobbyData(lobby_id, LOBBY_LEVEL_KEY, LevelCatalog.DEFAULT_LEVEL_ID)
+	Steam.setLobbyData(lobby_id, LOBBY_LEVEL_KEY, LevelCatalog.MULTIPLAYER_LEVEL_ID)
 	Steam.setLobbyData(lobby_id, LOBBY_PROTOCOL_KEY, str(NetworkProtocol.PROTOCOL_VERSION))
 	Steam.setLobbyData(lobby_id, "host_id", str(Steam.getSteamID()))
 	Steam.setLobbyJoinable(lobby_id, true)
@@ -288,11 +288,11 @@ func set_lobby_level_id(level_id: String) -> bool:
 
 func get_lobby_level_id() -> String:
 	if lobby_id == 0:
-		return LevelCatalog.DEFAULT_LEVEL_ID
+		return LevelCatalog.MULTIPLAYER_LEVEL_ID
 
 	var level_id: String = str(Steam.getLobbyData(lobby_id, LOBBY_LEVEL_KEY))
 	if level_id.is_empty():
-		return LevelCatalog.DEFAULT_LEVEL_ID
+		return LevelCatalog.MULTIPLAYER_LEVEL_ID
 
 	return level_id
 

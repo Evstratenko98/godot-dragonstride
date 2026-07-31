@@ -54,6 +54,7 @@ func start_match() -> void:
 		if GameSession.is_multiplayer():
 			LobbyMatchCoordinator.cancel_runtime_start(start_error)
 		return
+	_start_initial_turn_mode()
 	hud.bind_session()
 	if level.has_welcome_modal():
 		hud.show_level_welcome(level.get_welcome_modal_title(), level.get_welcome_modal_text())
@@ -111,6 +112,19 @@ func _start_match_deferred() -> void:
 		return
 
 	start_match()
+
+
+func _start_initial_turn_mode() -> void:
+	if not level.starts_in_turn_mode():
+		return
+	if GameSession.is_multiplayer() and not GameSession.is_host():
+		return
+
+	if not runtime.enqueue_system_action(
+		WorldActionRecord.ActionType.SET_TURN_MODE,
+		{"is_enabled": true}
+	):
+		push_warning("Initial turn mode action could not be queued.")
 
 
 func _configure_level_audio() -> void:

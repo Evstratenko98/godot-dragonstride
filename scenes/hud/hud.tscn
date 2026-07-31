@@ -6,6 +6,7 @@
 [ext_resource type="Script" uid="uid://cw6jjvtbwgrst" path="res://scenes/hud/turn_status_panel.gd" id="4_turn_status"]
 [ext_resource type="Script" uid="uid://cn2i8edr1uwl" path="res://scenes/hud/player_roster_panel.gd" id="5_roster"]
 [ext_resource type="PackedScene" uid="uid://b2fglgsc3lgve" path="res://scenes/modal/modal_template.tscn" id="6_modal"]
+[ext_resource type="PackedScene" path="res://scenes/hud/chest_loot_dialog.tscn" id="7_chest_loot"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_end_turn"]
 bg_color = Color(0.06, 0.06, 0.08, 0.7)
@@ -127,6 +128,8 @@ grow_horizontal = 0
 script = ExtResource("5_roster")
 
 [node name="ModalDialog" parent="." unique_id=1580236755 instance=ExtResource("6_modal")]
+
+[node name="ChestLootDialog" parent="." instance=ExtResource("7_chest_loot")]
 
 [connection signal="pressed" from="EndGameButton" to="." method="_on_end_game_button_pressed"]
 [connection signal="pressed" from="EndTurnButton" to="." method="_on_end_turn_button_pressed"]

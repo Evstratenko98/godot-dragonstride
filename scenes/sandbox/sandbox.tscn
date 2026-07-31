@@ -11,6 +11,7 @@
 [ext_resource type="Texture2D" uid="uid://b5blnrd4g1rqe" path="res://art/Tiny Swords (Update 010)/Terrain/Ground/Tilemap_Flat.png" id="13_qcyxm"]
 [ext_resource type="Texture2D" uid="uid://1nkuwf8grh3o" path="res://art/Tiny Swords (Update 010)/Terrain/Bridge/Bridge_All.png" id="15_ditf4"]
 [ext_resource type="PackedScene" path="res://scenes/entities/enemies/warrior/warrior.tscn" id="21_hswqa"]
+[ext_resource type="PackedScene" path="res://scenes/objects/chest/chest.tscn" id="22_chest"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_dsd14"]
 texture = ExtResource("6_dsd14")
@@ -313,6 +314,10 @@ position = Vector2(94, 340)
 
 [node name="MeteorScroll" parent="WorldEntities" unique_id=740941564 instance=ExtResource("10_3emkg")]
 position = Vector2(92, 987)
+
+[node name="Chest" parent="WorldEntities" instance=ExtResource("22_chest")]
+position = Vector2(608, 672)
+object_id = "chest_1"
 
 [node name="SpawnedObjects" type="Node2D" parent="." unique_id=1900879963]
 

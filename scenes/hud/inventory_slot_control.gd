@@ -111,7 +111,12 @@ func _gui_input(event: InputEvent) -> void:
 
 
 func _get_drag_data(_at_position: Vector2) -> Variant:
-	if is_trash or inventory_item == null:
+	if (
+		is_trash
+		or inventory_item == null
+		or inventory_bar == null
+		or not inventory_bar.can_rearrange_inventory()
+	):
 		return null
 
 	var preview: CtrlInventoryItem = CtrlInventoryItem.new()
@@ -130,7 +135,18 @@ func _get_drag_data(_at_position: Vector2) -> Variant:
 
 
 func _can_drop_data(_at_position: Vector2, data: Variant) -> bool:
-	if inventory_bar == null or not (data is Dictionary):
+	if inventory_bar == null:
+		return false
+	if data is ChestLootDragData:
+		return (
+			not is_trash
+			and inventory_bar.can_accept_chest_loot(
+				data as ChestLootDragData,
+				inventory_kind,
+				slot_index
+			)
+		)
+	if not (data is Dictionary) or not inventory_bar.can_rearrange_inventory():
 		return false
 
 	var drag_data: Dictionary = data as Dictionary
@@ -150,6 +166,13 @@ func _can_drop_data(_at_position: Vector2, data: Variant) -> bool:
 
 func _drop_data(_at_position: Vector2, data: Variant) -> void:
 	if not _can_drop_data(Vector2.ZERO, data):
+		return
+	if data is ChestLootDragData:
+		inventory_bar.request_chest_loot_drop(
+			data as ChestLootDragData,
+			inventory_kind,
+			slot_index
+		)
 		return
 
 	var drag_data: Dictionary = data as Dictionary
@@ -171,18 +194,4 @@ func _add_label(label_text: String) -> void:
 
 
 func _refresh_style() -> void:
-	add_theme_stylebox_override("panel", _create_slot_style())
-
-
-func _create_slot_style() -> StyleBoxFlat:
-	var style: StyleBoxFlat = StyleBoxFlat.new()
-	style.bg_color = Color(0.08, 0.08, 0.1, 0.70)
-	if is_selected:
-		style.border_color = Color(1.0, 0.72, 0.12, 0.94)
-	elif is_exhausted:
-		style.border_color = Color(0.42, 0.18, 0.18, 0.88)
-	else:
-		style.border_color = Color(0.65, 0.65, 0.7, 0.82)
-	style.set_border_width_all(2 if is_selected else 1)
-	style.set_corner_radius_all(3)
-	return style
+	add_theme_stylebox_override("panel", InventorySlotStyle.create(is_selected, is_exhausted))
