@@ -13,12 +13,8 @@ static func get_rejection_reason(action: WorldActionRecord) -> String:
 		return "payload_too_large"
 
 	match action.action_type:
-		WorldActionRecord.ActionType.MOVE:
-			var direction_value: Variant = action.payload.get("direction")
-			if not (direction_value is Vector2i):
-				return WorldActionStream.REJECTION_INVALID_ACTION
-			var direction: Vector2i = direction_value as Vector2i
-			if absi(direction.x) + absi(direction.y) != 1:
+		WorldActionRecord.ActionType.MOVE_PATH:
+			if not NetworkProtocol.is_valid_move_path(action.payload.get("requested_path")):
 				return WorldActionStream.REJECTION_INVALID_ACTION
 		WorldActionRecord.ActionType.ATTACK, WorldActionRecord.ActionType.INTERACTION:
 			if not (action.payload.get("target_cell") is Vector2i):

@@ -53,6 +53,7 @@ func hide_lines() -> void:
 func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void:
 	runtime = new_runtime
 	level = new_level
+	visible = level == null or not level.allows_debug_commands()
 	if level != null and level.allows_debug_commands():
 		_register_console_commands()
 	queue_redraw()

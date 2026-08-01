@@ -10,5 +10,4 @@ extends Resource
 @export var death_sound_stream: AudioStream = null
 @export var welcome_modal_title: String = ""
 @export_multiline var welcome_modal_text: String = ""
-@export var starts_in_turn_mode: bool = false
 @export var allows_debug_commands: bool = false

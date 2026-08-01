@@ -2,6 +2,7 @@ class_name CellHover
 extends Node2D
 
 signal hovered_entity_changed(entity: Entity)
+signal hovered_cell_changed(cell: Vector2i, is_inside_world: bool)
 
 @export var hover_color: Color = Color(1.0, 0.85, 0.2, 0.28)
 @export var spell_target_color: Color = Color(1.0, 0.3, 0.08, 0.38)
@@ -9,6 +10,7 @@ signal hovered_entity_changed(entity: Entity)
 var runtime: WorldRuntime = null
 var hover_cell: Vector2i = Vector2i.ZERO
 var has_hover_cell: bool = false
+var is_hover_cell_inside: bool = false
 var is_spell_targeting: bool = false
 var hovered_entity: Entity = null
 
@@ -20,7 +22,8 @@ func _process(_delta: float) -> void:
 	var next_cell: Vector2i = runtime.world_to_cell(get_global_mouse_position())
 	var local_player: PlayerCharacter = runtime.get_local_player()
 	var next_is_spell_targeting: bool = runtime.has_selected_spell(local_player)
-	var next_has_hover_cell: bool = runtime.is_cell_inside(next_cell) if next_is_spell_targeting else runtime.is_cell_interactable(next_cell)
+	var next_is_hover_cell_inside: bool = runtime.is_cell_inside(next_cell)
+	var next_has_hover_cell: bool = next_is_hover_cell_inside if next_is_spell_targeting else runtime.is_cell_interactable(next_cell)
 	var next_hovered_entity: Entity = null
 	if runtime.is_cell_inside(next_cell):
 		next_hovered_entity = runtime.get_entity_at_cell(next_cell) as Entity
@@ -29,17 +32,22 @@ func _process(_delta: float) -> void:
 	if (
 		hover_cell == next_cell
 		and has_hover_cell == next_has_hover_cell
+		and is_hover_cell_inside == next_is_hover_cell_inside
 		and is_spell_targeting == next_is_spell_targeting
 		and hovered_entity == next_hovered_entity
 	):
 		return
 
+	var did_hovered_cell_change: bool = hover_cell != next_cell or is_hover_cell_inside != next_is_hover_cell_inside
 	hover_cell = next_cell
 	has_hover_cell = next_has_hover_cell
+	is_hover_cell_inside = next_is_hover_cell_inside
 	is_spell_targeting = next_is_spell_targeting
 	if hovered_entity != next_hovered_entity:
 		hovered_entity = next_hovered_entity
 		hovered_entity_changed.emit(hovered_entity)
+	if did_hovered_cell_change:
+		hovered_cell_changed.emit(hover_cell, is_hover_cell_inside)
 	queue_redraw()
 
 
@@ -61,3 +69,11 @@ func get_hovered_entity() -> Entity:
 	if hovered_entity == null or not is_instance_valid(hovered_entity):
 		return null
 	return hovered_entity
+
+
+func get_hovered_cell() -> Vector2i:
+	return hover_cell
+
+
+func has_hovered_world_cell() -> bool:
+	return is_hover_cell_inside

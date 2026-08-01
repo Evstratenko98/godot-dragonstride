@@ -69,9 +69,9 @@ anchor_left = 0.5
 anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
-offset_left = -255.5
+offset_left = -277.0
 offset_top = -62.0
-offset_right = 255.5
+offset_right = 277.0
 offset_bottom = -24.0
 grow_horizontal = 2
 grow_vertical = 0
@@ -84,9 +84,9 @@ anchor_left = 0.5
 anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
-offset_left = 284.0
+offset_left = 424.0
 offset_top = -64.0
-offset_right = 414.0
+offset_right = 554.0
 offset_bottom = -24.0
 grow_horizontal = 2
 grow_vertical = 0
@@ -129,7 +129,7 @@ script = ExtResource("5_roster")
 
 [node name="ModalDialog" parent="." unique_id=1580236755 instance=ExtResource("6_modal")]
 
-[node name="ChestLootDialog" parent="." instance=ExtResource("7_chest_loot")]
+[node name="ChestLootDialog" parent="." unique_id=523605113 instance=ExtResource("7_chest_loot")]
 
 [connection signal="pressed" from="EndGameButton" to="." method="_on_end_game_button_pressed"]
 [connection signal="pressed" from="EndTurnButton" to="." method="_on_end_turn_button_pressed"]

@@ -31,7 +31,7 @@ func broadcast_action_profile_payload(action: WorldActionRecord) -> void:
 	if action == null or network == null:
 		return
 	match action.action_type:
-		WorldActionRecord.ActionType.MOVE, WorldActionRecord.ActionType.INTERACTION:
+		WorldActionRecord.ActionType.MOVE_PATH, WorldActionRecord.ActionType.INTERACTION:
 			network.broadcast_character_action_payload(action)
 		WorldActionRecord.ActionType.ATTACK:
 			network.broadcast_combat_action_payload(action)
@@ -112,16 +112,8 @@ func get_rejection_reason(action: WorldActionRecord) -> String:
 		return WorldActionStream.REJECTION_ACTOR_UNAVAILABLE
 
 	match action.action_type:
-		WorldActionRecord.ActionType.MOVE:
-			var direction: Vector2i = action.payload.get("direction", Vector2i.ZERO)
-			if direction == Vector2i.ZERO or not runtime.can_entity_move_in_turn(player):
-				return WorldActionStream.REJECTION_INVALID_ACTION
-			var from_cell: Vector2i = runtime.world_to_cell(player.global_position)
-			var target_cell: Vector2i = from_cell + direction
-			if not runtime.can_enter_cell(target_cell, player):
-				return WorldActionStream.REJECTION_INVALID_ACTION
-			action.payload["from_cell"] = from_cell
-			action.payload["target_cell"] = target_cell
+		WorldActionRecord.ActionType.MOVE_PATH:
+			return WorldMovePathPolicy.prepare_authoritative_path(runtime, turns, player, action)
 		WorldActionRecord.ActionType.ATTACK:
 			var attack_cell: Vector2i = action.payload.get("target_cell", Vector2i.ZERO)
 			player.current_cell = runtime.world_to_cell(player.global_position)
@@ -162,19 +154,12 @@ func execute_authoritative(action: WorldActionRecord) -> bool:
 	var scene_tree: SceneTree = runtime.get_tree()
 	var player: PlayerCharacter = runtime.get_entity_by_id(action.actor_entity_id) as PlayerCharacter
 	match action.action_type:
-		WorldActionRecord.ActionType.MOVE:
-			var direction: Vector2i = action.payload.get("direction", Vector2i.ZERO)
-			if player == null or not player.execute_authoritative_move(direction):
-				return false
-			var move_deadline_msec: int = Time.get_ticks_msec() + int((player.move_time + 2.0) * 1000.0)
-			while is_instance_valid(player) and player.is_moving and Time.get_ticks_msec() < move_deadline_msec:
-				await scene_tree.process_frame
-				if not runtime.is_inside_tree():
-					return false
-			if not is_instance_valid(player):
-				return false
-			if player.is_moving:
-				player.force_cancel_movement(action.payload.get("from_cell", player.current_cell))
+		WorldActionRecord.ActionType.MOVE_PATH:
+			var authoritative_path: Array[Vector2i] = WorldMovePathPolicy.read_cells(
+				action.payload,
+				WorldMovePathPolicy.AUTHORITATIVE_PATH_KEY
+			)
+			if player == null or not await player.execute_authoritative_move_path(authoritative_path):
 				action.payload["cancellation_reason"] = WorldActionStream.REJECTION_PRESENTATION_TIMEOUT
 				return false
 			return true
@@ -282,19 +267,12 @@ func play_remote(action: WorldActionRecord) -> void:
 	if player == null:
 		return
 	match action.action_type:
-		WorldActionRecord.ActionType.MOVE:
-			var from_cell: Vector2i = action.payload.get("from_cell", player.current_cell)
-			var target_cell: Vector2i = action.payload.get("target_cell", player.current_cell)
-			if player.play_remote_move(from_cell, target_cell):
-				var move_deadline_msec: int = Time.get_ticks_msec() + int((player.move_time + 2.0) * 1000.0)
-				while is_instance_valid(player) and player.is_moving and Time.get_ticks_msec() < move_deadline_msec:
-					await scene_tree.process_frame
-					if not runtime.is_inside_tree():
-						return
-				if not is_instance_valid(player):
-					return
-				if player.is_moving:
-					player.force_cancel_movement(from_cell)
+		WorldActionRecord.ActionType.MOVE_PATH:
+			var authoritative_path: Array[Vector2i] = WorldMovePathPolicy.read_cells(
+				action.payload,
+				WorldMovePathPolicy.AUTHORITATIVE_PATH_KEY
+			)
+			await player.play_remote_move_path(authoritative_path)
 		WorldActionRecord.ActionType.ATTACK:
 			var attack_cell: Vector2i = action.payload.get("target_cell", player.current_cell)
 			player.play_remote_attack(attack_cell, false)
@@ -339,7 +317,7 @@ func _get_inventory_mutation_reason(character_inventory: CharacterInventory) -> 
 
 func _is_turn_bound_action(action_type: WorldActionRecord.ActionType) -> bool:
 	return action_type in [
-		WorldActionRecord.ActionType.MOVE,
+		WorldActionRecord.ActionType.MOVE_PATH,
 		WorldActionRecord.ActionType.ATTACK,
 		WorldActionRecord.ActionType.INTERACTION,
 		WorldActionRecord.ActionType.SPELL_CAST,
@@ -350,7 +328,7 @@ func _is_turn_bound_action(action_type: WorldActionRecord.ActionType) -> bool:
 
 func _is_player_action(action_type: WorldActionRecord.ActionType) -> bool:
 	return action_type in [
-		WorldActionRecord.ActionType.MOVE,
+		WorldActionRecord.ActionType.MOVE_PATH,
 		WorldActionRecord.ActionType.ATTACK,
 		WorldActionRecord.ActionType.INTERACTION,
 		WorldActionRecord.ActionType.SPELL_CAST,

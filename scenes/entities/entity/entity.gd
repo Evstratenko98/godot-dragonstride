@@ -92,7 +92,7 @@ func request_move(direction: Vector2i) -> bool:
 	return execute_move(direction, true)
 
 
-func execute_move(direction: Vector2i, should_broadcast: bool) -> bool:
+func execute_move(direction: Vector2i, should_broadcast: bool, movement_step_cost: int = 1) -> bool:
 	if direction == Vector2i.ZERO or runtime == null:
 		return false
 
@@ -114,7 +114,7 @@ func execute_move(direction: Vector2i, should_broadcast: bool) -> bool:
 		_on_move_blocked(direction, target_cell)
 		return false
 
-	_move_to_cell(target_cell, should_broadcast)
+	_move_to_cell(target_cell, should_broadcast, movement_step_cost)
 	return true
 
 
@@ -267,7 +267,7 @@ func get_action_generation() -> int:
 	return action_generation
 
 
-func _move_to_cell(target_cell: Vector2i, should_broadcast: bool = true) -> void:
+func _move_to_cell(target_cell: Vector2i, should_broadcast: bool = true, movement_step_cost: int = 1) -> void:
 	if runtime == null:
 		return
 
@@ -293,7 +293,7 @@ func _move_to_cell(target_cell: Vector2i, should_broadcast: bool = true) -> void
 		is_moving = false
 
 		if runtime != null:
-			runtime.handle_entity_move_completed(self, from_cell, target_cell)
+			runtime.handle_entity_move_completed(self, from_cell, target_cell, movement_step_cost)
 		movement_finished.emit(from_cell, target_cell)
 
 		_on_move_finished(target_cell)

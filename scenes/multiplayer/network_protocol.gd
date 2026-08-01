@@ -1,7 +1,7 @@
 class_name NetworkProtocol
 extends RefCounted
 
-const PROTOCOL_VERSION := 3
+const PROTOCOL_VERSION := 4
 const SNAPSHOT_SCHEMA_VERSION := 1
 const MAX_ROSTER_SIZE := 4
 const MAX_IDENTIFIER_LENGTH := 64
@@ -16,6 +16,7 @@ const MAX_MESSAGES_PER_SEQUENCE := 32
 const MAX_BUFFERED_MESSAGES := 256
 const MAX_GAMEPLAY_VALUE := 1_000_000
 const MAX_ABSOLUTE_GRID_COORDINATE := 1_000_000
+const MAX_MOVE_PATH_CELLS := 512
 
 const SAFE_REASON_CODES: PackedStringArray = [
 	"actor_busy",
@@ -81,6 +82,18 @@ static func is_valid_cell_value(cell: Vector2i) -> bool:
 		absi(cell.x) <= MAX_ABSOLUTE_GRID_COORDINATE
 		and absi(cell.y) <= MAX_ABSOLUTE_GRID_COORDINATE
 	)
+
+
+static func is_valid_move_path(path_value: Variant) -> bool:
+	if not (path_value is Array):
+		return false
+	var path: Array = path_value as Array
+	if path.is_empty() or path.size() > MAX_MOVE_PATH_CELLS:
+		return false
+	for cell_value: Variant in path:
+		if not (cell_value is Vector2i) or not is_valid_cell_value(cell_value as Vector2i):
+			return false
+	return true
 
 
 static func is_valid_nonnegative_value(value: int) -> bool:

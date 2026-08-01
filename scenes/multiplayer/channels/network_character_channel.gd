@@ -3,9 +3,9 @@ extends NetworkChannel
 
 signal interaction_requested(target_cell: Vector2i, match_id: String, turn_revision: int, request_id: int, requester_peer_id: int)
 signal character_action_payload_received(match_id: String, sequence_id: int, payload: Dictionary)
-signal entity_move_requested(
+signal character_move_path_requested(
 	requester_steam_id: int,
-	direction: Vector2i,
+	requested_path: Array[Vector2i],
 	match_id: String,
 	turn_revision: int,
 	request_id: int
@@ -34,13 +34,24 @@ func broadcast_action_payload(match_id: String, sequence_id: int, payload: Dicti
 		rpc("_receive_action_payload", match_id, sequence_id, payload)
 
 
-func request_entity_move(direction: Vector2i, match_id: String, turn_revision: int, request_id: int) -> void:
-	if not _can_send():
+func request_character_move_path(
+	requested_path: Array[Vector2i],
+	match_id: String,
+	turn_revision: int,
+	request_id: int
+) -> void:
+	if not _can_send() or not NetworkProtocol.is_valid_move_path(requested_path):
 		return
 	if connection.is_host:
-		entity_move_requested.emit(connection.local_steam_id, direction, match_id, turn_revision, request_id)
+		character_move_path_requested.emit(
+			connection.local_steam_id,
+			requested_path,
+			match_id,
+			turn_revision,
+			request_id
+		)
 		return
-	rpc_id(1, "_submit_entity_move", direction, match_id, turn_revision, request_id)
+	rpc_id(1, "_submit_character_move_path", requested_path, match_id, turn_revision, request_id)
 
 
 func broadcast_entity_move(
@@ -84,10 +95,30 @@ func _receive_action_payload(match_id: String, sequence_id: int, payload: Dictio
 
 
 @rpc("any_peer", "call_remote", "reliable", 1)
-func _submit_entity_move(direction: Vector2i, match_id: String, turn_revision: int, request_id: int) -> void:
+func _submit_character_move_path(
+	requested_path: Array[Vector2i],
+	match_id: String,
+	turn_revision: int,
+	request_id: int
+) -> void:
 	var requester_steam_id: int = _get_registered_sender_steam_id()
-	if requester_steam_id != 0 and turn_revision >= 0 and direction in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN] and _is_valid_intent(match_id, request_id, {"direction": direction, "turn_revision": turn_revision}):
-		entity_move_requested.emit(requester_steam_id, direction, match_id, turn_revision, request_id)
+	if (
+		requester_steam_id != 0
+		and turn_revision >= 0
+		and NetworkProtocol.is_valid_move_path(requested_path)
+		and _is_valid_intent(
+			match_id,
+			request_id,
+			{"requested_path": requested_path, "turn_revision": turn_revision}
+		)
+	):
+		character_move_path_requested.emit(
+			requester_steam_id,
+			requested_path,
+			match_id,
+			turn_revision,
+			request_id
+		)
 
 
 @rpc("authority", "call_remote", "reliable", 1)

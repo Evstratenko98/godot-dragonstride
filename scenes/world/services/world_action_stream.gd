@@ -327,8 +327,8 @@ func enqueue_internal_action(action: WorldActionRecord) -> bool:
 	return true
 
 
-func has_pending_move(actor_entity_id: String) -> bool:
-	return has_pending_action(actor_entity_id, WorldActionRecord.ActionType.MOVE)
+func has_pending_move_path(actor_entity_id: String) -> bool:
+	return has_pending_action(actor_entity_id, WorldActionRecord.ActionType.MOVE_PATH)
 
 
 func has_pending_action(actor_entity_id: String, action_type: WorldActionRecord.ActionType) -> bool:
@@ -751,7 +751,7 @@ func _on_stream_snapshot_requested(
 
 func _requires_profile_payload(action_type: WorldActionRecord.ActionType) -> bool:
 	return action_type in [
-		WorldActionRecord.ActionType.MOVE,
+		WorldActionRecord.ActionType.MOVE_PATH,
 		WorldActionRecord.ActionType.ATTACK,
 		WorldActionRecord.ActionType.INTERACTION,
 		WorldActionRecord.ActionType.SPELL_CAST,
@@ -772,7 +772,7 @@ func _has_required_auxiliary_profiles(action: WorldActionRecord) -> bool:
 		WorldActionRecord.ActionType.SET_TURN_MODE,
 	]
 	if runtime.is_turn_mode_enabled() and action.action_type in [
-		WorldActionRecord.ActionType.MOVE,
+		WorldActionRecord.ActionType.MOVE_PATH,
 		WorldActionRecord.ActionType.ATTACK,
 		WorldActionRecord.ActionType.INTERACTION,
 	]:
@@ -943,7 +943,7 @@ func _increment_diagnostic(counter_name: String) -> void:
 
 func _is_external_player_action(action_type: WorldActionRecord.ActionType) -> bool:
 	return action_type in [
-		WorldActionRecord.ActionType.MOVE,
+		WorldActionRecord.ActionType.MOVE_PATH,
 		WorldActionRecord.ActionType.ATTACK,
 		WorldActionRecord.ActionType.INTERACTION,
 		WorldActionRecord.ActionType.SPELL_CAST,

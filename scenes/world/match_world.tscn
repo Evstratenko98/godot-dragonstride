@@ -1,4 +1,4 @@
-[gd_scene load_steps=20 format=3]
+[gd_scene load_steps=21 format=3]
 
 [ext_resource type="Script" path="res://scenes/world/services/world_grid.gd" id="1_grid"]
 [ext_resource type="Script" path="res://scenes/world/services/world_registry.gd" id="2_registry"]
@@ -19,6 +19,7 @@
 [ext_resource type="PackedScene" path="res://scenes/cell_hover/cell_hover.tscn" id="12_cell_hover"]
 [ext_resource type="PackedScene" path="res://scenes/hud/hud.tscn" id="13_hud"]
 [ext_resource type="PackedScene" path="res://scenes/movement_range/movement_range_overlay.tscn" id="14_movement_range"]
+[ext_resource type="PackedScene" path="res://scenes/movement_range/movement_path_overlay.tscn" id="15_movement_path"]
 
 [node name="MatchWorld" type="Node2D"]
 y_sort_enabled = true
@@ -77,6 +78,8 @@ script = ExtResource("10_match")
 [node name="GridLines" parent="." instance=ExtResource("11_grid_lines")]
 
 [node name="MovementRangeOverlay" parent="." instance=ExtResource("14_movement_range")]
+
+[node name="MovementPathOverlay" parent="." instance=ExtResource("15_movement_path")]
 
 [node name="CellHover" parent="." instance=ExtResource("12_cell_hover")]
 

@@ -1,6 +1,5 @@
 extends Control
 
-const LEVEL_SELECTION_SCENE_PATH := "res://scenes/menu/level_selection/level_selection.tscn"
 const NOTICE_MESSAGES := {
 	"host_disconnected": "The host connection was lost. The match has ended.",
 	"state_sync_failed": "World synchronization failed. You were disconnected from the match.",
@@ -27,4 +26,6 @@ func _on_lobby_button_pressed() -> void:
 
 
 func _on_start_button_pressed() -> void:
-	get_tree().change_scene_to_file(LEVEL_SELECTION_SCENE_PATH)
+	NetworkManager.connection.stop_network()
+	GameSession.start_singleplayer()
+	GameSession.go_to_selected_scene()

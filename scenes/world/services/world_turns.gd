@@ -214,11 +214,11 @@ func can_entity_sync_state(entity: Node) -> bool:
 	return state == STATE_PLAYER_TURN and _is_active_entity(entity)
 
 
-func notify_entity_moved(entity: Node, _from_cell: Vector2i, _target_cell: Vector2i) -> void:
-	if not _is_authority() or state != STATE_PLAYER_TURN or not _is_active_entity(entity):
+func notify_entity_moved(entity: Node, _from_cell: Vector2i, _target_cell: Vector2i, movement_step_cost: int = 1) -> void:
+	if not _is_authority() or state != STATE_PLAYER_TURN or not _is_active_entity(entity) or movement_step_cost <= 0:
 		return
 
-	steps_left = maxi(steps_left - 1, 0)
+	steps_left = maxi(steps_left - movement_step_cost, 0)
 	var log_line: String = "Steps left for %s: %d" % [_get_entity_display_name(entity), steps_left]
 	ConsoleOutput.print_console(log_line, runtime)
 	_broadcast_snapshot(EVENT_STEPS_CHANGED)

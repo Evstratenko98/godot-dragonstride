@@ -9,9 +9,8 @@ var pending_inventory_snapshots: Dictionary[int, Dictionary] = {}
 var pending_combat_messages: Dictionary[int, Array] = {}
 var pending_entity_messages: Dictionary[int, Array] = {}
 var pending_npc_action_messages: Dictionary[int, Array] = {}
-var pending_local_move_request_id: int = 0
-var pending_local_move_sequence_id: int = 0
 var signal_bindings: WorldNetworkSignalBindings = WorldNetworkSignalBindings.new()
+var move_request_tracker: WorldMoveRequestTracker = WorldMoveRequestTracker.new()
 
 
 func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void:
@@ -97,25 +96,29 @@ func broadcast_entity_ai_state(
 	)
 
 
-func request_character_move(player: PlayerCharacter, direction: Vector2i) -> bool:
-	if player == null or player != runtime.get_local_player() or direction == Vector2i.ZERO:
+func request_character_move_path(player: PlayerCharacter, requested_path: Array[Vector2i]) -> bool:
+	if player == null or player != runtime.get_local_player() or requested_path.is_empty():
 		return false
-	if runtime.has_pending_move(player) or pending_local_move_request_id > 0:
+	if runtime.has_pending_move_path(player) or move_request_tracker.is_pending():
 		return false
 	var request_id: int = runtime.create_action_request_id()
 	if GameSession.is_singleplayer():
 		return runtime.enqueue_player_action(
-			WorldActionRecord.ActionType.MOVE,
+			WorldActionRecord.ActionType.MOVE_PATH,
 			player,
-			{"direction": direction},
+			{WorldMovePathPolicy.REQUESTED_PATH_KEY: requested_path},
 			request_id,
 			0
 		)
 	if not NetworkManager.connection.is_ready():
 		return false
-	pending_local_move_request_id = request_id
-	pending_local_move_sequence_id = 0
-	NetworkManager.character.request_entity_move(direction, GameSession.get_match_id(), runtime.get_turn_revision(), request_id)
+	move_request_tracker.begin(request_id)
+	NetworkManager.character.request_character_move_path(
+		requested_path,
+		GameSession.get_match_id(),
+		runtime.get_turn_revision(),
+		request_id
+	)
 	return true
 
 
@@ -384,9 +387,9 @@ func _apply_npc_move_message(entity_id: String, from_cell: Vector2i, target_cell
 	runtime.reserve_entity_cell(entity, from_cell, target_cell)
 
 
-func _on_entity_move_requested(
+func _on_character_move_path_requested(
 	requester_steam_id: int,
-	direction: Vector2i,
+	requested_path: Array[Vector2i],
 	match_id: String,
 	turn_revision: int,
 	request_id: int
@@ -396,9 +399,9 @@ func _on_entity_move_requested(
 		return
 	var peer_id: int = NetworkManager.peers.get_peer_id_for_steam_id(requester_steam_id)
 	runtime.enqueue_player_action(
-		WorldActionRecord.ActionType.MOVE,
+		WorldActionRecord.ActionType.MOVE_PATH,
 		player,
-		{"direction": direction},
+		{WorldMovePathPolicy.REQUESTED_PATH_KEY: requested_path},
 		request_id,
 		peer_id,
 		turn_revision,
@@ -771,9 +774,7 @@ func _on_stream_action_started(action: WorldActionRecord) -> void:
 
 
 func _on_stream_action_finished(action: WorldActionRecord) -> void:
-	if action != null and action.action_type == WorldActionRecord.ActionType.MOVE:
-		if action.request_id == pending_local_move_request_id:
-			_clear_pending_local_move_request()
+	move_request_tracker.finish_action(action)
 
 
 func _on_stream_action_cancelled(action: WorldActionRecord, reason_code: String) -> void:
@@ -787,28 +788,16 @@ func _on_stream_action_cancelled(action: WorldActionRecord, reason_code: String)
 
 
 func _on_action_rejected(request_id: int, reason_code: String) -> void:
-	if request_id == pending_local_move_request_id:
-		_clear_pending_local_move_request()
+	move_request_tracker.handle_rejected(request_id)
 	runtime.notify_local_action_rejected(reason_code)
 
 
 func _on_action_accepted(request_id: int, sequence_id: int) -> void:
-	if request_id == pending_local_move_request_id:
-		pending_local_move_sequence_id = sequence_id
+	move_request_tracker.handle_accepted(request_id, sequence_id)
 
 
 func _on_remote_snapshot_committed(boundary_sequence_id: int) -> void:
-	if (
-		pending_local_move_request_id > 0
-		and pending_local_move_sequence_id > 0
-		and pending_local_move_sequence_id < boundary_sequence_id
-	):
-		_clear_pending_local_move_request()
-
-
-func _clear_pending_local_move_request() -> void:
-	pending_local_move_request_id = 0
-	pending_local_move_sequence_id = 0
+	move_request_tracker.handle_snapshot_committed(boundary_sequence_id)
 
 
 func _buffer_combat_message(sequence_id: int, message: Dictionary) -> bool:
@@ -953,7 +942,7 @@ func _on_session_cleared() -> void:
 	pending_combat_messages.clear()
 	pending_entity_messages.clear()
 	pending_npc_action_messages.clear()
-	_clear_pending_local_move_request()
+	move_request_tracker.clear()
 
 
 func _send_entity_vitality_states_to_peer(peer_id: int) -> void:

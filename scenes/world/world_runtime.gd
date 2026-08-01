@@ -114,9 +114,9 @@ func handle_entity_move_started(entity: Node, from_cell: Vector2i, target_cell: 
 	network.request_entity_move_started(entity, from_cell, target_cell, should_broadcast)
 
 
-func handle_entity_move_completed(entity: Node, from_cell: Vector2i, target_cell: Vector2i) -> void:
+func handle_entity_move_completed(entity: Node, from_cell: Vector2i, target_cell: Vector2i, movement_step_cost: int = 1) -> void:
 	complete_entity_move(entity, from_cell, target_cell)
-	notify_entity_moved_in_turn(entity, from_cell, target_cell)
+	notify_entity_moved_in_turn(entity, from_cell, target_cell, movement_step_cost)
 
 
 func handle_character_attack(attacker: Node, target_cell: Vector2i) -> void:
@@ -127,8 +127,8 @@ func request_character_attack(attacker: PlayerCharacter, target_cell: Vector2i) 
 	return network.request_character_attack(attacker, target_cell)
 
 
-func request_character_move(player: PlayerCharacter, direction: Vector2i) -> bool:
-	return network.request_character_move(player, direction)
+func request_character_move_path(player: PlayerCharacter, requested_path: Array[Vector2i]) -> bool:
+	return network.request_character_move_path(player, requested_path)
 
 
 func request_character_interaction(interactor: PlayerCharacter, target_cell: Vector2i) -> void:
@@ -397,9 +397,9 @@ func can_entity_sync_state_in_turn(entity: Node) -> bool:
 	return turn_manager.can_entity_sync_state(entity)
 
 
-func notify_entity_moved_in_turn(entity: Node, from_cell: Vector2i, target_cell: Vector2i) -> void:
+func notify_entity_moved_in_turn(entity: Node, from_cell: Vector2i, target_cell: Vector2i, movement_step_cost: int = 1) -> void:
 	if turn_manager != null:
-		turn_manager.notify_entity_moved(entity, from_cell, target_cell)
+		turn_manager.notify_entity_moved(entity, from_cell, target_cell, movement_step_cost)
 
 
 func notify_entity_attacked_in_turn(entity: Node, target_cell: Vector2i) -> void:
@@ -473,10 +473,10 @@ func enqueue_system_action(action_type: WorldActionRecord.ActionType, payload: D
 	return action_stream.enqueue_internal_action(action)
 
 
-func has_pending_move(entity: Node) -> bool:
+func has_pending_move_path(entity: Node) -> bool:
 	if action_stream == null or entity == null:
 		return false
-	return action_stream.has_pending_move(get_entity_id(entity))
+	return action_stream.has_pending_move_path(get_entity_id(entity))
 
 
 func is_action_stream_idle() -> bool:

@@ -3,7 +3,7 @@ extends RefCounted
 
 enum ActionType {
 	NONE,
-	MOVE,
+	MOVE_PATH,
 	ATTACK,
 	INTERACTION,
 	SPELL_CAST,

@@ -4,6 +4,7 @@ extends "res://scenes/entities/entity/entity.gd"
 signal action_mode_changed(action_mode: ActionMode)
 
 enum ActionMode {
+	MOVE,
 	ATTACK,
 	INTERACT,
 }
@@ -25,6 +26,7 @@ var steam_id: int = 0
 var is_local_player: bool = true
 var can_receive_input: bool = true
 var is_local_input_blocked: bool = false
+var is_executing_move_path: bool = false
 var action_mode: ActionMode = ActionMode.ATTACK
 var warrior_color: String = DEFAULT_WARRIOR_COLOR
 
@@ -51,6 +53,7 @@ func start(
 ) -> void:
 	can_receive_input = receive_input
 	is_local_player = receive_input
+	is_executing_move_path = false
 	action_mode = ActionMode.ATTACK
 	start_entity(start_position, new_entity_id, new_entity_name, EntityType.CHARACTER)
 	character_inventory.configure_owner(entity_id)
@@ -81,7 +84,12 @@ func set_local_input_blocked(should_block: bool) -> void:
 
 
 func can_process_local_input() -> bool:
-	return is_local_player and can_receive_input and not is_local_input_blocked
+	return (
+		is_local_player
+		and can_receive_input
+		and not is_local_input_blocked
+		and not is_executing_move_path
+	)
 
 
 func get_max_movement_steps_per_turn() -> int:
@@ -100,29 +108,18 @@ func request_interaction_cell(target_cell: Vector2i) -> bool:
 	return true
 
 
-func request_move(direction: Vector2i) -> bool:
-	if runtime == null or direction == Vector2i.ZERO:
+func request_move_path(requested_path: Array[Vector2i]) -> bool:
+	if runtime == null or requested_path.is_empty():
 		return false
-	return runtime.request_character_move(self, direction)
+	return runtime.request_character_move_path(self, requested_path)
 
 
-func execute_authoritative_move(direction: Vector2i) -> bool:
-	return super.execute_move(direction, false)
+func execute_authoritative_move_path(path: Array[Vector2i]) -> bool:
+	return await _play_move_path(path, true)
 
 
-func play_remote_move(from_cell: Vector2i, target_cell: Vector2i) -> bool:
-	if runtime == null or is_moving or is_attacking:
-		return false
-	var direction: Vector2i = target_cell - from_cell
-	if absi(direction.x) + absi(direction.y) != 1:
-		return false
-	current_cell = from_cell
-	global_position = runtime.cell_to_world(from_cell)
-	if not runtime.reserve_entity_cell(self, from_cell, target_cell):
-		return false
-	_on_move_direction_selected(direction)
-	_move_to_cell(target_cell, false)
-	return true
+func play_remote_move_path(path: Array[Vector2i]) -> bool:
+	return await _play_move_path(path, false)
 
 
 func play_remote_attack(target_cell: Vector2i, should_apply: bool = true) -> void:
@@ -188,6 +185,59 @@ func _on_move_direction_selected(direction: Vector2i) -> void:
 	_sync_facing_from_view()
 
 
+func _play_move_path(path: Array[Vector2i], should_consume_steps: bool) -> bool:
+	if (
+		runtime == null
+		or path.is_empty()
+		or is_moving
+		or is_attacking
+		or health <= 0
+		or runtime.is_entity_casting(self)
+	):
+		return false
+	if should_consume_steps and not runtime.can_entity_move_in_turn(self):
+		return false
+
+	var start_cell: Vector2i = runtime.world_to_cell(global_position)
+	var move_path_generation: int = get_action_generation()
+	current_cell = start_cell
+	is_executing_move_path = true
+	for path_index: int in range(path.size()):
+		var target_cell: Vector2i = path[path_index]
+		var from_cell: Vector2i = current_cell
+		var direction: Vector2i = target_cell - from_cell
+		if absi(direction.x) + absi(direction.y) != 1:
+			force_cancel_movement(start_cell)
+			_finish_move_path()
+			return false
+		if not runtime.reserve_entity_cell(self, from_cell, target_cell):
+			force_cancel_movement(start_cell)
+			_finish_move_path()
+			return false
+
+		var movement_step_cost: int = 0
+		if should_consume_steps and path_index == path.size() - 1:
+			movement_step_cost = path.size()
+		_on_move_direction_selected(direction)
+		_move_to_cell(target_cell, false, movement_step_cost)
+		var move_deadline_msec: int = Time.get_ticks_msec() + int((move_time + 2.0) * 1000.0)
+		while is_inside_tree() and is_moving and Time.get_ticks_msec() < move_deadline_msec:
+			await get_tree().process_frame
+		if not is_inside_tree():
+			_finish_move_path()
+			return false
+		if get_action_generation() != move_path_generation:
+			_finish_move_path()
+			return false
+		if is_moving:
+			force_cancel_movement(start_cell)
+			_finish_move_path()
+			return false
+
+	_finish_move_path()
+	return true
+
+
 func _on_move_started(_target_cell: Vector2i) -> void:
 	update_move_animation(true)
 
@@ -201,8 +251,17 @@ func _try_continue_moving() -> bool:
 
 
 func _on_move_stopped() -> void:
+	if is_executing_move_path:
+		return
+
 	var character_model: CharacterModel = _get_model()
 	update_move_animation(character_model != null and character_model.should_play_move_animation())
+
+
+func _finish_move_path() -> void:
+	is_executing_move_path = false
+	if is_inside_tree():
+		update_move_animation(false)
 
 
 func _attack_cell(target_cell: Vector2i, direction: Vector2i, should_apply: bool, should_broadcast: bool) -> void:

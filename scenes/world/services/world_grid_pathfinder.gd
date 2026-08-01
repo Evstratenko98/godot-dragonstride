@@ -92,13 +92,29 @@ static func find_path_to_any(
 	return empty_path
 
 
+static func find_path_to_cell(
+	runtime: WorldRuntime,
+	moving_entity: Entity,
+	start_cell: Vector2i,
+	target_cell: Vector2i,
+	should_respect_occupancy: bool = true
+) -> Array[Vector2i]:
+	return find_path_to_any(
+		runtime,
+		moving_entity,
+		start_cell,
+		[target_cell],
+		should_respect_occupancy
+	)
+
+
 static func _can_enter(
 	runtime: WorldRuntime,
 	moving_entity: Entity,
 	cell: Vector2i,
 	should_respect_occupancy: bool
 ) -> bool:
-	if not runtime.is_cell_inside(cell) or not runtime.is_cell_walkable(cell):
+	if not runtime.is_cell_inside(cell) or not runtime.is_cell_walkable_for_entity(cell, moving_entity):
 		return false
 	if runtime.get_object_at_cell(cell) != null:
 		return false

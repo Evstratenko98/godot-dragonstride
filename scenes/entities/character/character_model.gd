@@ -13,6 +13,8 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	if character == null or not character.is_local_player:
 		return
+	if character.is_executing_move_path:
+		return
 
 	var direction: Vector2i = Vector2i.ZERO
 	var can_read_movement_input: bool = _can_read_movement_input()
@@ -27,7 +29,7 @@ func _process(_delta: float) -> void:
 		return
 
 	if direction != Vector2i.ZERO:
-		character.request_move(direction)
+		_request_keyboard_move(direction)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -57,7 +59,9 @@ func _unhandled_input(event: InputEvent) -> void:
 				character.runtime.request_selected_spell_cast(character, target_cell)
 			get_viewport().set_input_as_handled()
 			return
-		if character.action_mode == PlayerCharacter.ActionMode.INTERACT:
+		if character.action_mode == PlayerCharacter.ActionMode.MOVE:
+			_request_mouse_move(target_cell)
+		elif character.action_mode == PlayerCharacter.ActionMode.INTERACT:
 			character.request_interaction_cell(target_cell)
 		else:
 			character.runtime.request_character_attack(character, target_cell)
@@ -88,8 +92,31 @@ func try_continue_moving() -> bool:
 	if direction == Vector2i.ZERO:
 		return false
 
-	character.request_move(direction)
+	_request_keyboard_move(direction)
 	return character.is_moving
+
+
+func _request_keyboard_move(direction: Vector2i) -> void:
+	if character.runtime == null or direction == Vector2i.ZERO:
+		return
+	var start_cell: Vector2i = character.runtime.world_to_cell(character.global_position)
+	var requested_path: Array[Vector2i] = [start_cell + direction]
+	character.request_move_path(requested_path)
+
+
+func _request_mouse_move(target_cell: Vector2i) -> void:
+	if character.runtime == null or not character.runtime.can_entity_move_in_turn(character):
+		return
+	var start_cell: Vector2i = character.runtime.world_to_cell(character.global_position)
+	var requested_path: Array[Vector2i] = WorldGridPathfinder.find_path_to_cell(
+		character.runtime,
+		character,
+		start_cell,
+		target_cell,
+		true
+	)
+	if not requested_path.is_empty():
+		character.request_move_path(requested_path)
 
 
 func _can_read_movement_input() -> bool:

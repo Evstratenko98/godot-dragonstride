@@ -44,8 +44,8 @@ func connect_signals() -> void:
 	if not NetworkManager.character.entity_move_received.is_connected(network._on_entity_move_received):
 		NetworkManager.character.entity_move_received.connect(network._on_entity_move_received)
 
-	if not NetworkManager.character.entity_move_requested.is_connected(network._on_entity_move_requested):
-		NetworkManager.character.entity_move_requested.connect(network._on_entity_move_requested)
+	if not NetworkManager.character.character_move_path_requested.is_connected(network._on_character_move_path_requested):
+		NetworkManager.character.character_move_path_requested.connect(network._on_character_move_path_requested)
 
 	if not NetworkManager.combat.entity_attack_received.is_connected(network._on_entity_attack_received):
 		NetworkManager.combat.entity_attack_received.connect(network._on_entity_attack_received)
@@ -123,8 +123,8 @@ func disconnect_signals() -> void:
 	if NetworkManager.character.entity_move_received.is_connected(network._on_entity_move_received):
 		NetworkManager.character.entity_move_received.disconnect(network._on_entity_move_received)
 
-	if NetworkManager.character.entity_move_requested.is_connected(network._on_entity_move_requested):
-		NetworkManager.character.entity_move_requested.disconnect(network._on_entity_move_requested)
+	if NetworkManager.character.character_move_path_requested.is_connected(network._on_character_move_path_requested):
+		NetworkManager.character.character_move_path_requested.disconnect(network._on_character_move_path_requested)
 
 	if NetworkManager.combat.entity_attack_received.is_connected(network._on_entity_attack_received):
 		NetworkManager.combat.entity_attack_received.disconnect(network._on_entity_attack_received)
@@ -164,4 +164,3 @@ func disconnect_signals() -> void:
 
 	if NetworkManager.match_channel.match_end_requested.is_connected(network._on_end_game_requested):
 		NetworkManager.match_channel.match_end_requested.disconnect(network._on_end_game_requested)
-

@@ -8,6 +8,7 @@ const GAME_HUD_SCRIPT := preload("res://scenes/hud/hud.gd")
 @export var level_container_path: NodePath = ^"../LevelContainer"
 @export var grid_lines_path: NodePath = ^"../GridLines"
 @export var movement_range_overlay_path: NodePath = ^"../MovementRangeOverlay"
+@export var movement_path_overlay_path: NodePath = ^"../MovementPathOverlay"
 @export var cell_hover_path: NodePath = ^"../CellHover"
 @export var hud_path: NodePath = ^"../HUD"
 @export var music_player_path: NodePath = ^"../Music"
@@ -17,6 +18,7 @@ const GAME_HUD_SCRIPT := preload("res://scenes/hud/hud.gd")
 @onready var level_container: Node2D = get_node(level_container_path) as Node2D
 @onready var grid_lines: GridLines = get_node(grid_lines_path) as GridLines
 @onready var movement_range_overlay: MovementRangeOverlay = get_node(movement_range_overlay_path) as MovementRangeOverlay
+@onready var movement_path_overlay: MovementPathOverlay = get_node(movement_path_overlay_path) as MovementPathOverlay
 @onready var cell_hover: CellHover = get_node(cell_hover_path) as CellHover
 @onready var hud: GAME_HUD_SCRIPT = get_node(hud_path) as GAME_HUD_SCRIPT
 @onready var music_player: AudioStreamPlayer = get_node(music_player_path) as AudioStreamPlayer
@@ -54,7 +56,7 @@ func start_match() -> void:
 		if GameSession.is_multiplayer():
 			LobbyMatchCoordinator.cancel_runtime_start(start_error)
 		return
-	_start_initial_turn_mode()
+	_enable_sandbox_turn_mode()
 	hud.bind_session()
 	if level.has_welcome_modal():
 		hud.show_level_welcome(level.get_welcome_modal_title(), level.get_welcome_modal_text())
@@ -101,6 +103,7 @@ func _initialize_match() -> void:
 	grid_lines.configure_context(runtime, level)
 	cell_hover.configure_context(runtime)
 	movement_range_overlay.configure_context(runtime, cell_hover)
+	movement_path_overlay.configure_context(runtime, cell_hover)
 	hud.configure_runtime(runtime)
 	_configure_level_audio()
 	runtime.connect_signals()
@@ -114,17 +117,16 @@ func _start_match_deferred() -> void:
 	start_match()
 
 
-func _start_initial_turn_mode() -> void:
-	if not level.starts_in_turn_mode():
+func _enable_sandbox_turn_mode() -> void:
+	if not level.allows_debug_commands():
 		return
 	if GameSession.is_multiplayer() and not GameSession.is_host():
 		return
-
 	if not runtime.enqueue_system_action(
 		WorldActionRecord.ActionType.SET_TURN_MODE,
 		{"is_enabled": true}
 	):
-		push_warning("Initial turn mode action could not be queued.")
+		push_warning("Sandbox turn mode action could not be queued.")
 
 
 func _configure_level_audio() -> void:
