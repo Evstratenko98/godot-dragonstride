@@ -1,10 +1,10 @@
-[gd_scene load_steps=4 format=3 uid="uid://coppr42pjm66q"]
+[gd_scene format=3 uid="uid://coppr42pjm66q"]
 
 [ext_resource type="Script" uid="uid://dobayx7aannnk" path="res://scenes/menu/main_menu/main_menu.gd" id="1_main"]
-[ext_resource type="Script" path="res://scenes/menu/common/menu_backdrop.gd" id="2_backdrop"]
-[ext_resource type="Script" path="res://scenes/menu/common/menu_presentation.gd" id="3_presentation"]
+[ext_resource type="Script" uid="uid://dw40wjorv3vrv" path="res://scenes/menu/common/menu_backdrop.gd" id="2_backdrop"]
+[ext_resource type="Script" uid="uid://bmqlegu8huj3h" path="res://scenes/menu/common/menu_presentation.gd" id="3_presentation"]
 
-[node name="MainMenu" type="Control"]
+[node name="MainMenu" type="Control" unique_id=1777939488]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -13,7 +13,7 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_main")
 
-[node name="Backdrop" type="Control" parent="."]
+[node name="Backdrop" type="Control" parent="." unique_id=230014104]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -22,10 +22,10 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("2_backdrop")
 
-[node name="MenuPresentation" type="Node" parent="."]
+[node name="MenuPresentation" type="Node" parent="." unique_id=1408446657]
 script = ExtResource("3_presentation")
 
-[node name="SafeArea" type="MarginContainer" parent="."]
+[node name="SafeArea" type="MarginContainer" parent="." unique_id=565206367]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -37,100 +37,82 @@ offset_bottom = -54.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="Columns" type="HBoxContainer" parent="SafeArea"]
+[node name="Columns" type="HBoxContainer" parent="SafeArea" unique_id=847836378]
 layout_mode = 2
 theme_override_constants/separation = 72
 
-[node name="BrandColumn" type="VBoxContainer" parent="SafeArea/Columns"]
+[node name="BrandColumn" type="VBoxContainer" parent="SafeArea/Columns" unique_id=277172104]
 custom_minimum_size = Vector2(480, 0)
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 18
 alignment = 1
 
-[node name="Eyebrow" type="Label" parent="SafeArea/Columns/BrandColumn"]
-layout_mode = 2
-theme_override_colors/font_color = Color(1, 0.82, 0.2, 1)
-theme_override_font_sizes/font_size = 14
-text = "ТАКТИЧЕСКАЯ СТРАТЕГИЯ"
-
-[node name="Title" type="Label" parent="SafeArea/Columns/BrandColumn"]
+[node name="Title" type="Label" parent="SafeArea/Columns/BrandColumn" unique_id=731728230]
 layout_mode = 2
 theme_override_font_sizes/font_size = 58
-text = "DRAGON\nSTRIDE"
+text = "DRAGON
+STRIDE"
 
-[node name="AccentLine" type="ColorRect" parent="SafeArea/Columns/BrandColumn"]
+[node name="AccentLine" type="ColorRect" parent="SafeArea/Columns/BrandColumn" unique_id=1436515283]
 custom_minimum_size = Vector2(128, 3)
 layout_mode = 2
 size_flags_horizontal = 0
 color = Color(1, 0.82, 0.2, 0.95)
 
-[node name="Tagline" type="Label" parent="SafeArea/Columns/BrandColumn"]
-layout_mode = 2
-theme_override_colors/font_color = Color(0.72, 0.76, 0.84, 1)
-theme_override_font_sizes/font_size = 22
-text = "Боги. Последователи. Один мир."
-
-[node name="Description" type="Label" parent="SafeArea/Columns/BrandColumn"]
-custom_minimum_size = Vector2(440, 0)
-layout_mode = 2
-theme_override_colors/font_color = Color(0.55, 0.61, 0.7, 1)
-theme_override_font_sizes/font_size = 15
-text = "Распределяйте действия между членами отряда,\nисследуйте поле боя и определяйте судьбу мира."
-
-[node name="MenuPanel" type="PanelContainer" parent="SafeArea/Columns"]
+[node name="MenuPanel" type="PanelContainer" parent="SafeArea/Columns" unique_id=824908935]
 custom_minimum_size = Vector2(410, 0)
 layout_mode = 2
 size_flags_horizontal = 0
 size_flags_vertical = 4
 
-[node name="VBoxContainer" type="VBoxContainer" parent="SafeArea/Columns/MenuPanel"]
+[node name="VBoxContainer" type="VBoxContainer" parent="SafeArea/Columns/MenuPanel" unique_id=1418200345]
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="SectionTitle" type="Label" parent="SafeArea/Columns/MenuPanel/VBoxContainer"]
+[node name="SectionTitle" type="Label" parent="SafeArea/Columns/MenuPanel/VBoxContainer" unique_id=1568522368]
 layout_mode = 2
 theme_override_font_sizes/font_size = 24
 text = "Главное меню"
 
-[node name="SectionSubtitle" type="Label" parent="SafeArea/Columns/MenuPanel/VBoxContainer"]
+[node name="SectionSubtitle" type="Label" parent="SafeArea/Columns/MenuPanel/VBoxContainer" unique_id=238039472]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.55, 0.61, 0.7, 1)
 theme_override_font_sizes/font_size = 13
 text = "Выберите режим игры"
 
-[node name="Spacer" type="Control" parent="SafeArea/Columns/MenuPanel/VBoxContainer"]
+[node name="Spacer" type="Control" parent="SafeArea/Columns/MenuPanel/VBoxContainer" unique_id=2050543169]
 custom_minimum_size = Vector2(0, 8)
 layout_mode = 2
 mouse_filter = 2
 
-[node name="StartButton" type="Button" parent="SafeArea/Columns/MenuPanel/VBoxContainer"]
+[node name="StartButton" type="Button" parent="SafeArea/Columns/MenuPanel/VBoxContainer" unique_id=1665709816]
 custom_minimum_size = Vector2(350, 52)
 layout_mode = 2
-theme_type_variation = &"PrimaryMenuButton"
 focus_mode = 0
+theme_type_variation = &"PrimaryMenuButton"
 text = "Начать одиночную игру"
 
-[node name="LobbyButton" type="Button" parent="SafeArea/Columns/MenuPanel/VBoxContainer"]
+[node name="LobbyButton" type="Button" parent="SafeArea/Columns/MenuPanel/VBoxContainer" unique_id=1401406690]
 custom_minimum_size = Vector2(350, 52)
 layout_mode = 2
 focus_mode = 0
 text = "Сетевая игра"
 
-[node name="SettingsButton" type="Button" parent="SafeArea/Columns/MenuPanel/VBoxContainer"]
+[node name="SettingsButton" type="Button" parent="SafeArea/Columns/MenuPanel/VBoxContainer" unique_id=1011236936]
 custom_minimum_size = Vector2(350, 52)
 layout_mode = 2
 focus_mode = 0
 text = "Настройки"
 
-[node name="ExitButton" type="Button" parent="SafeArea/Columns/MenuPanel/VBoxContainer"]
+[node name="ExitButton" type="Button" parent="SafeArea/Columns/MenuPanel/VBoxContainer" unique_id=556566161]
 custom_minimum_size = Vector2(350, 52)
 layout_mode = 2
-theme_type_variation = &"DangerMenuButton"
 focus_mode = 0
+theme_type_variation = &"DangerMenuButton"
 text = "Выйти"
 
-[node name="StatusLabel" type="Label" parent="SafeArea/Columns/MenuPanel/VBoxContainer"]
+[node name="StatusLabel" type="Label" parent="SafeArea/Columns/MenuPanel/VBoxContainer" unique_id=1570089588]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 38)
 layout_mode = 2
