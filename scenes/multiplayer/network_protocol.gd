@@ -1,9 +1,11 @@
 class_name NetworkProtocol
 extends RefCounted
 
-const PROTOCOL_VERSION := 4
+const PROTOCOL_VERSION := 6
 const SNAPSHOT_SCHEMA_VERSION := 1
 const MAX_ROSTER_SIZE := 4
+const MAX_SQUAD_SIZE := 4
+const MAX_PLAYER_CHARACTERS := MAX_ROSTER_SIZE * MAX_SQUAD_SIZE
 const MAX_IDENTIFIER_LENGTH := 64
 const MAX_INTENT_PAYLOAD_BYTES := 8 * 1024
 const MAX_SNAPSHOT_BYTES := 512 * 1024
@@ -17,6 +19,10 @@ const MAX_BUFFERED_MESSAGES := 256
 const MAX_GAMEPLAY_VALUE := 1_000_000
 const MAX_ABSOLUTE_GRID_COORDINATE := 1_000_000
 const MAX_MOVE_PATH_CELLS := 512
+
+
+static func make_squad_member_entity_id(player_id: String, squad_slot: int) -> String:
+	return "%s_follower_%d" % [player_id, squad_slot + 1]
 
 const SAFE_REASON_CODES: PackedStringArray = [
 	"actor_busy",

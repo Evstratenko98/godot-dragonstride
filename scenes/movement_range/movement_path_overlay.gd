@@ -18,7 +18,7 @@ var is_path_available_this_turn: bool = false
 func _process(_delta: float) -> void:
 	if runtime == null:
 		return
-	var local_player: PlayerCharacter = runtime.get_local_player()
+	var local_player: PlayerCharacter = runtime.get_selected_local_character()
 	if local_player != bound_player:
 		_bind_player(local_player)
 
@@ -59,7 +59,7 @@ func configure_context(new_runtime: WorldRuntime, new_cell_hover: CellHover) -> 
 			runtime.spells.targeting_changed.connect(_on_spell_targeting_changed)
 	if cell_hover != null and not cell_hover.hovered_cell_changed.is_connected(_on_hovered_cell_changed):
 		cell_hover.hovered_cell_changed.connect(_on_hovered_cell_changed)
-	_bind_player(null if runtime == null else runtime.get_local_player())
+	_bind_player(null if runtime == null else runtime.get_selected_local_character())
 	_refresh_preview()
 
 
@@ -96,7 +96,9 @@ func _refresh_preview() -> void:
 
 	is_path_available_this_turn = true
 	if runtime.turn_manager != null and runtime.turn_manager.is_turn_mode_enabled():
-		is_path_available_this_turn = preview_path.size() <= runtime.turn_manager.get_steps_left()
+		is_path_available_this_turn = (
+			preview_path.size() <= runtime.turn_manager.get_steps_left(bound_player.entity_id)
+		)
 	_update_step_label(target_cell)
 	queue_redraw()
 

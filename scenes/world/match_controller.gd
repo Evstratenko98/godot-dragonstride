@@ -8,6 +8,7 @@ const GAME_HUD_SCRIPT := preload("res://scenes/hud/hud.gd")
 @export var level_container_path: NodePath = ^"../LevelContainer"
 @export var grid_lines_path: NodePath = ^"../GridLines"
 @export var movement_range_overlay_path: NodePath = ^"../MovementRangeOverlay"
+@export var action_target_range_overlay_path: NodePath = ^"../ActionTargetRangeOverlay"
 @export var movement_path_overlay_path: NodePath = ^"../MovementPathOverlay"
 @export var cell_hover_path: NodePath = ^"../CellHover"
 @export var hud_path: NodePath = ^"../HUD"
@@ -18,6 +19,7 @@ const GAME_HUD_SCRIPT := preload("res://scenes/hud/hud.gd")
 @onready var level_container: Node2D = get_node(level_container_path) as Node2D
 @onready var grid_lines: GridLines = get_node(grid_lines_path) as GridLines
 @onready var movement_range_overlay: MovementRangeOverlay = get_node(movement_range_overlay_path) as MovementRangeOverlay
+@onready var action_target_range_overlay: ActionTargetRangeOverlay = get_node(action_target_range_overlay_path) as ActionTargetRangeOverlay
 @onready var movement_path_overlay: MovementPathOverlay = get_node(movement_path_overlay_path) as MovementPathOverlay
 @onready var cell_hover: CellHover = get_node(cell_hover_path) as CellHover
 @onready var hud: GAME_HUD_SCRIPT = get_node(hud_path) as GAME_HUD_SCRIPT
@@ -103,7 +105,9 @@ func _initialize_match() -> void:
 	grid_lines.configure_context(runtime, level)
 	cell_hover.configure_context(runtime)
 	movement_range_overlay.configure_context(runtime, cell_hover)
+	action_target_range_overlay.configure_context(runtime)
 	movement_path_overlay.configure_context(runtime, cell_hover)
+	hud.configure_world_input(cell_hover)
 	hud.configure_runtime(runtime)
 	_configure_level_audio()
 	runtime.connect_signals()

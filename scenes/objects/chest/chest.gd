@@ -35,6 +35,10 @@ func interact(_interactor: PlayerCharacter, _world_runtime: WorldRuntime) -> boo
 	return false
 
 
+func can_interact(interactor: PlayerCharacter, world_runtime: WorldRuntime) -> bool:
+	return interactor != null and world_runtime != null and can_open()
+
+
 func apply_network_state(network_state: int) -> void:
 	if network_state == ObjectState.OPENED:
 		if animation_player != null and animation_player.is_playing():

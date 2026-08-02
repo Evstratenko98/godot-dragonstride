@@ -1,9 +1,8 @@
 class_name ActionModeBar
 extends HBoxContainer
 
-const BUTTON_SIZE := Vector2(38.0, 38.0)
-const BUTTON_SEPARATION := 5
-const HOTKEY_HINT_COLOR := Color(0.7, 0.7, 0.75, 1.0)
+const BUTTON_SIZE := Vector2(46.0, 46.0)
+const BUTTON_SEPARATION := 8
 const MODE_ORDER: Array[int] = [
 	PlayerCharacter.ActionMode.MOVE,
 	PlayerCharacter.ActionMode.ATTACK,
@@ -14,13 +13,14 @@ const MODE_INPUT_ACTIONS: Array[StringName] = [
 	&"select_attack_mode",
 	&"select_interaction_mode",
 ]
-const MODE_HOTKEY_TEXTS: Array[String] = ["q", "e", "r"]
-const MODE_TOOLTIPS: Array[String] = ["Move (Q)", "Attack (E)", "Interact (R)"]
+const MODE_TOOLTIPS: Array[String] = ["Пойти", "Атаковать", "Схватить"]
 
 var runtime: WorldRuntime = null
 var bound_player: PlayerCharacter = null
 var action_buttons: Dictionary[int, Button] = {}
 var is_spell_targeting: bool = false
+var selected_spell_slot_index: int = -1
+var is_cursor_suspended: bool = false
 
 
 func _ready() -> void:
@@ -29,7 +29,7 @@ func _ready() -> void:
 	if bound_player != null:
 		_refresh_buttons(bound_player.action_mode)
 	else:
-		InventoryBarCursor.apply(PlayerCharacter.ActionMode.ATTACK)
+		InventoryBarCursor.apply(PlayerCharacter.ActionMode.MOVE)
 
 
 func _exit_tree() -> void:
@@ -76,19 +76,29 @@ func bind_character(player: PlayerCharacter) -> void:
 		_refresh_buttons(bound_player.action_mode)
 
 
+func set_cursor_suspended(should_suspend: bool) -> void:
+	is_cursor_suspended = should_suspend
+	if is_cursor_suspended:
+		InventoryBarCursor.clear_action_cursor()
+	elif bound_player != null and is_node_ready():
+		_refresh_cursor(bound_player.action_mode)
+
+
+func refresh_cursor() -> void:
+	if bound_player == null:
+		return
+	_refresh_cursor(bound_player.action_mode)
+
+
 func _build_buttons() -> void:
 	for mode_index: int in range(MODE_ORDER.size()):
 		var action_mode: int = MODE_ORDER[mode_index]
-		var action_button: Button = _create_action_button(
-			action_mode,
-			MODE_TOOLTIPS[mode_index],
-			MODE_HOTKEY_TEXTS[mode_index]
-		)
+		var action_button: Button = _create_action_button(action_mode, MODE_TOOLTIPS[mode_index])
 		action_buttons[action_mode] = action_button
 		add_child.call_deferred(action_button)
 
 
-func _create_action_button(action_mode: int, tooltip: String, hotkey_text: String) -> Button:
+func _create_action_button(action_mode: int, tooltip: String) -> Button:
 	var action_button: Button = Button.new()
 	action_button.icon = InventoryBarCursor.get_action_texture(action_mode)
 	action_button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -99,52 +109,24 @@ func _create_action_button(action_mode: int, tooltip: String, hotkey_text: Strin
 	action_button.focus_mode = Control.FOCUS_NONE
 	action_button.mouse_filter = Control.MOUSE_FILTER_STOP
 	action_button.pressed.connect(_on_action_button_pressed.bind(action_mode))
-	action_button.add_child.call_deferred(_create_shortcut_label(hotkey_text))
 	InventoryBarStyle.apply_action_button(action_button, false)
 	return action_button
 
 
-func _create_shortcut_label(shortcut_text: String) -> Label:
-	var shortcut_label: Label = Label.new()
-	shortcut_label.text = shortcut_text
-	shortcut_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	shortcut_label.offset_right = -3.0
-	shortcut_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	shortcut_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-	shortcut_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	shortcut_label.add_theme_font_size_override("font_size", 9)
-	shortcut_label.add_theme_color_override("font_color", HOTKEY_HINT_COLOR)
-	return shortcut_label
-
-
 func _refresh_buttons(action_mode: int) -> void:
 	if action_buttons.is_empty():
-		return
-	var next_action_mode: int = action_mode
-	if not _is_action_available(next_action_mode):
-		next_action_mode = _find_first_available_mode()
-
-	if bound_player != null and next_action_mode >= 0 and bound_player.action_mode != next_action_mode:
-		bound_player.set_action_mode(next_action_mode)
 		return
 
 	for mode_index: int in range(MODE_ORDER.size()):
 		var button_mode: int = MODE_ORDER[mode_index]
 		var button: Button = action_buttons.get(button_mode) as Button
 		var is_available: bool = _is_action_available(button_mode)
-		var is_selected: bool = is_available and button_mode == next_action_mode and not is_spell_targeting
+		var is_selected: bool = is_available and button_mode == action_mode and not is_spell_targeting
 		button.disabled = not is_available
-		button.tooltip_text = MODE_TOOLTIPS[mode_index] if is_available else "Action unavailable in current turn"
+		button.tooltip_text = MODE_TOOLTIPS[mode_index] if is_available else "%s — недоступно" % MODE_TOOLTIPS[mode_index]
 		InventoryBarStyle.apply_action_button(button, is_selected)
 
-	InventoryBarCursor.apply(next_action_mode, next_action_mode >= 0)
-
-
-func _find_first_available_mode() -> int:
-	for action_mode: int in MODE_ORDER:
-		if _is_action_available(action_mode):
-			return action_mode
-	return -1
+	_refresh_cursor(action_mode)
 
 
 func _select_action_mode(action_mode: int) -> void:
@@ -170,10 +152,34 @@ func _is_action_available(action_mode: int) -> bool:
 	if not turn_manager.is_entity_active_in_turn(bound_player):
 		return false
 	if action_mode == PlayerCharacter.ActionMode.MOVE:
-		return turn_manager.get_steps_left() > 0
+		return turn_manager.get_steps_left(bound_player.entity_id) > 0
 	if action_mode == PlayerCharacter.ActionMode.ATTACK:
-		return turn_manager.get_attacks_left() > 0
-	return turn_manager.get_interactions_left() > 0
+		return turn_manager.get_attacks_left(bound_player.entity_id) > 0
+	return turn_manager.get_interactions_left(bound_player.entity_id) > 0
+
+
+func _refresh_cursor(action_mode: int) -> void:
+	if is_cursor_suspended:
+		InventoryBarCursor.clear_action_cursor()
+		return
+	if _is_meteor_targeting():
+		InventoryBarCursor.apply_meteor_targeting()
+		return
+	InventoryBarCursor.apply(action_mode, _is_action_available(action_mode))
+
+
+func _is_meteor_targeting() -> bool:
+	if (
+		not is_spell_targeting
+		or bound_player == null
+		or selected_spell_slot_index < 0
+		or bound_player.character_inventory == null
+	):
+		return false
+	var spell_id: String = bound_player.character_inventory.get_spell_id_at_slot(
+		selected_spell_slot_index
+	)
+	return spell_id == WorldSpells.SPELL_ID_METEOR
 
 
 func _connect_runtime_signals() -> void:
@@ -221,8 +227,9 @@ func _on_player_action_mode_changed(action_mode: int) -> void:
 	_refresh_buttons(action_mode)
 
 
-func _on_spell_targeting_changed(next_is_targeting: bool, _spell_slot_index: int) -> void:
+func _on_spell_targeting_changed(next_is_targeting: bool, spell_slot_index: int) -> void:
 	is_spell_targeting = next_is_targeting
+	selected_spell_slot_index = spell_slot_index if next_is_targeting else -1
 	if bound_player != null:
 		_refresh_buttons(bound_player.action_mode)
 

@@ -57,8 +57,9 @@ static func get_warrior_color(player_index: int) -> String:
 
 
 static func get_player_node_name(player_info: Dictionary) -> String:
-	var steam_id: int = int(player_info.get("steam_id", 0))
-	return "Character" if steam_id == 0 else "Character_%s" % steam_id
+	var player_id: String = str(player_info.get("player_id", "player"))
+	var squad_slot: int = int(player_info.get("squad_slot", 0))
+	return "%s_Follower_%d" % [player_id.to_pascal_case(), squad_slot + 1]
 
 
 static func _is_available(

@@ -47,7 +47,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 
 func is_valid_snapshot(snapshot: Dictionary) -> bool:
 	var value: Variant = snapshot.get("used_spell_slots", {})
-	if not (value is Dictionary) or (value as Dictionary).size() > NetworkProtocol.MAX_ROSTER_SIZE:
+	if not (value is Dictionary) or (value as Dictionary).size() > NetworkProtocol.MAX_PLAYER_CHARACTERS:
 		return false
 	for entity_id_value: Variant in (value as Dictionary).keys():
 		var entity_id: String = str(entity_id_value)

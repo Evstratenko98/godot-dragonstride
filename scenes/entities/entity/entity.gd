@@ -82,10 +82,35 @@ func get_max_movement_steps_per_turn() -> int:
 
 
 func can_attack_cell(target_cell: Vector2i) -> bool:
-	if get_occupied_cells(current_cell).has(target_cell):
+	return can_attack_cell_from(current_cell, target_cell)
+
+
+func can_attack_cell_from(anchor_cell: Vector2i, target_cell: Vector2i) -> bool:
+	if get_occupied_cells(anchor_cell).has(target_cell):
 		return false
 
-	return _get_attack_direction_to_cell(target_cell) != Vector2i.ZERO
+	return EntityFootprint.get_adjacent_direction(
+		anchor_cell,
+		target_cell,
+		occupied_offsets
+	) != Vector2i.ZERO
+
+
+func get_attackable_cells(anchor_cell: Vector2i) -> Array[Vector2i]:
+	var attackable_cells: Array[Vector2i] = []
+	var occupied_cells: Array[Vector2i] = get_occupied_cells(anchor_cell)
+	var directions: Array[Vector2i] = [
+		Vector2i.RIGHT,
+		Vector2i.LEFT,
+		Vector2i.DOWN,
+		Vector2i.UP,
+	]
+	for occupied_cell: Vector2i in occupied_cells:
+		for direction: Vector2i in directions:
+			var target_cell: Vector2i = occupied_cell + direction
+			if not occupied_cells.has(target_cell) and not attackable_cells.has(target_cell):
+				attackable_cells.append(target_cell)
+	return attackable_cells
 
 
 func request_move(direction: Vector2i) -> bool:
@@ -138,6 +163,10 @@ func request_attack_cell(target_cell: Vector2i, should_apply: bool = true, shoul
 
 
 func interact(_interactor: PlayerCharacter, _world_runtime: WorldRuntime) -> bool:
+	return false
+
+
+func can_interact(_interactor: PlayerCharacter, _world_runtime: WorldRuntime) -> bool:
 	return false
 
 

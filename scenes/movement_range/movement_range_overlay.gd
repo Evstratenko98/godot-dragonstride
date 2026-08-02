@@ -77,7 +77,7 @@ func _refresh_range() -> void:
 
 	var maximum_steps: int = hovered_entity.get_max_movement_steps_per_turn()
 	if runtime.turn_manager != null and runtime.turn_manager.is_entity_active_in_turn(hovered_entity):
-		maximum_steps = runtime.turn_manager.get_steps_left()
+		maximum_steps = runtime.turn_manager.get_steps_left(hovered_entity.entity_id)
 	reachable_cells = runtime.get_reachable_cells_for_entity(hovered_entity, maximum_steps)
 	queue_redraw()
 
@@ -118,7 +118,8 @@ func _disconnect_hover_signal() -> void:
 
 
 func _get_hover_outline_color(entity: Entity) -> Color:
-	if entity == runtime.get_local_player():
+	var player_character: PlayerCharacter = entity as PlayerCharacter
+	if player_character != null and player_character.is_locally_owned:
 		return outline_color
 	if entity.entity_type == Entity.EntityType.NEUTRAL:
 		return neutral_outline_color
@@ -128,7 +129,8 @@ func _get_hover_outline_color(entity: Entity) -> Color:
 
 
 func _get_hover_fill_color(entity: Entity) -> Color:
-	if entity == runtime.get_local_player():
+	var player_character: PlayerCharacter = entity as PlayerCharacter
+	if player_character != null and player_character.is_locally_owned:
 		return fill_color
 	if entity.entity_type == Entity.EntityType.NEUTRAL:
 		return neutral_fill_color

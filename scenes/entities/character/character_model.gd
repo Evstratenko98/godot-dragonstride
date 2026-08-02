@@ -11,7 +11,7 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
-	if character == null or not character.is_local_player:
+	if character == null or not character.is_locally_owned:
 		return
 	if character.is_executing_move_path:
 		return
@@ -39,11 +39,6 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not character.can_process_local_input() or character.runtime == null or _is_console_open():
 		return
 
-	if event.is_action_pressed("ui_cancel") and character.runtime.has_selected_spell(character):
-		character.runtime.cancel_spell_targeting(character)
-		get_viewport().set_input_as_handled()
-		return
-
 	if event.is_action_pressed("end_turn"):
 		character.runtime.cancel_spell_targeting(character)
 		character.runtime.request_end_turn(character)
@@ -52,6 +47,9 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		var target_cell: Vector2i = character.runtime.world_to_cell(character.get_global_mouse_position())
+		var clicked_character: PlayerCharacter = character.runtime.get_entity_at_cell(target_cell) as PlayerCharacter
+		if clicked_character != null and clicked_character.is_locally_owned:
+			return
 		if character.runtime.has_selected_spell(character):
 			if character.runtime.is_cell_inside(target_cell):
 				spell_target_selected.emit(target_cell)

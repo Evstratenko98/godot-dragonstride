@@ -10,6 +10,21 @@ func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void
 	level = new_level
 
 
+func get_available_attack_cells(attacker: Entity) -> Array[Vector2i]:
+	var available_cells: Array[Vector2i] = []
+	if attacker == null or runtime == null or not attacker.can_act():
+		return available_cells
+	var anchor_cell: Vector2i = runtime.world_to_cell(attacker.global_position)
+	for target_cell: Vector2i in attacker.get_attackable_cells(anchor_cell):
+		if (
+			runtime.is_cell_inside(target_cell)
+			and attacker.can_attack_cell_from(anchor_cell, target_cell)
+			and runtime.can_entity_attack_in_turn(attacker, target_cell)
+		):
+			available_cells.append(target_cell)
+	return available_cells
+
+
 func apply_attack_to_cell(
 	attacker: Node,
 	cell: Vector2i,

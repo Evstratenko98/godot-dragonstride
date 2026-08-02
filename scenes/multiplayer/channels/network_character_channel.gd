@@ -1,10 +1,11 @@
 class_name NetworkCharacterChannel
 extends NetworkChannel
 
-signal interaction_requested(target_cell: Vector2i, match_id: String, turn_revision: int, request_id: int, requester_peer_id: int)
+signal interaction_requested(actor_entity_id: String, target_cell: Vector2i, match_id: String, turn_revision: int, request_id: int, requester_peer_id: int)
 signal character_action_payload_received(match_id: String, sequence_id: int, payload: Dictionary)
 signal character_move_path_requested(
 	requester_steam_id: int,
+	actor_entity_id: String,
 	requested_path: Array[Vector2i],
 	match_id: String,
 	turn_revision: int,
@@ -17,16 +18,16 @@ signal entity_move_received(
 	from_cell: Vector2i,
 	target_cell: Vector2i
 )
-signal character_kill_requested(match_id: String, turn_revision: int, request_id: int, requester_peer_id: int)
+signal character_kill_requested(actor_entity_id: String, match_id: String, turn_revision: int, request_id: int, requester_peer_id: int)
 
 
-func request_interaction(target_cell: Vector2i, match_id: String, turn_revision: int, request_id: int) -> void:
+func request_interaction(actor_entity_id: String, target_cell: Vector2i, match_id: String, turn_revision: int, request_id: int) -> void:
 	if not _can_send():
 		return
 	if connection.is_host:
-		interaction_requested.emit(target_cell, match_id, turn_revision, request_id, 0)
+		interaction_requested.emit(actor_entity_id, target_cell, match_id, turn_revision, request_id, 0)
 		return
-	rpc_id(1, "_submit_interaction", target_cell, match_id, turn_revision, request_id)
+	rpc_id(1, "_submit_interaction", actor_entity_id, target_cell, match_id, turn_revision, request_id)
 
 
 func broadcast_action_payload(match_id: String, sequence_id: int, payload: Dictionary) -> void:
@@ -35,6 +36,7 @@ func broadcast_action_payload(match_id: String, sequence_id: int, payload: Dicti
 
 
 func request_character_move_path(
+	actor_entity_id: String,
 	requested_path: Array[Vector2i],
 	match_id: String,
 	turn_revision: int,
@@ -45,13 +47,14 @@ func request_character_move_path(
 	if connection.is_host:
 		character_move_path_requested.emit(
 			connection.local_steam_id,
+			actor_entity_id,
 			requested_path,
 			match_id,
 			turn_revision,
 			request_id
 		)
 		return
-	rpc_id(1, "_submit_character_move_path", requested_path, match_id, turn_revision, request_id)
+	rpc_id(1, "_submit_character_move_path", actor_entity_id, requested_path, match_id, turn_revision, request_id)
 
 
 func broadcast_entity_move(
@@ -72,20 +75,20 @@ func broadcast_entity_move(
 		rpc("_receive_entity_move", GameSession.get_match_id(), parent_sequence_id, subsequence_id, entity_id, from_cell, target_cell)
 
 
-func request_character_kill(match_id: String, turn_revision: int, request_id: int) -> void:
+func request_character_kill(actor_entity_id: String, match_id: String, turn_revision: int, request_id: int) -> void:
 	if not _can_send():
 		return
 	if connection.is_host:
-		character_kill_requested.emit(match_id, turn_revision, request_id, 0)
+		character_kill_requested.emit(actor_entity_id, match_id, turn_revision, request_id, 0)
 		return
-	rpc_id(1, "_submit_character_kill", match_id, turn_revision, request_id)
+	rpc_id(1, "_submit_character_kill", actor_entity_id, match_id, turn_revision, request_id)
 
 
 @rpc("any_peer", "call_remote", "reliable", 1)
-func _submit_interaction(target_cell: Vector2i, match_id: String, turn_revision: int, request_id: int) -> void:
+func _submit_interaction(actor_entity_id: String, target_cell: Vector2i, match_id: String, turn_revision: int, request_id: int) -> void:
 	var requester_peer_id: int = _get_registered_sender_peer_id()
-	if requester_peer_id != 0 and turn_revision >= 0 and NetworkProtocol.is_valid_cell_value(target_cell) and _is_valid_intent(match_id, request_id, {"target_cell": target_cell, "turn_revision": turn_revision}):
-		interaction_requested.emit(target_cell, match_id, turn_revision, request_id, requester_peer_id)
+	if requester_peer_id != 0 and NetworkProtocol.is_valid_identifier(actor_entity_id) and turn_revision >= 0 and NetworkProtocol.is_valid_cell_value(target_cell) and _is_valid_intent(match_id, request_id, {"actor_entity_id": actor_entity_id, "target_cell": target_cell, "turn_revision": turn_revision}):
+		interaction_requested.emit(actor_entity_id, target_cell, match_id, turn_revision, request_id, requester_peer_id)
 
 
 @rpc("authority", "call_remote", "reliable", 1)
@@ -96,6 +99,7 @@ func _receive_action_payload(match_id: String, sequence_id: int, payload: Dictio
 
 @rpc("any_peer", "call_remote", "reliable", 1)
 func _submit_character_move_path(
+	actor_entity_id: String,
 	requested_path: Array[Vector2i],
 	match_id: String,
 	turn_revision: int,
@@ -104,16 +108,18 @@ func _submit_character_move_path(
 	var requester_steam_id: int = _get_registered_sender_steam_id()
 	if (
 		requester_steam_id != 0
+		and NetworkProtocol.is_valid_identifier(actor_entity_id)
 		and turn_revision >= 0
 		and NetworkProtocol.is_valid_move_path(requested_path)
 		and _is_valid_intent(
 			match_id,
 			request_id,
-			{"requested_path": requested_path, "turn_revision": turn_revision}
+			{"actor_entity_id": actor_entity_id, "requested_path": requested_path, "turn_revision": turn_revision}
 		)
 	):
 		character_move_path_requested.emit(
 			requester_steam_id,
+			actor_entity_id,
 			requested_path,
 			match_id,
 			turn_revision,
@@ -135,7 +141,7 @@ func _receive_entity_move(
 
 
 @rpc("any_peer", "call_remote", "reliable", 1)
-func _submit_character_kill(match_id: String, turn_revision: int, request_id: int) -> void:
+func _submit_character_kill(actor_entity_id: String, match_id: String, turn_revision: int, request_id: int) -> void:
 	var requester_peer_id: int = _get_registered_sender_peer_id()
-	if requester_peer_id != 0 and turn_revision >= 0 and _is_valid_intent(match_id, request_id, {"turn_revision": turn_revision}):
-		character_kill_requested.emit(match_id, turn_revision, request_id, requester_peer_id)
+	if requester_peer_id != 0 and NetworkProtocol.is_valid_identifier(actor_entity_id) and turn_revision >= 0 and _is_valid_intent(match_id, request_id, {"actor_entity_id": actor_entity_id, "turn_revision": turn_revision}):
+		character_kill_requested.emit(actor_entity_id, match_id, turn_revision, request_id, requester_peer_id)

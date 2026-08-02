@@ -2,7 +2,7 @@ class_name PlayerRosterPanel
 extends Control
 
 const MAX_PLAYER_CARDS := 4
-const DRAWER_WIDTH := 218.0
+const DRAWER_WIDTH := 280.0
 const TOGGLE_WIDTH := 28.0
 const DRAWER_DURATION_SECONDS := 0.22
 const PANEL_COLOR := Color(0.055, 0.065, 0.085, 0.62)
@@ -13,7 +13,7 @@ var runtime: WorldRuntime = null
 var drawer_panel: PanelContainer = null
 var cards_container: VBoxContainer = null
 var toggle_button: Button = null
-var player_cards: Array[PlayerStatusCard] = []
+var player_cards: Array[PlayerSquadRosterCard] = []
 var is_expanded: bool = true
 var drawer_tween: Tween = null
 
@@ -45,14 +45,19 @@ func bind_session() -> void:
 	var card_count: int = mini(session_players.size(), MAX_PLAYER_CARDS)
 	for player_index: int in range(card_count):
 		var player_record: Dictionary = session_players[player_index]
-		var player: PlayerCharacter = _resolve_player(player_record)
-		if player == null:
+		var player_id: String = str(player_record.get("player_id", ""))
+		var members: Array[PlayerCharacter] = runtime.get_squad_members(player_id)
+		if members.is_empty():
 			continue
 		var steam_name: String = str(player_record.get("name", "")) if GameSession.is_multiplayer() else ""
-		var card: PlayerStatusCard = PlayerStatusCard.new()
-		card.set_layout_mode(PlayerStatusCard.LayoutMode.ROSTER)
-		card.custom_minimum_size = Vector2(190.0, 60.0)
-		card.bind_player(player, steam_name, bool(player_record.get("is_local", false)))
+		var card: PlayerSquadRosterCard = PlayerSquadRosterCard.new()
+		card.bind_squad(
+			runtime,
+			player_id,
+			steam_name if not steam_name.is_empty() else player_id,
+			members,
+			bool(player_record.get("is_local", false))
+		)
 		player_cards.append(card)
 		cards_container.add_child.call_deferred(card)
 	_refresh_active_player()
@@ -141,24 +146,17 @@ func _set_expanded(should_be_expanded: bool) -> void:
 
 
 func _clear_cards() -> void:
-	for card: PlayerStatusCard in player_cards:
+	for card: PlayerSquadRosterCard in player_cards:
 		card.queue_free()
 	player_cards.clear()
 
 
-func _resolve_player(player_record: Dictionary) -> PlayerCharacter:
-	if GameSession.is_singleplayer():
-		return runtime.get_local_player()
-	return runtime.get_player_by_entity_id(str(player_record.get("entity_id", "")))
-
-
 func _refresh_active_player() -> void:
-	var active_entity_id: String = ""
+	var active_player_id: String = ""
 	if runtime != null and runtime.turn_manager != null:
-		active_entity_id = runtime.turn_manager.get_active_entity_id()
-	for card: PlayerStatusCard in player_cards:
-		var player: PlayerCharacter = card.get_bound_player()
-		card.set_active_player(player != null and player.entity_id == active_entity_id)
+		active_player_id = runtime.turn_manager.get_active_player_id()
+	for card: PlayerSquadRosterCard in player_cards:
+		card.set_active(card.player_id == active_player_id)
 
 
 func _disconnect_turn_signal() -> void:

@@ -51,6 +51,10 @@ func interact(_interactor: PlayerCharacter, _world_runtime: WorldRuntime) -> boo
 	return false
 
 
+func can_interact(_interactor: PlayerCharacter, _world_runtime: WorldRuntime) -> bool:
+	return false
+
+
 func apply_network_state(network_state: int) -> void:
 	if network_state == ObjectState.DESTROYED:
 		set_destroyed()

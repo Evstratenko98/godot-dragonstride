@@ -65,7 +65,7 @@ func _on_session_cleared() -> void:
 
 
 func toggle_spell_targeting(player: PlayerCharacter, spell_slot_index: int) -> bool:
-	if player == null or player != runtime.get_local_player():
+	if player == null or player != runtime.get_selected_local_character():
 		return false
 
 	var player_entity_id: String = runtime.get_entity_id(player)
@@ -128,7 +128,7 @@ func request_selected_spell_cast(player: PlayerCharacter, target_cell: Vector2i)
 	var request_id: int = runtime.create_action_request_id()
 	if GameSession.is_multiplayer():
 		pending_local_spell_request_ids[request_id] = 0
-		NetworkManager.spells.request_spell_cast(spell_slot_index, target_cell, GameSession.get_match_id(), runtime.get_turn_revision(), request_id)
+		NetworkManager.spells.request_spell_cast(player.entity_id, spell_slot_index, target_cell, GameSession.get_match_id(), runtime.get_turn_revision(), request_id)
 	else:
 		runtime.enqueue_player_action(
 			WorldActionRecord.ActionType.SPELL_CAST,
@@ -259,7 +259,8 @@ func execute_action_cast(action: WorldActionRecord, is_authority: bool) -> bool:
 	var effect: SpellCastEffect = _create_effect(cast_id, player.entity_id, spell_id, target_cell)
 	if effect == null:
 		return false
-
+	if is_authority:
+		runtime.notify_entity_attacked_in_turn(player, target_cell)
 	active_casts_by_entity_id[player.entity_id] = cast_id
 	active_cast_target_cells_by_entity_id[player.entity_id] = target_cell
 	release_action_reservation(action)
@@ -304,7 +305,7 @@ func _get_cast_rejection_reason(
 		var entity_id: String = runtime.get_entity_id(player)
 		if _is_spell_slot_used(entity_id, spell_slot_index):
 			return REJECTION_SPELL_UNAVAILABLE
-		var reservation_key: String = _make_spell_slot_key(entity_id, spell_slot_index)
+		var reservation_key: String = usage_ledger.make_key(entity_id, spell_slot_index)
 		if usage_ledger.is_reservation_key_reserved(reservation_key) and reservation_key != ignored_reservation_key:
 			return REJECTION_SPELL_UNAVAILABLE
 
@@ -409,19 +410,17 @@ func _is_spell_slot_reserved(entity_id: String, spell_slot_index: int) -> bool:
 	return usage_ledger.is_reserved(entity_id, spell_slot_index)
 
 
-func _make_spell_slot_key(entity_id: String, spell_slot_index: int) -> String:
-	return usage_ledger.make_key(entity_id, spell_slot_index)
-
-
-func _get_requesting_player(requester_peer_id: int) -> PlayerCharacter:
+func _get_requesting_player(requester_peer_id: int, actor_entity_id: String) -> PlayerCharacter:
 	if requester_peer_id == 0:
-		return runtime.get_local_player()
+		return runtime.get_player_by_entity_id(actor_entity_id)
 
 	var requester_steam_id: int = NetworkManager.peers.get_steam_id_for_peer_id(requester_peer_id)
 	if requester_steam_id == 0:
 		return null
 
-	return runtime.get_player_by_steam_id(requester_steam_id)
+	if not runtime.is_character_owned_by_steam_id(actor_entity_id, requester_steam_id):
+		return null
+	return runtime.get_player_by_entity_id(actor_entity_id)
 
 
 func _print_rejection(reason_code: String) -> void:
@@ -442,6 +441,7 @@ func _print_rejection(reason_code: String) -> void:
 
 
 func _on_spell_cast_requested(
+	actor_entity_id: String,
 	spell_slot_index: int,
 	target_cell: Vector2i,
 	match_id: String,
@@ -452,7 +452,7 @@ func _on_spell_cast_requested(
 	if not GameSession.is_host():
 		return
 
-	var player: PlayerCharacter = _get_requesting_player(requester_peer_id)
+	var player: PlayerCharacter = _get_requesting_player(requester_peer_id, actor_entity_id)
 	if player == null:
 		return
 	runtime.enqueue_player_action(
@@ -470,7 +470,7 @@ func _on_spell_cast_requested(
 	)
 
 
-func _on_player_turn_started(_entity_id: String) -> void:
+func _on_player_turn_started(_player_id: String) -> void:
 	_clear_targeting()
 
 

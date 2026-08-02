@@ -19,7 +19,11 @@ func request_claim(
 	expected_inventory_revision: int,
 	request_id: int
 ) -> void:
+	var actor: PlayerCharacter = runtime.get_selected_local_character()
+	if actor == null:
+		return
 	NetworkManager.loot.request_loot_claim(
+		actor.entity_id,
 		chest_id,
 		inventory_kind,
 		target_slot_index,
@@ -31,7 +35,9 @@ func request_claim(
 
 
 func request_discard(chest_id: String, request_id: int) -> void:
-	NetworkManager.loot.request_loot_discard(chest_id, GameSession.get_match_id(), request_id)
+	var actor: PlayerCharacter = runtime.get_selected_local_character()
+	if actor != null:
+		NetworkManager.loot.request_loot_discard(actor.entity_id, chest_id, GameSession.get_match_id(), request_id)
 
 
 func broadcast_discarded(chest_id: String, opener_entity_id: String) -> void:
@@ -79,14 +85,17 @@ func disconnect_signals() -> void:
 		GameSession.session_cleared.disconnect(_on_session_cleared)
 
 
-func _get_requesting_player(requester_peer_id: int) -> PlayerCharacter:
+func _get_requesting_player(requester_peer_id: int, actor_entity_id: String) -> PlayerCharacter:
 	if requester_peer_id == 0:
-		return runtime.get_local_player()
+		return runtime.get_player_by_entity_id(actor_entity_id)
 	var steam_id: int = NetworkManager.peers.get_steam_id_for_peer_id(requester_peer_id)
-	return runtime.get_player_by_steam_id(steam_id) if steam_id > 0 else null
+	if steam_id <= 0 or not runtime.is_character_owned_by_steam_id(actor_entity_id, steam_id):
+		return null
+	return runtime.get_player_by_entity_id(actor_entity_id)
 
 
 func _on_loot_claim_requested(
+	actor_entity_id: String,
 	chest_id: String,
 	inventory_kind: String,
 	target_slot_index: int,
@@ -98,7 +107,7 @@ func _on_loot_claim_requested(
 ) -> void:
 	if not GameSession.is_host():
 		return
-	var player: PlayerCharacter = _get_requesting_player(requester_peer_id)
+	var player: PlayerCharacter = _get_requesting_player(requester_peer_id, actor_entity_id)
 	if player != null:
 		loot.enqueue_claim_request(
 			player,
@@ -114,6 +123,7 @@ func _on_loot_claim_requested(
 
 
 func _on_loot_discard_requested(
+	actor_entity_id: String,
 	chest_id: String,
 	_match_id: String,
 	_request_id: int,
@@ -121,7 +131,7 @@ func _on_loot_discard_requested(
 ) -> void:
 	if not GameSession.is_host():
 		return
-	var player: PlayerCharacter = _get_requesting_player(requester_peer_id)
+	var player: PlayerCharacter = _get_requesting_player(requester_peer_id, actor_entity_id)
 	if player != null and loot.discard_authoritative(chest_id, player):
 		return
 	if requester_peer_id > 0:

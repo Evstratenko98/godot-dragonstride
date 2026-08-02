@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scenes/movement_range/action_target_range_overlay.gd" id="1_overlay"]
+
+[node name="ActionTargetRangeOverlay" type="Node2D"]
+z_index = 4
+script = ExtResource("1_overlay")

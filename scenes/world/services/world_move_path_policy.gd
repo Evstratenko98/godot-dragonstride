@@ -41,7 +41,8 @@ static func prepare_authoritative_path(
 
 	var executable_step_count: int = shortest_path.size()
 	if turns != null and turns.is_turn_mode_enabled():
-		executable_step_count = mini(executable_step_count, turns.get_steps_left())
+		if executable_step_count > turns.get_steps_left(player.entity_id):
+			return WorldActionStream.REJECTION_INVALID_ACTION
 	if executable_step_count <= 0:
 		return WorldActionStream.REJECTION_INVALID_ACTION
 

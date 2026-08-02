@@ -5,6 +5,7 @@ signal match_end_requested()
 signal action_rejected(reason_code: String)
 signal runtime_sync_failed(reason_code: String)
 signal world_occupancy_changed
+signal selected_local_character_changed(character: PlayerCharacter)
 
 @export var grid_path: NodePath = ^"../Grid"
 @export var registry_path: NodePath = ^"../Registry"
@@ -37,6 +38,7 @@ var action_stream: WorldActionStream = null
 var action_router: WorldActionRouter = WorldActionRouter.new()
 var state_snapshot: WorldStateSnapshot = WorldStateSnapshot.new()
 var match_startup: WorldMatchStartup = WorldMatchStartup.new()
+var composition: WorldRuntimeComposition = WorldRuntimeComposition.new()
 
 
 func configure_for_level(new_level: WorldLevel) -> void:
@@ -47,6 +49,8 @@ func configure_for_level(new_level: WorldLevel) -> void:
 	_configure_services()
 	if players_service != null and not players_service.player_connection_changed.is_connected(_on_player_connection_changed):
 		players_service.player_connection_changed.connect(_on_player_connection_changed)
+	if players_service != null and not players_service.selected_local_character_changed.is_connected(_on_selected_local_character_changed):
+		players_service.selected_local_character_changed.connect(_on_selected_local_character_changed)
 
 
 func is_configured_for(target_level: WorldLevel) -> bool:
@@ -338,6 +342,14 @@ func get_reachable_cells_for_entity(entity: Entity, max_steps: int) -> Array[Vec
 	return WorldGridPathfinder.get_reachable_cells_for_entity(self, entity, max_steps)
 
 
+func get_available_attack_cells(entity: Entity) -> Array[Vector2i]:
+	return [] if combat == null else combat.get_available_attack_cells(entity)
+
+
+func get_available_interaction_cells(character: PlayerCharacter) -> Array[Vector2i]:
+	return [] if interaction == null else interaction.get_available_interaction_cells(character)
+
+
 func is_cell_interactable(cell: Vector2i) -> bool:
 	return registry.is_cell_interactable(cell)
 
@@ -420,7 +432,7 @@ func notify_entity_action_finished_in_turn(entity: Node, world_turn_generation: 
 		turn_manager.notify_entity_action_finished(entity, world_turn_generation)
 
 
-func request_end_turn(entity: Node) -> void:
+func request_end_turn(entity: Node = null) -> void:
 	if turn_manager != null:
 		turn_manager.request_end_turn(entity)
 
@@ -596,21 +608,47 @@ func print_non_entity_attack_result(attacker: Node, target_cell: Vector2i) -> vo
 	combat.print_non_entity_attack_result(attacker, target_cell)
 
 
-func get_player_by_steam_id(steam_id: int) -> PlayerCharacter:
-	return players_service.get_player_by_steam_id(steam_id)
+func get_squad_members(player_id: String) -> Array[PlayerCharacter]:
+	return [] if players_service == null else players_service.get_squad_members(player_id)
 
 
-func get_local_player() -> PlayerCharacter:
-	if players_service == null:
-		return null
+func get_squad_members_by_steam_id(steam_id: int) -> Array[PlayerCharacter]:
+	return [] if players_service == null else players_service.get_squad_members_by_steam_id(steam_id)
 
-	return players_service.get_local_player()
+
+func get_local_squad_members() -> Array[PlayerCharacter]:
+	return [] if players_service == null else players_service.get_local_squad_members()
+
+
+func get_selected_local_character() -> PlayerCharacter:
+	return null if players_service == null else players_service.get_selected_local_character()
+
+
+func select_local_character(character: PlayerCharacter) -> bool:
+	return players_service != null and players_service.request_select_local_character(character)
+
+
+func get_local_camera_mode() -> String:
+	return GameCamera.MODE_FOLLOW if players_service == null else players_service.get_local_camera_mode()
+
+
+func set_local_camera_mode(camera_mode: String) -> bool:
+	return players_service != null and players_service.set_local_camera_mode(camera_mode)
+
+
+func set_local_camera_input_blocked(should_block: bool) -> void:
+	if players_service != null:
+		players_service.set_local_camera_input_blocked(should_block)
 
 
 func get_player_by_entity_id(entity_id: String) -> PlayerCharacter:
 	if players_service == null:
 		return null
 	return players_service.get_player_by_entity_id(entity_id)
+
+
+func is_character_owned_by_steam_id(entity_id: String, steam_id: int) -> bool:
+	return players_service != null and players_service.is_character_owned_by_steam_id(steam_id, entity_id)
 
 
 func get_players_root() -> Node2D:
@@ -678,85 +716,15 @@ func print_console(text: String) -> void:
 
 
 func _bind_services() -> void:
-	if level == null:
-		return
-
-	grid = get_node_or_null(grid_path) as WorldGrid
-	registry = get_node_or_null(registry_path) as WorldRegistry
-	players_service = get_node_or_null(players_service_path) as WorldPlayers
-	combat = get_node_or_null(combat_path) as WorldCombat
-	network = get_node_or_null(network_path) as WorldNetwork
-	turn_manager = get_node_or_null(turn_manager_path) as WorldTurns
-	spawner = get_node_or_null(spawner_path) as WorldSpawner
-	awareness = get_node_or_null(awareness_path) as WorldAwareness
-	interaction = get_node_or_null(interaction_path) as WorldInteraction
-	item_usage = get_node_or_null(item_usage_path) as WorldItemUsage
-	spells = get_node_or_null(spells_path) as WorldSpells
-	loot = get_node_or_null(loot_path) as WorldLoot
-	action_stream = get_node_or_null(action_stream_path) as WorldActionStream
-
-	if grid != null:
-		grid.configure_context(self, level)
-	if registry != null:
-		registry.configure_context(self, level)
-		if not registry.occupancy_changed.is_connected(_on_registry_occupancy_changed):
-			registry.occupancy_changed.connect(_on_registry_occupancy_changed)
-	if players_service != null:
-		players_service.configure_context(self, level)
-	if combat != null:
-		combat.configure_context(self, level)
-	if network != null:
-		network.configure_context(self, level)
-		if not network.match_end_requested.is_connected(_on_network_match_end_requested):
-			network.match_end_requested.connect(_on_network_match_end_requested)
-	if turn_manager != null:
-		turn_manager.configure_context(self, level)
-	if spawner != null:
-		spawner.configure_context(self, level)
-	if awareness != null:
-		awareness.configure_context(self, level)
-	if interaction != null:
-		interaction.configure_context(self, level)
-	if item_usage != null:
-		item_usage.configure_context(self, level)
-	if spells != null:
-		spells.configure_context(self, level)
-	if loot != null:
-		loot.configure_context(self, level)
-	if action_stream != null:
-		action_stream.configure_context(self, level)
-	action_router.configure_context(self, players_service, network, turn_manager, spells, loot)
-	state_snapshot.configure_context(
-		self,
-		registry,
-		spawner,
-		turn_manager,
-		spells,
-		loot,
-		NetworkManager.store
-	)
-	match_startup.configure_context(
-		self,
-		registry,
-		network,
-		players_service,
-		action_stream,
-		spawner
-	)
+	composition.bind_services(self, level)
+	if registry != null and not registry.occupancy_changed.is_connected(_on_registry_occupancy_changed):
+		registry.occupancy_changed.connect(_on_registry_occupancy_changed)
+	if network != null and not network.match_end_requested.is_connected(_on_network_match_end_requested):
+		network.match_end_requested.connect(_on_network_match_end_requested)
 
 
 func _configure_services() -> void:
-	if level == null:
-		return
-
-	if grid != null:
-		grid.configure(
-			level.get_grid_size(),
-			level.get_walkable_layer_names(),
-			level.get_character_walkable_layer_names()
-		)
-	if players_service != null:
-		players_service.configure(level.get_spawn_cells())
+	composition.configure_level_services(self, level)
 
 
 func register_level_entities() -> void:
@@ -802,9 +770,15 @@ func _on_action_stream_sync_failed(reason_code: String) -> void:
 
 
 func _on_action_stream_sync_state_changed(is_synchronizing: bool) -> void:
-	var player: PlayerCharacter = get_local_player()
-	if player != null:
+	for player: PlayerCharacter in get_local_squad_members():
 		player.can_receive_input = not is_synchronizing and GameSession.has_committed_match()
+
+
+func _on_selected_local_character_changed(
+	_previous_character: PlayerCharacter,
+	selected_character: PlayerCharacter
+) -> void:
+	selected_local_character_changed.emit(selected_character)
 
 
 func _on_player_connection_changed(steam_id: int, is_connected: bool) -> void:

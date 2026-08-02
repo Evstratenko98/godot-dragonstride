@@ -138,7 +138,7 @@ func execute_claim_action(action: WorldActionRecord, player: PlayerCharacter) ->
 
 
 func request_claim(chest_id: String, inventory_kind: String, target_slot_index: int) -> bool:
-	var player: PlayerCharacter = runtime.get_local_player()
+	var player: PlayerCharacter = runtime.get_selected_local_character()
 	var record: ChestLootRecord = _get_record(chest_id)
 	if player == null or record == null or record.opener_entity_id != player.entity_id:
 		return false
@@ -175,7 +175,7 @@ func request_claim(chest_id: String, inventory_kind: String, target_slot_index: 
 
 
 func request_discard(chest_id: String) -> bool:
-	var player: PlayerCharacter = runtime.get_local_player()
+	var player: PlayerCharacter = runtime.get_selected_local_character()
 	var record: ChestLootRecord = _get_record(chest_id)
 	if player == null or record == null or record.opener_entity_id != player.entity_id:
 		return false
@@ -228,7 +228,7 @@ func apply_snapshot(snapshot: Dictionary) -> bool:
 
 
 func reveal_pending_for_local_player() -> void:
-	var player: PlayerCharacter = runtime.get_local_player()
+	var player: PlayerCharacter = runtime.get_selected_local_character()
 	if player == null:
 		return
 	for record: ChestLootRecord in pending_records.values():
@@ -393,14 +393,14 @@ func _is_matching_inventory_kind(
 
 
 func _reveal_if_local(record: ChestLootRecord) -> void:
-	var player: PlayerCharacter = runtime.get_local_player()
+	var player: PlayerCharacter = runtime.get_selected_local_character()
 	if player != null and record.opener_entity_id == player.entity_id:
 		loot_revealed.emit(record.chest_id, record.loot_entries.duplicate(true))
 
 
 func apply_discarded(chest_id: String, opener_entity_id: String) -> void:
 	pending_records.erase(chest_id)
-	var player: PlayerCharacter = runtime.get_local_player()
+	var player: PlayerCharacter = runtime.get_selected_local_character()
 	if player != null and player.entity_id == opener_entity_id:
 		loot_resolved.emit(chest_id)
 
@@ -442,7 +442,7 @@ func handle_local_action_rejected(reason_code: String) -> void:
 
 
 func _reveal_resolution_if_local(record: ChestLootRecord) -> void:
-	var player: PlayerCharacter = runtime.get_local_player()
+	var player: PlayerCharacter = runtime.get_selected_local_character()
 	if player != null and player.entity_id == record.opener_entity_id:
 		loot_resolved.emit(record.chest_id)
 

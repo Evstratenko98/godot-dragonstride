@@ -1,83 +1,146 @@
-[gd_scene format=3 uid="uid://coppr42pjm66q"]
+[gd_scene load_steps=4 format=3 uid="uid://coppr42pjm66q"]
 
-[ext_resource type="Script" uid="uid://dobayx7aannnk" path="res://scenes/menu/main_menu/main_menu.gd" id="1_fsom3"]
+[ext_resource type="Script" uid="uid://dobayx7aannnk" path="res://scenes/menu/main_menu/main_menu.gd" id="1_main"]
+[ext_resource type="Script" path="res://scenes/menu/common/menu_backdrop.gd" id="2_backdrop"]
+[ext_resource type="Script" path="res://scenes/menu/common/menu_presentation.gd" id="3_presentation"]
 
-[node name="MainMenu" type="Control" unique_id=1488795914]
+[node name="MainMenu" type="Control"]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-script = ExtResource("1_fsom3")
+script = ExtResource("1_main")
 
-[node name="ColorRect" type="ColorRect" parent="." unique_id=801363895]
+[node name="Backdrop" type="Control" parent="."]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(2.2621452e-06, 0.44375616, 0.44375622, 1)
+script = ExtResource("2_backdrop")
 
-[node name="VBoxContainer" type="VBoxContainer" parent="." unique_id=1218704544]
+[node name="MenuPresentation" type="Node" parent="."]
+script = ExtResource("3_presentation")
+
+[node name="SafeArea" type="MarginContainer" parent="."]
 layout_mode = 1
-anchors_preset = 14
-anchor_top = 0.5
+anchors_preset = 15
 anchor_right = 1.0
-anchor_bottom = 0.5
-offset_left = 326.0
-offset_top = 76.0
-offset_right = -326.0
-offset_bottom = 189.0
+anchor_bottom = 1.0
+offset_left = 72.0
+offset_top = 54.0
+offset_right = -72.0
+offset_bottom = -54.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/separation = 10
 
-[node name="StartButton" type="Button" parent="VBoxContainer" unique_id=1058029147]
+[node name="Columns" type="HBoxContainer" parent="SafeArea"]
 layout_mode = 2
-text = "Start Game"
+theme_override_constants/separation = 72
 
-[node name="LobbyButton" type="Button" parent="VBoxContainer" unique_id=1765463185]
+[node name="BrandColumn" type="VBoxContainer" parent="SafeArea/Columns"]
+custom_minimum_size = Vector2(480, 0)
 layout_mode = 2
-text = "Lobby"
+size_flags_horizontal = 3
+theme_override_constants/separation = 18
+alignment = 1
 
-[node name="SettingsButton" type="Button" parent="VBoxContainer" unique_id=149611292]
+[node name="Eyebrow" type="Label" parent="SafeArea/Columns/BrandColumn"]
 layout_mode = 2
-text = "Settings"
+theme_override_colors/font_color = Color(1, 0.82, 0.2, 1)
+theme_override_font_sizes/font_size = 14
+text = "ТАКТИЧЕСКАЯ СТРАТЕГИЯ"
 
-[node name="ExitButton" type="Button" parent="VBoxContainer" unique_id=682583021]
+[node name="Title" type="Label" parent="SafeArea/Columns/BrandColumn"]
 layout_mode = 2
-text = "Exit"
+theme_override_font_sizes/font_size = 58
+text = "DRAGON\nSTRIDE"
 
-[node name="Label" type="Label" parent="." unique_id=153905305]
-layout_mode = 1
-anchors_preset = 10
-anchor_right = 1.0
-offset_left = -2.0
-offset_top = 119.0
-offset_right = -2.0
-offset_bottom = 207.0
-grow_horizontal = 2
-theme_override_font_sizes/font_size = 64
-text = "DragonStride"
-horizontal_alignment = 1
-vertical_alignment = 1
+[node name="AccentLine" type="ColorRect" parent="SafeArea/Columns/BrandColumn"]
+custom_minimum_size = Vector2(128, 3)
+layout_mode = 2
+size_flags_horizontal = 0
+color = Color(1, 0.82, 0.2, 0.95)
 
-[node name="StatusLabel" type="Label" parent="." unique_id=2068609062]
-layout_mode = 1
-anchors_preset = 10
-anchor_right = 1.0
-offset_left = 326.0
-offset_top = 440.0
-offset_right = -326.0
-offset_bottom = 500.0
-grow_horizontal = 2
+[node name="Tagline" type="Label" parent="SafeArea/Columns/BrandColumn"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.72, 0.76, 0.84, 1)
+theme_override_font_sizes/font_size = 22
+text = "Боги. Последователи. Один мир."
+
+[node name="Description" type="Label" parent="SafeArea/Columns/BrandColumn"]
+custom_minimum_size = Vector2(440, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.55, 0.61, 0.7, 1)
+theme_override_font_sizes/font_size = 15
+text = "Распределяйте действия между членами отряда,\nисследуйте поле боя и определяйте судьбу мира."
+
+[node name="MenuPanel" type="PanelContainer" parent="SafeArea/Columns"]
+custom_minimum_size = Vector2(410, 0)
+layout_mode = 2
+size_flags_horizontal = 0
+size_flags_vertical = 4
+
+[node name="VBoxContainer" type="VBoxContainer" parent="SafeArea/Columns/MenuPanel"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="SectionTitle" type="Label" parent="SafeArea/Columns/MenuPanel/VBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "Главное меню"
+
+[node name="SectionSubtitle" type="Label" parent="SafeArea/Columns/MenuPanel/VBoxContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.55, 0.61, 0.7, 1)
+theme_override_font_sizes/font_size = 13
+text = "Выберите режим игры"
+
+[node name="Spacer" type="Control" parent="SafeArea/Columns/MenuPanel/VBoxContainer"]
+custom_minimum_size = Vector2(0, 8)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="StartButton" type="Button" parent="SafeArea/Columns/MenuPanel/VBoxContainer"]
+custom_minimum_size = Vector2(350, 52)
+layout_mode = 2
+theme_type_variation = &"PrimaryMenuButton"
+focus_mode = 0
+text = "Начать одиночную игру"
+
+[node name="LobbyButton" type="Button" parent="SafeArea/Columns/MenuPanel/VBoxContainer"]
+custom_minimum_size = Vector2(350, 52)
+layout_mode = 2
+focus_mode = 0
+text = "Сетевая игра"
+
+[node name="SettingsButton" type="Button" parent="SafeArea/Columns/MenuPanel/VBoxContainer"]
+custom_minimum_size = Vector2(350, 52)
+layout_mode = 2
+focus_mode = 0
+text = "Настройки"
+
+[node name="ExitButton" type="Button" parent="SafeArea/Columns/MenuPanel/VBoxContainer"]
+custom_minimum_size = Vector2(350, 52)
+layout_mode = 2
+theme_type_variation = &"DangerMenuButton"
+focus_mode = 0
+text = "Выйти"
+
+[node name="StatusLabel" type="Label" parent="SafeArea/Columns/MenuPanel/VBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 38)
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.68, 0.32, 1)
+theme_override_font_sizes/font_size = 12
 horizontal_alignment = 1
 vertical_alignment = 1
 autowrap_mode = 2
 
-[connection signal="pressed" from="VBoxContainer/StartButton" to="." method="_on_start_button_pressed"]
-[connection signal="pressed" from="VBoxContainer/LobbyButton" to="." method="_on_lobby_button_pressed"]
-[connection signal="pressed" from="VBoxContainer/SettingsButton" to="." method="_on_settings_button_pressed"]
-[connection signal="pressed" from="VBoxContainer/ExitButton" to="." method="_on_exit_button_pressed"]
+[connection signal="pressed" from="SafeArea/Columns/MenuPanel/VBoxContainer/StartButton" to="." method="_on_start_button_pressed"]
+[connection signal="pressed" from="SafeArea/Columns/MenuPanel/VBoxContainer/LobbyButton" to="." method="_on_lobby_button_pressed"]
+[connection signal="pressed" from="SafeArea/Columns/MenuPanel/VBoxContainer/SettingsButton" to="." method="_on_settings_button_pressed"]
+[connection signal="pressed" from="SafeArea/Columns/MenuPanel/VBoxContainer/ExitButton" to="." method="_on_exit_button_pressed"]

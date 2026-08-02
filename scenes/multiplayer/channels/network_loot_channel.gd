@@ -2,6 +2,7 @@ class_name NetworkLootChannel
 extends NetworkChannel
 
 signal loot_claim_requested(
+	actor_entity_id: String,
 	chest_id: String,
 	inventory_kind: String,
 	target_slot_index: int,
@@ -11,12 +12,13 @@ signal loot_claim_requested(
 	request_id: int,
 	requester_peer_id: int
 )
-signal loot_discard_requested(chest_id: String, match_id: String, request_id: int, requester_peer_id: int)
+signal loot_discard_requested(actor_entity_id: String, chest_id: String, match_id: String, request_id: int, requester_peer_id: int)
 signal loot_discarded_received(chest_id: String, opener_entity_id: String)
 signal loot_discard_rejected(chest_id: String, reason_code: String)
 
 
 func request_loot_claim(
+	actor_entity_id: String,
 	chest_id: String,
 	inventory_kind: String,
 	target_slot_index: int,
@@ -29,6 +31,7 @@ func request_loot_claim(
 		return
 	if connection.is_host:
 		loot_claim_requested.emit(
+			actor_entity_id,
 			chest_id,
 			inventory_kind,
 			target_slot_index,
@@ -42,6 +45,7 @@ func request_loot_claim(
 	rpc_id(
 		1,
 		"_submit_loot_claim",
+		actor_entity_id,
 		chest_id,
 		inventory_kind,
 		target_slot_index,
@@ -52,13 +56,13 @@ func request_loot_claim(
 	)
 
 
-func request_loot_discard(chest_id: String, match_id: String, request_id: int) -> void:
+func request_loot_discard(actor_entity_id: String, chest_id: String, match_id: String, request_id: int) -> void:
 	if not _can_send():
 		return
 	if connection.is_host:
-		loot_discard_requested.emit(chest_id, match_id, request_id, 0)
+		loot_discard_requested.emit(actor_entity_id, chest_id, match_id, request_id, 0)
 		return
-	rpc_id(1, "_submit_loot_discard", chest_id, match_id, request_id)
+	rpc_id(1, "_submit_loot_discard", actor_entity_id, chest_id, match_id, request_id)
 
 
 func broadcast_loot_discarded(chest_id: String, opener_entity_id: String) -> void:
@@ -81,6 +85,7 @@ func send_loot_discard_rejected(peer_id: int, chest_id: String, reason_code: Str
 
 @rpc("any_peer", "call_remote", "reliable", 1)
 func _submit_loot_claim(
+	actor_entity_id: String,
 	chest_id: String,
 	inventory_kind: String,
 	target_slot_index: int,
@@ -92,6 +97,7 @@ func _submit_loot_claim(
 	var requester_peer_id: int = _get_registered_sender_peer_id()
 	if (
 		requester_peer_id == 0
+		or not NetworkProtocol.is_valid_identifier(actor_entity_id)
 		or not NetworkProtocol.is_valid_identifier(chest_id)
 		or inventory_kind not in [
 			CharacterInventory.INVENTORY_KIND_ITEM,
@@ -102,6 +108,7 @@ func _submit_loot_claim(
 		or expected_inventory_revision < 0
 		or turn_revision < 0
 		or not _is_valid_intent(match_id, request_id, {
+			"actor_entity_id": actor_entity_id,
 			"chest_id": chest_id,
 			"inventory_kind": inventory_kind,
 			"target_slot_index": target_slot_index,
@@ -111,6 +118,7 @@ func _submit_loot_claim(
 	):
 		return
 	loot_claim_requested.emit(
+		actor_entity_id,
 		chest_id,
 		inventory_kind,
 		target_slot_index,
@@ -123,14 +131,15 @@ func _submit_loot_claim(
 
 
 @rpc("any_peer", "call_remote", "reliable", 1)
-func _submit_loot_discard(chest_id: String, match_id: String, request_id: int) -> void:
+func _submit_loot_discard(actor_entity_id: String, chest_id: String, match_id: String, request_id: int) -> void:
 	var requester_peer_id: int = _get_registered_sender_peer_id()
 	if (
 		requester_peer_id != 0
+		and NetworkProtocol.is_valid_identifier(actor_entity_id)
 		and NetworkProtocol.is_valid_identifier(chest_id)
-		and _is_valid_intent(match_id, request_id, {"chest_id": chest_id})
+		and _is_valid_intent(match_id, request_id, {"actor_entity_id": actor_entity_id, "chest_id": chest_id})
 	):
-		loot_discard_requested.emit(chest_id, match_id, request_id, requester_peer_id)
+		loot_discard_requested.emit(actor_entity_id, chest_id, match_id, request_id, requester_peer_id)
 
 
 @rpc("authority", "call_remote", "reliable", 1)

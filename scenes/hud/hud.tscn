@@ -2,11 +2,14 @@
 
 [ext_resource type="Script" uid="uid://uy07nb7ji2t3" path="res://scenes/hud/hud.gd" id="1_64ctp"]
 [ext_resource type="Script" uid="uid://d3st1b6u0o0jw" path="res://scenes/hud/inventory_bar.gd" id="2_inventory_bar"]
-[ext_resource type="Script" uid="uid://duvs2yucx3sic" path="res://scenes/hud/player_status_card.gd" id="3_player_status"]
+[ext_resource type="Script" path="res://scenes/hud/local_squad_panel.gd" id="3_player_status"]
 [ext_resource type="Script" uid="uid://cw6jjvtbwgrst" path="res://scenes/hud/turn_status_panel.gd" id="4_turn_status"]
 [ext_resource type="Script" uid="uid://cn2i8edr1uwl" path="res://scenes/hud/player_roster_panel.gd" id="5_roster"]
 [ext_resource type="PackedScene" uid="uid://b2fglgsc3lgve" path="res://scenes/modal/modal_template.tscn" id="6_modal"]
 [ext_resource type="PackedScene" path="res://scenes/hud/chest_loot_dialog.tscn" id="7_chest_loot"]
+[ext_resource type="Script" path="res://scenes/hud/hud_cursor_controller.gd" id="8_cursor"]
+[ext_resource type="PackedScene" path="res://scenes/hud/game_pause_menu.tscn" id="9_pause"]
+[ext_resource type="PackedScene" path="res://scenes/hud/character_action_menu.tscn" id="10_action_menu"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_end_turn"]
 bg_color = Color(0.06, 0.06, 0.08, 0.7)
@@ -35,10 +38,9 @@ corner_radius_bottom_left = 3
 [node name="HUD" type="CanvasLayer" unique_id=207140631]
 script = ExtResource("1_64ctp")
 
-[node name="EndGameButton" type="Button" parent="." unique_id=284578119]
-offset_right = 8.0
-offset_bottom = 8.0
-text = "End game"
+
+[node name="CursorController" type="Node" parent="."]
+script = ExtResource("8_cursor")
 
 [node name="TurnStatusPanel" type="PanelContainer" parent="." unique_id=650445380]
 anchors_preset = 5
@@ -47,18 +49,18 @@ anchor_right = 0.5
 offset_left = -164.0
 offset_top = 24.0
 offset_right = 164.0
-offset_bottom = 106.0
+offset_bottom = 86.0
 grow_horizontal = 2
 script = ExtResource("4_turn_status")
 
-[node name="LocalPlayerCard" type="PanelContainer" parent="." unique_id=1841279488]
+[node name="LocalSquadPanel" type="PanelContainer" parent="." unique_id=1841279488]
 visible = false
 anchors_preset = 2
 anchor_top = 1.0
 anchor_bottom = 1.0
 offset_left = 24.0
-offset_top = -76.0
-offset_right = 200.0
+offset_top = -174.0
+offset_right = 284.0
 offset_bottom = -24.0
 grow_vertical = 0
 script = ExtResource("3_player_status")
@@ -76,6 +78,8 @@ offset_bottom = -24.0
 grow_horizontal = 2
 grow_vertical = 0
 script = ExtResource("2_inventory_bar")
+
+[node name="CharacterActionMenu" parent="." instance=ExtResource("10_action_menu")]
 
 [node name="EndTurnButton" type="Button" parent="." unique_id=216910845]
 custom_minimum_size = Vector2(130, 38)
@@ -121,7 +125,7 @@ layout_mode = 3
 anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
-offset_left = -246.0
+offset_left = -308.0
 offset_top = 96.0
 offset_bottom = 416.0
 grow_horizontal = 0
@@ -131,5 +135,9 @@ script = ExtResource("5_roster")
 
 [node name="ChestLootDialog" parent="." unique_id=523605113 instance=ExtResource("7_chest_loot")]
 
-[connection signal="pressed" from="EndGameButton" to="." method="_on_end_game_button_pressed"]
+[node name="GamePauseMenu" parent="." instance=ExtResource("9_pause")]
+
 [connection signal="pressed" from="EndTurnButton" to="." method="_on_end_turn_button_pressed"]
+[connection signal="camera_mode_requested" from="GamePauseMenu" to="." method="_on_pause_menu_camera_mode_requested"]
+[connection signal="exit_game_requested" from="GamePauseMenu" to="." method="_on_pause_menu_exit_game_requested"]
+[connection signal="open_state_changed" from="GamePauseMenu" to="." method="_on_pause_menu_open_state_changed"]

@@ -1,11 +1,11 @@
 extends Control
 
 const NOTICE_MESSAGES := {
-	"host_disconnected": "The host connection was lost. The match has ended.",
-	"state_sync_failed": "World synchronization failed. You were disconnected from the match.",
+	"host_disconnected": "Связь с хозяином потеряна. Матч завершён.",
+	"state_sync_failed": "Не удалось синхронизировать мир. Соединение с матчем закрыто.",
 }
 
-@onready var status_label: Label = $StatusLabel
+@onready var status_label: Label = %StatusLabel
 
 
 func _ready() -> void:

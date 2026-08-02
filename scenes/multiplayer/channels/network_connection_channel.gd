@@ -264,7 +264,7 @@ func _is_allowed_session_steam_id(steam_id: int) -> bool:
 	return (
 		steam_id != 0
 		and steam_id != local_steam_id
-		and not GameSession.get_player_by_steam_id(steam_id).is_empty()
+		and not GameSession.get_player_record_by_steam_id(steam_id).is_empty()
 	)
 
 
@@ -304,7 +304,7 @@ func _submit_client_match_ready(submitted_match_id: String, submitted_roster_has
 	if (
 		submitted_match_id != GameSession.get_match_id()
 		or submitted_roster_hash != GameSession.get_roster_hash()
-		or GameSession.get_player_by_steam_id(sender_steam_id).is_empty()
+		or GameSession.get_player_record_by_steam_id(sender_steam_id).is_empty()
 	):
 		_disconnect_transport_peer(sender_peer_id)
 		return

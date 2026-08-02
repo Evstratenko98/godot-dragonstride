@@ -1,83 +1,175 @@
 [gd_scene format=3 uid="uid://c3atw3xubrvt2"]
 
-[ext_resource type="Script" uid="uid://bju0kau4n7507" path="res://scenes/menu/lobby/lobby_host.gd" id="1_33qdm"]
+[ext_resource type="Script" uid="uid://bju0kau4n7507" path="res://scenes/menu/lobby/lobby_host.gd" id="1_host"]
+[ext_resource type="Script" path="res://scenes/menu/common/menu_backdrop.gd" id="2_backdrop"]
+[ext_resource type="Script" path="res://scenes/menu/common/menu_presentation.gd" id="3_presentation"]
 
-[node name="LobbyHost" type="Control" unique_id=1278657101]
+[node name="LobbyHost" type="Control"]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-script = ExtResource("1_33qdm")
+script = ExtResource("1_host")
 
-[node name="ColorRect" type="ColorRect" parent="." unique_id=936623126]
+[node name="Backdrop" type="Control" parent="."]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(2.2621452e-06, 0.44375616, 0.44375622, 1)
+script = ExtResource("2_backdrop")
 
-[node name="MembersList" type="VBoxContainer" parent="." unique_id=1439134148]
+[node name="MenuPresentation" type="Node" parent="."]
+script = ExtResource("3_presentation")
+
+[node name="Page" type="MarginContainer" parent="."]
 layout_mode = 1
-anchors_preset = 14
-anchor_top = 0.5
+anchors_preset = 15
 anchor_right = 1.0
-anchor_bottom = 0.5
-offset_left = 326.0
-offset_top = -25.0
-offset_right = -326.0
-offset_bottom = 189.0
+anchor_bottom = 1.0
+offset_left = 72.0
+offset_top = 48.0
+offset_right = -72.0
+offset_bottom = -48.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/separation = 10
 
-[node name="Label" type="Label" parent="MembersList" unique_id=1009131890]
+[node name="Content" type="VBoxContainer" parent="Page"]
 layout_mode = 2
+theme_override_constants/separation = 20
 
-[node name="LobbyTitleLabel" type="Label" parent="." unique_id=650912928]
-layout_mode = 1
-anchors_preset = 10
-anchor_right = 1.0
-offset_left = -2.0
-offset_top = 119.0
-offset_right = -2.0
-offset_bottom = 207.0
-grow_horizontal = 2
-theme_override_font_sizes/font_size = 64
-horizontal_alignment = 1
+[node name="Header" type="HBoxContainer" parent="Page/Content"]
+layout_mode = 2
+theme_override_constants/separation = 24
+
+[node name="Titles" type="VBoxContainer" parent="Page/Content/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 5
+
+[node name="Eyebrow" type="Label" parent="Page/Content/Header/Titles"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.82, 0.2, 1)
+theme_override_font_sizes/font_size = 13
+text = "СЕТЕВОЙ ЗАЛ ОЖИДАНИЯ"
+
+[node name="Title" type="Label" parent="Page/Content/Header/Titles"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 38
+text = "Лобби отряда"
+
+[node name="LobbyTitleLabel" type="Label" parent="Page/Content/Header"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 46)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.72, 0.76, 0.84, 1)
+theme_override_font_sizes/font_size = 14
+horizontal_alignment = 2
 vertical_alignment = 1
 
-[node name="StatusLabel" type="Label" parent="."]
-layout_mode = 1
-anchors_preset = 10
-anchor_right = 1.0
-offset_left = 326.0
-offset_top = 470.0
-offset_right = -326.0
-offset_bottom = 518.0
-grow_horizontal = 2
+[node name="Columns" type="HBoxContainer" parent="Page/Content"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 24
+
+[node name="MembersPanel" type="PanelContainer" parent="Page/Content/Columns"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="MembersContent" type="VBoxContainer" parent="Page/Content/Columns/MembersPanel"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="SectionHeader" type="HBoxContainer" parent="Page/Content/Columns/MembersPanel/MembersContent"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="Page/Content/Columns/MembersPanel/MembersContent/SectionHeader"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 22
+text = "Участники"
+
+[node name="Capacity" type="Label" parent="Page/Content/Columns/MembersPanel/MembersContent/SectionHeader"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.55, 0.61, 0.7, 1)
+theme_override_font_sizes/font_size = 13
+text = "ДО 4 ИГРОКОВ"
+vertical_alignment = 1
+
+[node name="Divider" type="ColorRect" parent="Page/Content/Columns/MembersPanel/MembersContent"]
+custom_minimum_size = Vector2(0, 1)
+layout_mode = 2
+color = Color(0.27, 0.31, 0.38, 0.9)
+
+[node name="MembersScroll" type="ScrollContainer" parent="Page/Content/Columns/MembersPanel/MembersContent"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="MembersList" type="VBoxContainer" parent="Page/Content/Columns/MembersPanel/MembersContent/MembersScroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="LoadingLabel" type="Label" parent="Page/Content/Columns/MembersPanel/MembersContent/MembersScroll/MembersList"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.55, 0.61, 0.7, 1)
+text = "Обновление состава..."
+
+[node name="ControlPanel" type="PanelContainer" parent="Page/Content/Columns"]
+custom_minimum_size = Vector2(360, 0)
+layout_mode = 2
+
+[node name="ControlContent" type="VBoxContainer" parent="Page/Content/Columns/ControlPanel"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="Title" type="Label" parent="Page/Content/Columns/ControlPanel/ControlContent"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Подготовка матча"
+
+[node name="Hint" type="Label" parent="Page/Content/Columns/ControlPanel/ControlContent"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.55, 0.61, 0.7, 1)
+theme_override_font_sizes/font_size = 14
+text = "Хозяин лобби запускает матч, когда все участники подключены."
+autowrap_mode = 2
+
+[node name="StatusBox" type="PanelContainer" parent="Page/Content/Columns/ControlPanel/ControlContent"]
+custom_minimum_size = Vector2(0, 100)
+layout_mode = 2
+theme_type_variation = &"CompactMenuPanel"
+size_flags_vertical = 3
+
+[node name="StatusLabel" type="Label" parent="Page/Content/Columns/ControlPanel/ControlContent/StatusBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.68, 0.32, 1)
+theme_override_font_sizes/font_size = 13
+text = "Ожидание игроков"
 horizontal_alignment = 1
 vertical_alignment = 1
 autowrap_mode = 2
 
-[node name="VBoxContainer" type="VBoxContainer" parent="." unique_id=1027376864]
-layout_mode = 0
-offset_left = 326.0
-offset_top = 550.0
-offset_right = 954.0
-offset_bottom = 626.0
-theme_override_constants/separation = 10
-
-[node name="StartGameButton" type="Button" parent="VBoxContainer" unique_id=2023920905]
+[node name="StartGameButton" type="Button" parent="Page/Content/Columns/ControlPanel/ControlContent"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 54)
 layout_mode = 2
-text = "Start Game"
+theme_type_variation = &"PrimaryMenuButton"
+focus_mode = 0
+text = "Начать матч"
 
-[node name="BackButton" type="Button" parent="VBoxContainer" unique_id=782000121]
+[node name="BackButton" type="Button" parent="Page/Content/Columns/ControlPanel/ControlContent"]
+custom_minimum_size = Vector2(0, 50)
 layout_mode = 2
-text = "Back"
+theme_type_variation = &"DangerMenuButton"
+focus_mode = 0
+text = "Покинуть лобби"
 
-[connection signal="pressed" from="VBoxContainer/StartGameButton" to="." method="_on_start_game_button_pressed"]
-[connection signal="pressed" from="VBoxContainer/BackButton" to="." method="_on_back_button_pressed"]
+[connection signal="pressed" from="Page/Content/Columns/ControlPanel/ControlContent/StartGameButton" to="." method="_on_start_game_button_pressed"]
+[connection signal="pressed" from="Page/Content/Columns/ControlPanel/ControlContent/BackButton" to="." method="_on_back_button_pressed"]

@@ -2,6 +2,7 @@ class_name InventoryBar
 extends HBoxContainer
 
 const SLOT_SEPARATION := 5
+const INVENTORY_GROUP_SEPARATION := 18.0
 const SLOT_ACTIONS: Array[StringName] = [
 	&"use_inventory_slot_1",
 	&"use_inventory_slot_2",
@@ -21,7 +22,6 @@ var character_inventory: CharacterInventory = null
 var bound_player: PlayerCharacter = null
 var item_slots: Array[InventorySlotControl] = []
 var spell_slots: Array[InventorySlotControl] = []
-var action_mode_bar: ActionModeBar = null
 var selected_spell_slot_index: int = -1
 var is_loot_modal_mode: bool = false
 var loot_drop_controller: ChestLootInventoryDropController = ChestLootInventoryDropController.new()
@@ -29,6 +29,7 @@ var loot_drop_controller: ChestLootInventoryDropController = ChestLootInventoryD
 
 func _ready() -> void:
 	add_theme_constant_override("separation", SLOT_SEPARATION)
+	alignment = BoxContainer.ALIGNMENT_CENTER
 	_build_bar()
 
 
@@ -68,8 +69,6 @@ func configure_runtime(new_runtime: WorldRuntime) -> void:
 		if not runtime.turn_manager.turn_state_changed.is_connected(_on_turn_state_changed):
 			runtime.turn_manager.turn_state_changed.connect(_on_turn_state_changed)
 	_connect_spell_signals()
-	if action_mode_bar != null:
-		action_mode_bar.configure_runtime(runtime)
 
 
 func configure_loot_dialog(dialog: ChestLootDialog) -> void:
@@ -82,8 +81,6 @@ func bind_character(player: PlayerCharacter) -> void:
 	_connect_spell_signals()
 	if player == bound_player:
 		_refresh_spell_states()
-		if action_mode_bar != null:
-			action_mode_bar.bind_character(player)
 		return
 	if character_inventory != null and character_inventory.inventory_changed.is_connected(_refresh_items):
 		character_inventory.inventory_changed.disconnect(_refresh_items)
@@ -94,8 +91,6 @@ func bind_character(player: PlayerCharacter) -> void:
 	if not character_inventory.inventory_changed.is_connected(_refresh_items):
 		character_inventory.inventory_changed.connect(_refresh_items)
 	selected_spell_slot_index = runtime.get_selected_spell_slot_index(bound_player)
-	if action_mode_bar != null:
-		action_mode_bar.bind_character(player)
 	_refresh_items()
 
 
@@ -126,9 +121,7 @@ func request_use(inventory_kind: String, slot_index: int) -> void:
 
 func set_loot_modal_mode(should_enable: bool) -> void:
 	is_loot_modal_mode = should_enable
-	alignment = BoxContainer.ALIGNMENT_CENTER if should_enable else BoxContainer.ALIGNMENT_BEGIN
-	if action_mode_bar != null:
-		action_mode_bar.visible = not should_enable
+	alignment = BoxContainer.ALIGNMENT_CENTER
 
 
 func can_rearrange_inventory() -> bool:
@@ -159,11 +152,10 @@ func _build_bar() -> void:
 		item_slots.append(item_slot)
 		add_child.call_deferred(item_slot)
 
-	action_mode_bar = ActionModeBar.new()
-	action_mode_bar.configure_runtime(runtime)
-	if bound_player != null:
-		action_mode_bar.bind_character(bound_player)
-	add_child.call_deferred(action_mode_bar)
+	var group_spacer: Control = Control.new()
+	group_spacer.custom_minimum_size = Vector2(INVENTORY_GROUP_SEPARATION, 0.0)
+	group_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child.call_deferred(group_spacer)
 
 	for spell_index: int in range(CharacterInventory.SPELL_SLOT_COUNT):
 		var spell_slot: InventorySlotControl = InventorySlotControl.new()

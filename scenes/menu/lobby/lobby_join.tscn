@@ -1,79 +1,139 @@
 [gd_scene format=3 uid="uid://fskyuuucr5g7"]
 
-[ext_resource type="Script" uid="uid://dvn0c1kvte8om" path="res://scenes/menu/lobby/lobby_join.gd" id="1_1cywd"]
+[ext_resource type="Script" uid="uid://dvn0c1kvte8om" path="res://scenes/menu/lobby/lobby_join.gd" id="1_join"]
+[ext_resource type="Script" path="res://scenes/menu/common/menu_backdrop.gd" id="2_backdrop"]
+[ext_resource type="Script" path="res://scenes/menu/common/menu_presentation.gd" id="3_presentation"]
 
-[node name="LobbyJoin" type="Control" unique_id=1069554423]
+[node name="LobbyJoin" type="Control"]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-script = ExtResource("1_1cywd")
+script = ExtResource("1_join")
 
-[node name="ColorRect" type="ColorRect" parent="." unique_id=228540181]
+[node name="Backdrop" type="Control" parent="."]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(2.2621452e-06, 0.44375616, 0.44375622, 1)
+script = ExtResource("2_backdrop")
 
-[node name="LobbiesList" type="VBoxContainer" parent="." unique_id=2124272463]
+[node name="MenuPresentation" type="Node" parent="."]
+script = ExtResource("3_presentation")
+
+[node name="Page" type="MarginContainer" parent="."]
 layout_mode = 1
-anchors_preset = 14
-anchor_top = 0.5
+anchors_preset = 15
 anchor_right = 1.0
-anchor_bottom = 0.5
-offset_left = 326.0
-offset_top = -25.0
-offset_right = -326.0
-offset_bottom = 189.0
+anchor_bottom = 1.0
+offset_left = 72.0
+offset_top = 48.0
+offset_right = -72.0
+offset_bottom = -48.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/separation = 10
 
-[node name="Label" type="Label" parent="." unique_id=905280924]
-layout_mode = 1
-anchors_preset = 10
-anchor_right = 1.0
-offset_left = -2.0
-offset_top = 119.0
-offset_right = -2.0
-offset_bottom = 207.0
-grow_horizontal = 2
-theme_override_font_sizes/font_size = 64
+[node name="Content" type="VBoxContainer" parent="Page"]
+layout_mode = 2
+theme_override_constants/separation = 18
+
+[node name="Header" type="VBoxContainer" parent="Page/Content"]
+layout_mode = 2
+theme_override_constants/separation = 5
+
+[node name="Eyebrow" type="Label" parent="Page/Content/Header"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.36, 0.68, 0.92, 1)
+theme_override_font_sizes/font_size = 13
+text = "ПОИСК МАТЧА / STEAM"
+
+[node name="Title" type="Label" parent="Page/Content/Header"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 38
 text = "Доступные лобби"
-horizontal_alignment = 1
+
+[node name="Subtitle" type="Label" parent="Page/Content/Header"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.55, 0.61, 0.7, 1)
+theme_override_font_sizes/font_size = 14
+text = "Показываются только совместимые матчи текущей версии игры."
+
+[node name="ListPanel" type="PanelContainer" parent="Page/Content"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="PanelContent" type="VBoxContainer" parent="Page/Content/ListPanel"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="ListHeader" type="HBoxContainer" parent="Page/Content/ListPanel/PanelContent"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="Page/Content/ListPanel/PanelContent/ListHeader"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 20
+text = "Список матчей"
+
+[node name="Hint" type="Label" parent="Page/Content/ListPanel/PanelContent/ListHeader"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.55, 0.61, 0.7, 1)
+theme_override_font_sizes/font_size = 12
+text = "ОБНОВЛЯЕТСЯ ПО ЗАПРОСУ"
 vertical_alignment = 1
 
-[node name="VBoxContainer" type="VBoxContainer" parent="." unique_id=673662060]
-layout_mode = 0
-offset_left = 326.0
-offset_top = 550.0
-offset_right = 954.0
-offset_bottom = 626.0
-theme_override_constants/separation = 10
+[node name="Divider" type="ColorRect" parent="Page/Content/ListPanel/PanelContent"]
+custom_minimum_size = Vector2(0, 1)
+layout_mode = 2
+color = Color(0.27, 0.31, 0.38, 0.9)
 
-[node name="StatusLabel" type="Label" parent="."]
-layout_mode = 1
-anchors_preset = 10
-anchor_right = 1.0
-offset_top = 505.0
-offset_bottom = 541.0
-grow_horizontal = 2
-theme_override_colors/font_color = Color(1, 0.78, 0.35, 1)
+[node name="LobbiesScroll" type="ScrollContainer" parent="Page/Content/ListPanel/PanelContent"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="LobbiesList" type="VBoxContainer" parent="Page/Content/ListPanel/PanelContent/LobbiesScroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 9
+
+[node name="LoadingLabel" type="Label" parent="Page/Content/ListPanel/PanelContent/LobbiesScroll/LobbiesList"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.55, 0.61, 0.7, 1)
+text = "Поиск доступных матчей..."
 horizontal_alignment = 1
 
-[node name="RefreshButton" type="Button" parent="VBoxContainer" unique_id=1039908863]
+[node name="Footer" type="HBoxContainer" parent="Page/Content"]
 layout_mode = 2
-text = "Refresh lobbies list
-"
+theme_override_constants/separation = 12
 
-[node name="BackButton" type="Button" parent="VBoxContainer" unique_id=1146290820]
+[node name="BackButton" type="Button" parent="Page/Content/Footer"]
+custom_minimum_size = Vector2(220, 50)
 layout_mode = 2
-text = "Back"
+focus_mode = 0
+text = "Назад"
 
-[connection signal="pressed" from="VBoxContainer/RefreshButton" to="." method="_on_refresh_button_pressed"]
-[connection signal="pressed" from="VBoxContainer/BackButton" to="." method="_on_back_button_pressed"]
+[node name="StatusLabel" type="Label" parent="Page/Content/Footer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(1, 0.68, 0.32, 1)
+theme_override_font_sizes/font_size = 13
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 2
+
+[node name="RefreshButton" type="Button" parent="Page/Content/Footer"]
+custom_minimum_size = Vector2(240, 50)
+layout_mode = 2
+theme_type_variation = &"PrimaryMenuButton"
+focus_mode = 0
+text = "Обновить список"
+
+[connection signal="pressed" from="Page/Content/Footer/RefreshButton" to="." method="_on_refresh_button_pressed"]
+[connection signal="pressed" from="Page/Content/Footer/BackButton" to="." method="_on_back_button_pressed"]

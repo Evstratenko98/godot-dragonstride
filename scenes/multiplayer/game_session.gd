@@ -9,7 +9,10 @@ const MODE_SINGLEPLAYER := "singleplayer"
 const MODE_MULTIPLAYER_HOST := "multiplayer_host"
 const MODE_MULTIPLAYER_CLIENT := "multiplayer_client"
 const MATCH_SCENE_PATH := "res://scenes/world/match_world.tscn"
-const ROSTER_REVISION := 1
+const ROSTER_REVISION := 2
+const MIN_SQUAD_SIZE := 1
+const MAX_SQUAD_SIZE := 4
+const DEFAULT_SQUAD_SIZE := 2
 
 var mode: String = MODE_NONE
 var selected_level_id: String = LevelCatalog.DEFAULT_LEVEL_ID
@@ -27,6 +30,7 @@ func start_singleplayer(settings: Dictionary = {}) -> void:
 	clear()
 	mode = MODE_SINGLEPLAYER
 	match_settings = settings.duplicate(true)
+	match_settings["squad_size"] = DEFAULT_SQUAD_SIZE
 	_select_level_from_settings()
 	players = [_make_player_info(0, "Player", true, true, "player_1", 0)]
 	is_committed = true
@@ -53,12 +57,14 @@ func prepare_remote_match(payload: Dictionary) -> bool:
 	var new_match_id: String = str(payload.get("match_id", ""))
 	var level_id: String = str(payload.get("level_id", ""))
 	var payload_revision: int = int(payload.get("roster_revision", 0))
+	var payload_squad_size: int = int(payload.get("squad_size", 0))
 	var roster_value: Variant = payload.get("players", [])
 	if (
 		new_match_id.is_empty()
 		or level_id != LevelCatalog.MULTIPLAYER_LEVEL_ID
 		or not LevelCatalog.has_level(level_id)
 		or payload_revision != ROSTER_REVISION
+		or payload_squad_size != DEFAULT_SQUAD_SIZE
 		or not (roster_value is Array)
 	):
 		return false
@@ -86,6 +92,7 @@ func create_match_prepare_payload() -> Dictionary:
 		"level_id": selected_level_id,
 		"roster_revision": roster_revision,
 		"roster_hash": get_roster_hash(),
+		"squad_size": get_squad_size(),
 		"players": _create_network_roster(),
 	}
 
@@ -138,10 +145,11 @@ func get_match_id() -> String:
 
 func get_roster_hash() -> String:
 	var canonical_parts: PackedStringArray = PackedStringArray()
+	canonical_parts.append("squad_size|%d" % DEFAULT_SQUAD_SIZE)
 	for player: Dictionary in players:
 		canonical_parts.append("%d|%s|%d|%d" % [
 			int(player.get("steam_id", 0)),
-			str(player.get("entity_id", "")),
+			str(player.get("player_id", "")),
 			int(bool(player.get("is_host", false))),
 			int(player.get("color_index", 0)),
 		])
@@ -152,18 +160,29 @@ func get_players() -> Array[Dictionary]:
 	return players.duplicate(true)
 
 
-func get_local_player() -> Dictionary:
+func get_local_player_record() -> Dictionary:
 	for player: Dictionary in players:
 		if bool(player.get("is_local", false)):
 			return player.duplicate(true)
 	return {}
 
 
-func get_player_by_steam_id(steam_id: int) -> Dictionary:
+func get_player_record_by_steam_id(steam_id: int) -> Dictionary:
 	for player: Dictionary in players:
 		if int(player.get("steam_id", 0)) == steam_id:
 			return player.duplicate(true)
 	return {}
+
+
+func get_player_record_by_id(player_id: String) -> Dictionary:
+	for player: Dictionary in players:
+		if str(player.get("player_id", "")) == player_id:
+			return player.duplicate(true)
+	return {}
+
+
+func get_squad_size() -> int:
+	return clampi(int(match_settings.get("squad_size", DEFAULT_SQUAD_SIZE)), MIN_SQUAD_SIZE, MAX_SQUAD_SIZE)
 
 
 func get_match_setting(key: String, default_value: Variant = null) -> Variant:
@@ -209,7 +228,10 @@ func _prepare_multiplayer_state(new_match_id: String, level_id: String, roster: 
 	roster_revision = ROSTER_REVISION
 	players = roster.duplicate(true)
 	selected_level_id = level_id
-	match_settings = {"level_id": level_id}
+	match_settings = {
+		"level_id": level_id,
+		"squad_size": DEFAULT_SQUAD_SIZE,
+	}
 	is_committed = false
 	session_started.emit(mode)
 	return true
@@ -246,7 +268,7 @@ func _create_network_roster() -> Array[Dictionary]:
 			"steam_id": str(int(player.get("steam_id", 0))),
 			"name": str(player.get("name", "Player")),
 			"is_host": bool(player.get("is_host", false)),
-			"entity_id": str(player.get("entity_id", "")),
+			"player_id": str(player.get("player_id", "")),
 			"color_index": int(player.get("color_index", 0)),
 		})
 	return result
@@ -256,27 +278,27 @@ func _is_valid_roster(roster: Array[Dictionary], expected_host_steam_id: int) ->
 	if roster.is_empty() or roster.size() > NetworkProtocol.MAX_ROSTER_SIZE or expected_host_steam_id == 0:
 		return false
 	var seen_steam_ids: Dictionary[int, bool] = {}
-	var seen_entity_ids: Dictionary[String, bool] = {}
+	var seen_player_ids: Dictionary[String, bool] = {}
 	var host_count: int = 0
 	var previous_steam_id: int = 0
 	for index: int in range(roster.size()):
 		var record: Dictionary = roster[index]
 		var steam_id: int = int(record.get("steam_id", 0))
-		var entity_id: String = str(record.get("entity_id", ""))
+		var player_id: String = str(record.get("player_id", ""))
 		if (
 			steam_id == 0
 			or steam_id <= previous_steam_id
-			or entity_id != "player_%d" % [index + 1]
+			or player_id != "player_%d" % [index + 1]
 			or int(record.get("color_index", -1)) != index
 			or seen_steam_ids.has(steam_id)
-			or seen_entity_ids.has(entity_id)
-			or not NetworkProtocol.is_valid_identifier(entity_id)
+			or seen_player_ids.has(player_id)
+			or not NetworkProtocol.is_valid_identifier(player_id)
 			or str(record.get("name", "")).length() > NetworkProtocol.MAX_IDENTIFIER_LENGTH
 		):
 			return false
 		previous_steam_id = steam_id
 		seen_steam_ids[steam_id] = true
-		seen_entity_ids[entity_id] = true
+		seen_player_ids[player_id] = true
 		if bool(record.get("is_host", false)):
 			host_count += 1
 			if steam_id != expected_host_steam_id:
@@ -295,16 +317,16 @@ func _make_player_info(
 	steam_id: int,
 	player_name: String,
 	is_host_player: bool,
-	is_local_player: bool,
-	entity_id: String,
+	is_local_participant: bool,
+	player_id: String,
 	color_index: int
 ) -> Dictionary:
 	return {
 		"steam_id": steam_id,
 		"name": player_name.left(64),
 		"is_host": is_host_player,
-		"is_local": is_local_player,
-		"entity_id": entity_id,
+		"is_local": is_local_participant,
+		"player_id": player_id,
 		"color_index": color_index,
 	}
 

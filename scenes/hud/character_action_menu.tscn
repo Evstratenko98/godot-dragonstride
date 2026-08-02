@@ -1,0 +1,49 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scenes/hud/character_action_menu.gd" id="1_menu"]
+[ext_resource type="Script" path="res://scenes/hud/action_mode_bar.gd" id="2_bar"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_popup"]
+bg_color = Color(0.035, 0.04, 0.055, 0.96)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.44, 0.38, 0.18, 0.95)
+corner_radius_top_left = 28
+corner_radius_top_right = 28
+corner_radius_bottom_right = 28
+corner_radius_bottom_left = 28
+shadow_color = Color(0, 0, 0, 0.45)
+shadow_size = 8
+
+[node name="CharacterActionMenu" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1_menu")
+
+[node name="PopupPanel" type="PanelContainer" parent="."]
+visible = false
+z_index = 120
+custom_minimum_size = Vector2(178, 66)
+offset_right = 178.0
+offset_bottom = 66.0
+mouse_filter = 0
+theme_override_styles/panel = SubResource("StyleBox_popup")
+
+[node name="Content" type="MarginContainer" parent="PopupPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 10
+
+[node name="ActionModeBar" type="HBoxContainer" parent="PopupPanel/Content"]
+layout_mode = 2
+alignment = 1
+script = ExtResource("2_bar")

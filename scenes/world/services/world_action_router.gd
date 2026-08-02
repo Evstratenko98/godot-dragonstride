@@ -72,7 +72,11 @@ func get_acceptance_rejection_reason(action: WorldActionRecord) -> String:
 	if turns != null and action.turn_revision != turns.get_turn_revision():
 		return WorldActionStream.REJECTION_STALE_TURN
 	var player: PlayerCharacter = runtime.get_entity_by_id(action.actor_entity_id) as PlayerCharacter
-	if player == null or player.health <= 0:
+	if player == null:
+		return WorldActionStream.REJECTION_ACTOR_UNAVAILABLE
+	if action.requester_steam_id > 0 and not runtime.is_character_owned_by_steam_id(action.actor_entity_id, action.requester_steam_id):
+		return WorldActionStream.REJECTION_ACTOR_UNAVAILABLE
+	if action.action_type != WorldActionRecord.ActionType.END_PLAYER_TURN and player.health <= 0:
 		return WorldActionStream.REJECTION_ACTOR_UNAVAILABLE
 	if turns != null and turns.is_world_turn_active():
 		return WorldActionStream.REJECTION_WORLD_TURN
@@ -108,7 +112,11 @@ func get_rejection_reason(action: WorldActionRecord) -> String:
 	if action == null:
 		return WorldActionStream.REJECTION_INVALID_ACTION
 	var player: PlayerCharacter = runtime.get_entity_by_id(action.actor_entity_id) as PlayerCharacter
-	if _is_player_action(action.action_type) and (player == null or player.health <= 0):
+	if (
+		_is_player_action(action.action_type)
+		and action.action_type != WorldActionRecord.ActionType.END_PLAYER_TURN
+		and (player == null or player.health <= 0)
+	):
 		return WorldActionStream.REJECTION_ACTOR_UNAVAILABLE
 
 	match action.action_type:

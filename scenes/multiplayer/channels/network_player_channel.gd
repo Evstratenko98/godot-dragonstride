@@ -90,7 +90,7 @@ func _submit_player_world_ready(match_id: String) -> void:
 	if requester_peer_id == 0 or match_id != GameSession.get_match_id():
 		return
 	var steam_id: int = peers.get_steam_id_for_peer_id(requester_peer_id)
-	if not GameSession.get_player_by_steam_id(steam_id).is_empty():
+	if not GameSession.get_player_record_by_steam_id(steam_id).is_empty():
 		player_world_ready_received.emit(steam_id, match_id)
 
 
@@ -104,7 +104,7 @@ func _submit_player_world_failed(match_id: String, reason_code: String) -> void:
 	):
 		return
 	var steam_id: int = peers.get_steam_id_for_peer_id(requester_peer_id)
-	if not GameSession.get_player_by_steam_id(steam_id).is_empty():
+	if not GameSession.get_player_record_by_steam_id(steam_id).is_empty():
 		player_world_failed_received.emit(steam_id, match_id, reason_code)
 
 
@@ -127,37 +127,45 @@ func _receive_player_connection_state(match_id: String, steam_id: int, is_connec
 
 
 func _is_valid_player_spawn_snapshot(snapshot: Dictionary) -> bool:
-	var players_value: Variant = snapshot.get("players")
+	var members_value: Variant = snapshot.get("members")
+	var squad_size: int = int(snapshot.get("squad_size", 0))
+	var expected_member_count: int = GameSession.get_players().size() * GameSession.get_squad_size()
 	if (
 		int(snapshot.get("protocol_version", 0)) != NetworkProtocol.PROTOCOL_VERSION
 		or str(snapshot.get("match_id", "")) != GameSession.get_match_id()
 		or str(snapshot.get("roster_hash", "")) != GameSession.get_roster_hash()
 		or str(snapshot.get("level_id", "")) != GameSession.selected_level_id
-		or not (players_value is Array)
-		or (players_value as Array).size() != GameSession.get_players().size()
-		or (players_value as Array).size() > NetworkProtocol.MAX_ROSTER_SIZE
+		or squad_size != GameSession.get_squad_size()
+		or not (members_value is Array)
+		or (members_value as Array).size() != expected_member_count
+		or (members_value as Array).size() > NetworkProtocol.MAX_PLAYER_CHARACTERS
 		or not _is_payload_size_valid(snapshot, NetworkProtocol.MAX_SNAPSHOT_BYTES)
 	):
 		return false
-	var seen_steam_ids: Dictionary[int, bool] = {}
 	var seen_entity_ids: Dictionary[String, bool] = {}
 	var seen_cells: Dictionary[Vector2i, bool] = {}
-	for record_value: Variant in players_value as Array:
+	var member_count_by_player_id: Dictionary[String, int] = {}
+	var warrior_color_by_player_id: Dictionary[String, String] = {}
+	for record_value: Variant in members_value as Array:
 		if not (record_value is Dictionary):
 			return false
 		var record: Dictionary = record_value as Dictionary
 		var steam_id: int = int(record.get("steam_id", 0))
+		var player_id: String = str(record.get("player_id", ""))
+		var squad_slot: int = int(record.get("squad_slot", -1))
 		var entity_id: String = str(record.get("entity_id", ""))
 		var cell_value: Variant = record.get("spawn_cell")
 		var cell: Vector2i = record.get("spawn_cell", Vector2i.ZERO)
 		var warrior_color: String = str(record.get("warrior_color", ""))
-		var roster_player: Dictionary = GameSession.get_player_by_steam_id(steam_id)
+		var roster_player: Dictionary = GameSession.get_player_record_by_steam_id(steam_id)
 		if (
 			steam_id <= 0
-			or seen_steam_ids.has(steam_id)
 			or roster_player.is_empty()
+			or str(roster_player.get("player_id", "")) != player_id
+			or squad_slot < 0
+			or squad_slot >= squad_size
 			or not NetworkProtocol.is_valid_identifier(entity_id)
-			or str(roster_player.get("entity_id", "")) != entity_id
+			or entity_id != NetworkProtocol.make_squad_member_entity_id(player_id, squad_slot)
 			or seen_entity_ids.has(entity_id)
 			or not (cell_value is Vector2i)
 			or not NetworkProtocol.is_valid_cell_value(cell)
@@ -165,7 +173,13 @@ func _is_valid_player_spawn_snapshot(snapshot: Dictionary) -> bool:
 			or warrior_color not in ALLOWED_WARRIOR_COLORS
 		):
 			return false
-		seen_steam_ids[steam_id] = true
+		if warrior_color_by_player_id.has(player_id) and warrior_color_by_player_id[player_id] != warrior_color:
+			return false
+		warrior_color_by_player_id[player_id] = warrior_color
 		seen_entity_ids[entity_id] = true
 		seen_cells[cell] = true
+		member_count_by_player_id[player_id] = int(member_count_by_player_id.get(player_id, 0)) + 1
+	for player: Dictionary in GameSession.get_players():
+		if int(member_count_by_player_id.get(str(player.get("player_id", "")), 0)) != squad_size:
+			return false
 	return true

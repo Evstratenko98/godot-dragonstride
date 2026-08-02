@@ -1,13 +1,14 @@
 extends Control
 
-@onready var lobbies_list: VBoxContainer = $LobbiesList
-@onready var status_label: Label = $StatusLabel
+@onready var lobbies_list: VBoxContainer = %LobbiesList
+@onready var status_label: Label = %StatusLabel
 
 func _ready() -> void:
 	SteamManager.lobby_list_received.connect(_on_lobby_list_received)
 	SteamManager.lobby_joined.connect(_on_lobby_joined)
 	SteamManager.lobby_join_failed.connect(_on_lobby_join_failed)
 
+	status_label.text = "Поиск доступных лобби..."
 	SteamManager.request_lobbies()
 
 
@@ -40,27 +41,44 @@ func _render_lobbies(lobbies: Array) -> void:
 		child.queue_free()
 
 	if lobbies.is_empty():
-		var empty_label := Label.new()
-		empty_label.text = "No lobbies found"
-		lobbies_list.add_child(empty_label)
+		var empty_label: Label = Label.new()
+		empty_label.text = "Совместимые лобби не найдены"
+		empty_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		empty_label.add_theme_color_override("font_color", Color(0.55, 0.61, 0.7, 1.0))
+		lobbies_list.add_child.call_deferred(empty_label)
+		status_label.text = ""
 		return
 
-	for lobby in lobbies:
-		var row := HBoxContainer.new()
+	for lobby_value: Variant in lobbies:
+		var lobby: Dictionary = lobby_value as Dictionary
+		var lobby_panel: PanelContainer = PanelContainer.new()
+		lobby_panel.theme_type_variation = &"CompactMenuPanel"
+		lobby_panel.custom_minimum_size = Vector2(0.0, 72.0)
+		var row: HBoxContainer = HBoxContainer.new()
+		row.add_theme_constant_override("separation", 18)
+		var label: Label = Label.new()
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		label.text = "%s\nУчастники: %d / 4" % [
+			str(lobby.get("name", "Steam lobby")),
+			int(lobby.get("member_count", 0)),
+		]
+		var join_button: Button = Button.new()
+		join_button.custom_minimum_size = Vector2(150.0, 46.0)
+		join_button.focus_mode = Control.FOCUS_NONE
+		join_button.text = "Присоединиться"
+		join_button.pressed.connect(_on_join_lobby_pressed.bind(int(lobby.get("id", 0))))
+		row.add_child.call_deferred(label)
+		row.add_child.call_deferred(join_button)
+		lobby_panel.add_child.call_deferred(row)
+		lobbies_list.add_child.call_deferred(lobby_panel)
+	status_label.text = "Найдено лобби: %d" % lobbies.size()
 
-		var label := Label.new()
-		label.text = str(lobby["name"]) + " | Players: " + str(lobby["member_count"])
 
-		var join_button := Button.new()
-		join_button.text = "Join"
-		join_button.pressed.connect(func():
-			SteamManager.join_lobby(lobby["id"])
-		)
-
-		row.add_child(label)
-		row.add_child(join_button)
-
-		lobbies_list.add_child(row)
+func _on_join_lobby_pressed(lobby_id: int) -> void:
+	if lobby_id <= 0:
+		return
+	status_label.text = "Подключение к лобби..."
+	SteamManager.join_lobby(lobby_id)
 
 
 func _on_lobby_joined(_lobby_id: int) -> void:
@@ -69,7 +87,7 @@ func _on_lobby_joined(_lobby_id: int) -> void:
 
 func _on_lobby_join_failed(response: int) -> void:
 	if response == -1:
-		status_label.text = "This lobby uses an incompatible network protocol version."
+		status_label.text = "Это лобби использует несовместимую версию сетевого протокола."
 		return
-	status_label.text = "Failed to join the selected lobby."
+	status_label.text = "Не удалось присоединиться к выбранному лобби."
 	push_warning("Failed to join lobby. Steam response: %d" % response)

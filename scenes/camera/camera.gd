@@ -19,6 +19,7 @@ var allows_console_commands: bool = false
 var target_zoom_factor: float = 1.0
 var world_bounds: Rect2 = Rect2()
 var has_world_bounds: bool = false
+var is_user_input_blocked: bool = false
 
 
 func _ready() -> void:
@@ -50,12 +51,13 @@ func _process(delta: float) -> void:
 				var follow_weight: float = 1.0 - exp(-follow_smoothing * delta)
 				global_position = global_position.lerp(target.global_position, follow_weight)
 	else:
-		_move_free(delta)
+		if not is_user_input_blocked:
+			_move_free(delta)
 		_clamp_to_world_bounds()
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not is_current():
+	if not is_current() or is_user_input_blocked:
 		return
 
 	var mouse_button_event: InputEventMouseButton = event as InputEventMouseButton
@@ -82,15 +84,36 @@ func configure_world_bounds(new_world_bounds: Rect2) -> void:
 		_clamp_to_world_bounds()
 
 
-func set_camera_mode(new_mode: String) -> void:
+func follow_character(character: Node2D) -> void:
+	if character == null or not character.is_inside_tree() or not is_inside_tree():
+		return
+	target_path = get_path_to(character)
+	target = character
+	camera_mode = MODE_FOLLOW
+
+
+func get_camera_mode() -> String:
+	return camera_mode
+
+
+func is_follow_mode() -> bool:
+	return camera_mode == MODE_FOLLOW
+
+
+func set_camera_mode(new_mode: String) -> bool:
 	if new_mode != MODE_FOLLOW and new_mode != MODE_FREE:
 		ConsoleOutput.print_console("Unknown camera mode: %s" % new_mode)
-		return
+		return false
 
 	camera_mode = new_mode
 	if camera_mode == MODE_FREE:
 		_clamp_to_world_bounds()
 	ConsoleOutput.print_console("Camera mode: %s" % camera_mode)
+	return true
+
+
+func set_user_input_blocked(should_block: bool) -> void:
+	is_user_input_blocked = should_block
 
 
 func console_follow() -> void:

@@ -33,7 +33,8 @@ func kill_local_character() -> void:
 	if not _can_mutate():
 		ConsoleOutput.print_console("ERROR: Debug mutations are unavailable for this level.", runtime)
 		return
-	if players.local_player == null:
+	var selected_character: PlayerCharacter = players.get_selected_local_character()
+	if selected_character == null:
 		ConsoleOutput.print_console("ERROR: Local character is not ready.", runtime)
 		return
 	if GameSession.is_multiplayer() and not NetworkManager.connection.is_ready():
@@ -41,11 +42,11 @@ func kill_local_character() -> void:
 		return
 	var request_id: int = runtime.create_action_request_id()
 	if GameSession.is_multiplayer() and not GameSession.is_host():
-		NetworkManager.character.request_character_kill(GameSession.get_match_id(), runtime.get_turn_revision(), request_id)
+		NetworkManager.character.request_character_kill(selected_character.entity_id, GameSession.get_match_id(), runtime.get_turn_revision(), request_id)
 		return
 	runtime.enqueue_player_action(
 		WorldActionRecord.ActionType.CHARACTER_KILL,
-		players.local_player,
+		selected_character,
 		{},
 		request_id,
 		0
@@ -56,10 +57,11 @@ func add_inventory_item(item_id: String, amount_text: String) -> void:
 	if not _can_mutate():
 		ConsoleOutput.print_console("ERROR: Debug mutations are unavailable for this level.", runtime)
 		return
-	if players.local_player == null:
+	var selected_character: PlayerCharacter = players.get_selected_local_character()
+	if selected_character == null:
 		ConsoleOutput.print_console("ERROR: Local character is not ready.", runtime)
 		return
-	if not players.local_player.character_inventory.has_item_id(item_id):
+	if not selected_character.character_inventory.has_item_id(item_id):
 		ConsoleOutput.print_console("ERROR: Unknown inventory item: %s." % item_id, runtime)
 		return
 	if (

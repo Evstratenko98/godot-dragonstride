@@ -14,9 +14,17 @@ combined internal queue is capped at 256 records. Per Steam ID, the token bucket
 accepts 8 intents per second with a burst of 12, while the deduplication window keeps
 the latest 256 accepted request IDs.
 
-An actor may have at most one pending external gameplay action in total, counting
+Each human participant owns a squad identified by stable `player_id`; the MVP squad
+size is two, while protocol bounds allow one to four members. Member IDs use
+`player_N_follower_M`. An actor may have at most one pending external gameplay action in total, counting
 both the currently executing record and queued records. Any second external action
 for the same actor is rejected with `actor_busy`.
+
+Every move, attack, interaction, spell, inventory, and loot intent carries the
+acting member's `actor_entity_id`. The host resolves the sender Steam ID from the
+registered peer and rejects an actor that does not belong to that participant.
+End-turn is the exception: its wire intent contains no Steam ID or actor, and the
+host derives the active squad from the sender peer.
 
 `NetworkActionChannel` transports lifecycle metadata and the bounded snapshot stream:
 
@@ -45,9 +53,11 @@ two-second grace watchdog; meteor presentation has a four-second total watchdog.
 Unapplied timed-out actions are cancelled with `presentation_timeout`; an action whose
 gameplay result was already applied only has its presentation forced to finish.
 
-Player movement sends direction only. The host determines `from_cell`, validates and
-reserves `target_cell`, commits the cell at Tween completion, and never accepts a
-client completion or canonical position update. Both authoritative and remote player
+Player movement sends a requested path and `actor_entity_id`. The host rebuilds the
+shortest authoritative path and rejects it when its full cost exceeds the acting
+member's remaining step budget. It commits cells at Tween completion and never
+accepts a client
+completion or canonical position update. Both authoritative and remote player
 movement start the walk presentation and update facing from the accepted direction.
 NPC movement and attacks during the
 composite world turn carry the world action's parent sequence plus a local
@@ -66,22 +76,32 @@ queues the next player-start or world-start continuation before later external
 requests can enter behind it. Turn mode changes are host-only `SET_TURN_MODE` system
 records. `BLOCKING_EVENT` is reserved for future cutscenes and disallows spell intents.
 
+The turn queue contains `player_id`, not character IDs. At squad-turn start the host
+attempts each member's respawn, grants 10 movement steps to every available member,
+and grants every
+available member one attack and one interaction. Ordinary attacks and successfully
+started spells consume that member's attack. Successful interactions consume that
+member's interaction. Exhausting movement does not end the turn or remove remaining
+member actions. If no member is available, the squad turn is skipped.
+
 Spell slots are reserved when a cast is accepted and are consumed when the cast
 successfully starts. Reservations are released on cancellation. In turn mode usage is
 cleared only on a new full round; free mode has no round usage limit. Entity targets
 are resolved again at execution and cancel if missing or dead, while cell targets keep
 their accepted cell.
 
-Every change of the allowed action author advances the monotonic `turn_revision`.
+Turn snapshots carry `active_player_id`, the `player_id` queue, `steps_left_by_entity_id`,
+`attacks_left_by_entity_id`, and `interactions_left_by_entity_id`. Every change of
+the allowed squad advances the monotonic `turn_revision`.
 Move, attack, interaction, spell cast, inventory use, and end turn intents must carry
 the current `match_id` and `turn_revision`. In turn mode, spell cast and inventory use
-are accepted only from the active player; inventory move and delete remain available
+are accepted only from the active squad; inventory move and delete remain available
 for organization outside the player's turn.
 
 ## Resynchronization boundary
 
-Late join and reconnect are intentionally rejected by the first-iteration match
-protocol. An accepted client must finish initial synchronization before it reports
+Adding a new human after the roster is frozen remains unsupported. An accepted or
+reconnecting roster participant must finish synchronization before it reports
 `player_world_ready`. A running client enters one bounded resync cycle when an
 expected lifecycle/profile message is missing, a future sequence exceeds the window,
 or an auxiliary buffer reaches its limit. Gameplay input remains disabled during
@@ -89,7 +109,7 @@ that cycle.
 
 Snapshot requests contain `(match_id, sync_id, expected_sequence_id)`. The host sends
 snapshots only between actions; during an action it returns `sync_pending`. A complete
-snapshot contains the frozen roster hash, turn revision, inventories and their
+snapshot contains the frozen roster hash, turn revision, every squad member's inventory and its
 revisions, spell usage, entity vitality/cells, object and AI state, dynamic spawns,
 removal records, world-turn generation, and the next `boundary_sequence_id`.
 
@@ -142,14 +162,14 @@ timeout cannot roll it back or apply it again.
 
 ## Protocol compatibility and limits
 
-The current network protocol version is 2. It is advertised in lobby data, filtered
+The current network protocol version is 6. It is advertised in lobby data, filtered
 in lobby discovery, checked in `prepare_match`, transport identity registration, and
 snapshots. Builds with another version are rejected before world loading.
 
 Identifiers and display names are limited to 64 characters, roster size to four,
+player characters to sixteen,
 normal intent payloads to 8 KiB, world-record collections to 512, and snapshots to
 512 KiB. Every channel validates `match_id`, sender identity, types, bounded values,
 and safe reason codes before emitting a domain signal or changing replication state.
 
-This protocol is intentionally incompatible with builds made before the `Actions`
-channel and protocol version 2.
+Protocol v6 is intentionally incompatible with shared-step and single-character builds.

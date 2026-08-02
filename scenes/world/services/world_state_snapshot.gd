@@ -84,15 +84,9 @@ func _create_world_state_snapshot() -> Dictionary:
 			"max_health": entity.max_health,
 			"damage": entity.damage,
 		})
-	if GameSession.is_multiplayer():
-		for roster_player: Dictionary in GameSession.get_players():
-			var player: PlayerCharacter = runtime.get_player_by_steam_id(int(roster_player.get("steam_id", 0)))
-			if player != null and player.character_inventory != null:
-				inventory_records.append(player.character_inventory.create_snapshot())
-	else:
-		var local_player: PlayerCharacter = runtime.get_local_player()
-		if local_player != null and local_player.character_inventory != null:
-			inventory_records.append(local_player.character_inventory.create_snapshot())
+	for player: PlayerCharacter in runtime.players_service.get_all_characters():
+		if player.character_inventory != null:
+			inventory_records.append(player.character_inventory.create_snapshot())
 
 	var object_records: Array[Dictionary] = []
 	for object_value: Variant in runtime.get_registered_objects():
@@ -135,7 +129,7 @@ func _validate_world_state_snapshot(world_state: Dictionary) -> bool:
 	if (
 		entities.size() > NetworkProtocol.MAX_WORLD_RECORDS
 		or objects.size() > NetworkProtocol.MAX_WORLD_RECORDS
-		or inventories.size() > NetworkProtocol.MAX_ROSTER_SIZE
+		or inventories.size() > NetworkProtocol.MAX_PLAYER_CHARACTERS
 		or (dynamic_spawns_value as Array).size() > NetworkProtocol.MAX_WORLD_RECORDS
 		or (removed_items_value as Array).size() > NetworkProtocol.MAX_WORLD_RECORDS
 		or (ai_states_value as Dictionary).size() > NetworkProtocol.MAX_WORLD_RECORDS
@@ -179,7 +173,7 @@ func _validate_world_state_snapshot(world_state: Dictionary) -> bool:
 		):
 			return false
 		seen_object_ids[object_id] = true
-	var expected_inventory_count: int = GameSession.get_players().size() if GameSession.is_multiplayer() else 1
+	var expected_inventory_count: int = GameSession.get_players().size() * GameSession.get_squad_size()
 	if inventories.size() != expected_inventory_count:
 		return false
 	var seen_inventory_entity_ids: Dictionary[String, bool] = {}
@@ -189,11 +183,6 @@ func _validate_world_state_snapshot(world_state: Dictionary) -> bool:
 		var inventory_snapshot: Dictionary = snapshot_value as Dictionary
 		var inventory_entity_id: String = str(inventory_snapshot.get("entity_id", ""))
 		var player: PlayerCharacter = runtime.get_entity_by_id(inventory_entity_id) as PlayerCharacter
-		if player == null:
-			for roster_player: Dictionary in GameSession.get_players():
-				if str(roster_player.get("entity_id", "")) == inventory_entity_id:
-					player = runtime.get_player_by_steam_id(int(roster_player.get("steam_id", 0)))
-					break
 		if (
 			player == null
 			or player.character_inventory == null
@@ -303,11 +292,6 @@ func _apply_world_state_snapshot(world_state: Dictionary) -> bool:
 			continue
 		var inventory_snapshot: Dictionary = snapshot_value as Dictionary
 		var player: PlayerCharacter = runtime.get_entity_by_id(str(inventory_snapshot.get("entity_id", ""))) as PlayerCharacter
-		if player == null:
-			for roster_player: Dictionary in GameSession.get_players():
-				if str(roster_player.get("entity_id", "")) == str(inventory_snapshot.get("entity_id", "")):
-					player = runtime.get_player_by_steam_id(int(roster_player.get("steam_id", 0)))
-					break
 		if player == null or player.character_inventory == null:
 			return false
 		if not player.character_inventory.apply_authoritative_snapshot(inventory_snapshot):
