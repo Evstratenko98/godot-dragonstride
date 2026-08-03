@@ -17,6 +17,7 @@ config/icon="res://icon.svg"
 
 [autoload]
 
+GameCursor="*res://scenes/hud/game_cursor.gd"
 SteamManager="*uid://do0iw4xpfjumh"
 GameSession="*res://scenes/multiplayer/game_session.gd"
 NetworkManager="*res://scenes/multiplayer/network_manager.tscn"
@@ -25,6 +26,8 @@ Console="*uid://ouiu5xh1cs8n"
 
 [display]
 
+mouse_cursor/custom_image="res://art/pointers/hand_small_point_n.svg"
+mouse_cursor/custom_image_hotspot=Vector2(15, 4)
 window/size/mode=3
 window/size/borderless=true
 window/stretch/mode="canvas_items"

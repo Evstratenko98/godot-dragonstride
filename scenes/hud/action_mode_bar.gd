@@ -1,8 +1,9 @@
 class_name ActionModeBar
 extends HBoxContainer
 
-const BUTTON_SIZE := Vector2(46.0, 46.0)
-const BUTTON_SEPARATION := 8
+const BUTTON_SIZE := Vector2(26.0, 26.0)
+const BUTTON_ICON_MAX_WIDTH := 18
+const BUTTON_SEPARATION := 5
 const MODE_ORDER: Array[int] = [
 	PlayerCharacter.ActionMode.MOVE,
 	PlayerCharacter.ActionMode.ATTACK,
@@ -13,11 +14,13 @@ const MODE_INPUT_ACTIONS: Array[StringName] = [
 	&"select_attack_mode",
 	&"select_interaction_mode",
 ]
+const MODE_SHORTCUT_FALLBACKS: Array[String] = ["Q", "E", "R"]
 const MODE_TOOLTIPS: Array[String] = ["Пойти", "Атаковать", "Схватить"]
 
 var runtime: WorldRuntime = null
 var bound_player: PlayerCharacter = null
 var action_buttons: Dictionary[int, Button] = {}
+var shortcut_labels: Dictionary[int, Label] = {}
 var is_spell_targeting: bool = false
 var selected_spell_slot_index: int = -1
 var is_cursor_suspended: bool = false
@@ -33,7 +36,7 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
-	Input.set_custom_mouse_cursor(null, Input.CURSOR_ARROW)
+	InventoryBarCursor.clear_action_cursor()
 	_disconnect_player_signal()
 	_disconnect_runtime_signals()
 
@@ -104,13 +107,54 @@ func _create_action_button(action_mode: int, tooltip: String) -> Button:
 	action_button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	action_button.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
 	action_button.expand_icon = false
+	action_button.add_theme_constant_override("icon_max_width", BUTTON_ICON_MAX_WIDTH)
 	action_button.tooltip_text = tooltip
 	action_button.custom_minimum_size = BUTTON_SIZE
 	action_button.focus_mode = Control.FOCUS_NONE
 	action_button.mouse_filter = Control.MOUSE_FILTER_STOP
 	action_button.pressed.connect(_on_action_button_pressed.bind(action_mode))
+	shortcut_labels[action_mode] = _add_shortcut_label(
+		action_button,
+		_get_shortcut_label(action_mode)
+	)
 	InventoryBarStyle.apply_action_button(action_button, false)
 	return action_button
+
+
+func _add_shortcut_label(action_button: Button, shortcut_text: String) -> Label:
+	var shortcut_label: Label = Label.new()
+	shortcut_label.text = shortcut_text
+	shortcut_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	shortcut_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	shortcut_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	shortcut_label.add_theme_font_size_override("font_size", 7)
+	shortcut_label.add_theme_color_override("font_outline_color", Color(0.02, 0.02, 0.025, 0.9))
+	shortcut_label.add_theme_constant_override("outline_size", 1)
+	InventoryBarStyle.apply_shortcut_label(shortcut_label, false)
+	action_button.add_child(shortcut_label)
+	shortcut_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	shortcut_label.offset_left = -11.0
+	shortcut_label.offset_top = 0.0
+	shortcut_label.offset_right = -1.0
+	shortcut_label.offset_bottom = 10.0
+	return shortcut_label
+
+
+func _get_shortcut_label(action_mode: int) -> String:
+	var mode_index: int = MODE_ORDER.find(action_mode)
+	if mode_index < 0:
+		return ""
+	var input_events: Array[InputEvent] = InputMap.action_get_events(MODE_INPUT_ACTIONS[mode_index])
+	for input_event: InputEvent in input_events:
+		var key_event: InputEventKey = input_event as InputEventKey
+		if key_event == null:
+			continue
+		var shortcut_text: String = key_event.as_text_physical_keycode()
+		if shortcut_text.is_empty():
+			shortcut_text = key_event.as_text_keycode()
+		if not shortcut_text.is_empty():
+			return shortcut_text
+	return MODE_SHORTCUT_FALLBACKS[mode_index]
 
 
 func _refresh_buttons(action_mode: int) -> void:
@@ -122,9 +166,11 @@ func _refresh_buttons(action_mode: int) -> void:
 		var button: Button = action_buttons.get(button_mode) as Button
 		var is_available: bool = _is_action_available(button_mode)
 		var is_selected: bool = is_available and button_mode == action_mode and not is_spell_targeting
+		var shortcut_label: Label = shortcut_labels.get(button_mode) as Label
 		button.disabled = not is_available
 		button.tooltip_text = MODE_TOOLTIPS[mode_index] if is_available else "%s — недоступно" % MODE_TOOLTIPS[mode_index]
 		InventoryBarStyle.apply_action_button(button, is_selected)
+		InventoryBarStyle.apply_shortcut_label(shortcut_label, is_selected)
 
 	_refresh_cursor(action_mode)
 

@@ -95,7 +95,11 @@ func _refresh_content() -> void:
 		return
 	portrait.set_player(character)
 	name_label.text = character.get_display_name()
-	health_label.text = "Здоровье: %d/%d" % [character.health, character.max_health]
+	health_label.text = "Здоровье: %d/%d  Урон: %d" % [
+		character.health,
+		character.max_health,
+		character.damage,
+	]
 	var attacks_left: int = 0
 	var interactions_left: int = 0
 	var steps_left: int = 0

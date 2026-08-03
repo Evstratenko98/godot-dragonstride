@@ -2,7 +2,6 @@ class_name InventorySlotControl
 extends PanelContainer
 
 const SLOT_SIZE := Vector2(38.0, 38.0)
-const HOTKEY_HINT_COLOR := Color(0.7, 0.7, 0.75, 1.0)
 
 var inventory_bar: InventoryBar = null
 var inventory_kind: String = ""
@@ -40,7 +39,7 @@ func _ready() -> void:
 	shortcut_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	shortcut_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	shortcut_label.add_theme_font_size_override("font_size", 9)
-	shortcut_label.add_theme_color_override("font_color", HOTKEY_HINT_COLOR)
+	InventoryBarStyle.apply_shortcut_label(shortcut_label, is_selected)
 	var shortcut_layer: Control = Control.new()
 	shortcut_layer.custom_minimum_size = SLOT_SIZE
 	shortcut_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -195,3 +194,4 @@ func _add_label(label_text: String) -> void:
 
 func _refresh_style() -> void:
 	add_theme_stylebox_override("panel", InventorySlotStyle.create(is_selected, is_exhausted))
+	InventoryBarStyle.apply_shortcut_label(shortcut_label, is_selected)

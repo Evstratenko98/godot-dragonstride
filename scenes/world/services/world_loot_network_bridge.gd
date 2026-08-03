@@ -13,13 +13,13 @@ func configure(owner: WorldLoot, new_runtime: WorldRuntime) -> void:
 
 
 func request_claim(
+	actor: PlayerCharacter,
 	chest_id: String,
 	inventory_kind: String,
 	target_slot_index: int,
 	expected_inventory_revision: int,
 	request_id: int
 ) -> void:
-	var actor: PlayerCharacter = runtime.get_selected_local_character()
 	if actor == null:
 		return
 	NetworkManager.loot.request_loot_claim(
@@ -34,8 +34,7 @@ func request_claim(
 	)
 
 
-func request_discard(chest_id: String, request_id: int) -> void:
-	var actor: PlayerCharacter = runtime.get_selected_local_character()
+func request_discard(actor: PlayerCharacter, chest_id: String, request_id: int) -> void:
 	if actor != null:
 		NetworkManager.loot.request_loot_discard(actor.entity_id, chest_id, GameSession.get_match_id(), request_id)
 

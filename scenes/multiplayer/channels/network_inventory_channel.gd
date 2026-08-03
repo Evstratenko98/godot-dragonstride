@@ -77,7 +77,7 @@ func _submit_inventory_add(actor_entity_id: String, item_id: String, amount: int
 		and NetworkProtocol.is_valid_identifier(actor_entity_id)
 		and NetworkProtocol.is_valid_identifier(item_id)
 		and amount > 0
-		and amount <= CharacterInventory.ITEM_SLOT_COUNT * CharacterInventory.DEFAULT_MAX_STACK_SIZE
+		and amount <= CharacterInventory.get_max_intent_amount()
 		and expected_inventory_revision >= 0
 		and turn_revision >= 0
 		and _is_valid_intent(match_id, request_id, {
@@ -94,7 +94,7 @@ func _submit_inventory_add(actor_entity_id: String, item_id: String, amount: int
 @rpc("any_peer", "call_remote", "reliable", 1)
 func _submit_inventory_move(actor_entity_id: String, inventory_kind: String, source_slot_index: int, target_slot_index: int, expected_inventory_revision: int, match_id: String, turn_revision: int, request_id: int) -> void:
 	var requester_peer_id: int = _get_registered_sender_peer_id()
-	if requester_peer_id != 0 and NetworkProtocol.is_valid_identifier(actor_entity_id) and inventory_kind in [CharacterInventory.INVENTORY_KIND_ITEM, CharacterInventory.INVENTORY_KIND_SPELL] and source_slot_index >= 0 and source_slot_index < CharacterInventory.ITEM_SLOT_COUNT and target_slot_index >= 0 and target_slot_index < CharacterInventory.ITEM_SLOT_COUNT and expected_inventory_revision >= 0 and turn_revision >= 0 and _is_valid_intent(match_id, request_id, {
+	if requester_peer_id != 0 and NetworkProtocol.is_valid_identifier(actor_entity_id) and CharacterInventory.is_valid_slot_index_for_kind(inventory_kind, source_slot_index) and CharacterInventory.is_valid_slot_index_for_kind(inventory_kind, target_slot_index) and expected_inventory_revision >= 0 and turn_revision >= 0 and _is_valid_intent(match_id, request_id, {
 		"actor_entity_id": actor_entity_id,
 		"inventory_kind": inventory_kind,
 		"source_slot_index": source_slot_index,
@@ -118,7 +118,7 @@ func _submit_inventory_move(actor_entity_id: String, inventory_kind: String, sou
 @rpc("any_peer", "call_remote", "reliable", 1)
 func _submit_inventory_delete(actor_entity_id: String, inventory_kind: String, slot_index: int, expected_inventory_revision: int, match_id: String, turn_revision: int, request_id: int) -> void:
 	var requester_peer_id: int = _get_registered_sender_peer_id()
-	if requester_peer_id != 0 and NetworkProtocol.is_valid_identifier(actor_entity_id) and inventory_kind in [CharacterInventory.INVENTORY_KIND_ITEM, CharacterInventory.INVENTORY_KIND_SPELL] and slot_index >= 0 and slot_index < CharacterInventory.ITEM_SLOT_COUNT and expected_inventory_revision >= 0 and turn_revision >= 0 and _is_valid_intent(match_id, request_id, {
+	if requester_peer_id != 0 and NetworkProtocol.is_valid_identifier(actor_entity_id) and CharacterInventory.is_valid_slot_index_for_kind(inventory_kind, slot_index) and expected_inventory_revision >= 0 and turn_revision >= 0 and _is_valid_intent(match_id, request_id, {
 		"actor_entity_id": actor_entity_id,
 		"inventory_kind": inventory_kind,
 		"slot_index": slot_index,
@@ -131,7 +131,7 @@ func _submit_inventory_delete(actor_entity_id: String, inventory_kind: String, s
 @rpc("any_peer", "call_remote", "reliable", 1)
 func _submit_inventory_use(actor_entity_id: String, slot_index: int, expected_inventory_revision: int, match_id: String, turn_revision: int, request_id: int) -> void:
 	var requester_peer_id: int = _get_registered_sender_peer_id()
-	if requester_peer_id != 0 and NetworkProtocol.is_valid_identifier(actor_entity_id) and slot_index >= 0 and slot_index < CharacterInventory.ITEM_SLOT_COUNT and expected_inventory_revision >= 0 and turn_revision >= 0 and _is_valid_intent(match_id, request_id, {
+	if requester_peer_id != 0 and NetworkProtocol.is_valid_identifier(actor_entity_id) and CharacterInventory.is_valid_slot_index_for_kind(CharacterInventory.INVENTORY_KIND_ITEM, slot_index) and expected_inventory_revision >= 0 and turn_revision >= 0 and _is_valid_intent(match_id, request_id, {
 		"actor_entity_id": actor_entity_id,
 		"slot_index": slot_index,
 		"expected_inventory_revision": expected_inventory_revision,

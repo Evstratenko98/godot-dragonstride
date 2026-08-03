@@ -30,24 +30,21 @@ static func find_available_cell(
 ) -> Vector2i:
 	if has_preferred_cell and _is_available(runtime, preferred_cell, assigned_cells, ignored_player):
 		return preferred_cell
-	var candidates: Array[Vector2i] = []
+	var best_cell: Vector2i = INVALID_SPAWN_CELL
+	var best_distance: int = 0
 	var grid_size: Vector2i = runtime.get_grid_size()
 	for y: int in range(grid_size.y):
 		for x: int in range(grid_size.x):
 			var cell: Vector2i = Vector2i(x, y)
-			if _is_available(runtime, cell, assigned_cells, ignored_player):
-				candidates.append(cell)
-	if has_preferred_cell:
-		candidates.sort_custom(func(first: Vector2i, second: Vector2i) -> bool:
-			var first_distance: int = absi(first.x - preferred_cell.x) + absi(first.y - preferred_cell.y)
-			var second_distance: int = absi(second.x - preferred_cell.x) + absi(second.y - preferred_cell.y)
-			if first_distance != second_distance:
-				return first_distance < second_distance
-			if first.y != second.y:
-				return first.y < second.y
-			return first.x < second.x
-		)
-	return INVALID_SPAWN_CELL if candidates.is_empty() else candidates[0]
+			if not _is_available(runtime, cell, assigned_cells, ignored_player):
+				continue
+			if not has_preferred_cell:
+				return cell
+			var distance: int = absi(cell.x - preferred_cell.x) + absi(cell.y - preferred_cell.y)
+			if best_cell == INVALID_SPAWN_CELL or distance < best_distance:
+				best_cell = cell
+				best_distance = distance
+	return best_cell
 
 
 static func get_warrior_color(player_index: int) -> String:

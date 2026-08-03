@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://da3crlpnrj5ew"
-path="res://.godot/imported/unknown.png-58ac2f18b036a5e8fe6bb70793cf8abf.ctex"
+uid="uid://cnvj5s80282ou"
+path="res://.godot/imported/knight_warrior_walk_forward_01.png-af15f256559b545b8a1d2327946e1fde.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://art/base/rotations/unknown.png"
-dest_files=["res://.godot/imported/unknown.png-58ac2f18b036a5e8fe6bb70793cf8abf.ctex"]
+source_file="res://art/sprite_generation_lab/knight_warrior_walk_forward/knight_warrior_walk_forward_01.png"
+dest_files=["res://.godot/imported/knight_warrior_walk_forward_01.png-af15f256559b545b8a1d2327946e1fde.ctex"]
 
 [params]
 

@@ -30,6 +30,7 @@ var squad_registry: PlayerSquadRegistry = PlayerSquadRegistry.new()
 var spawn_coordinator: WorldPlayerSpawnCoordinator = WorldPlayerSpawnCoordinator.new()
 var selection_controller: LocalSquadSelectionController = null
 var debug_commands: WorldPlayersDebugCommands = WorldPlayersDebugCommands.new()
+var is_respawn_retry_scheduled: bool = false
 
 
 func _ready() -> void:
@@ -39,37 +40,20 @@ func _ready() -> void:
 	selection_controller.selected_character_changed.connect(_on_selected_character_changed)
 	_connect_network_signals()
 	_connect_player_channel_signals()
-	set_process(true)
-
-
-func _process(_delta: float) -> void:
-	if runtime == null or pending_respawn_players.is_empty() or (GameSession.is_multiplayer() and not GameSession.is_host()):
-		return
-	for entity_id: String in pending_respawn_players.keys():
-		var member: PlayerCharacter = pending_respawn_players.get(entity_id, null) as PlayerCharacter
-		if member == null or not is_instance_valid(member):
-			pending_respawn_players.erase(entity_id)
-			continue
-		var target_cell: Vector2i = WorldPlayerSpawnPlanner.find_available_cell(runtime, member.spawn_cell, true, {}, member)
-		if target_cell == INVALID_SPAWN_CELL:
-			continue
-		if member.respawn_at_cell(target_cell):
-			pending_respawn_players.erase(entity_id)
-			member.can_receive_input = member.is_locally_owned
-			member.show()
-			_broadcast_player_respawn(member)
-			selection_controller.ensure_available_selection()
 
 
 func _exit_tree() -> void:
 	debug_commands.unregister_commands()
+	_disconnect_runtime_signals()
 	_disconnect_network_signals()
 	_disconnect_player_channel_signals()
 
 
 func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void:
+	_disconnect_runtime_signals()
 	runtime = new_runtime
 	level = new_level
+	_connect_runtime_signals()
 	debug_commands.configure_context(self, runtime, level)
 	_configure_helpers()
 
@@ -241,6 +225,7 @@ func request_player_respawn(member: PlayerCharacter) -> bool:
 		member.can_receive_input = false
 		member.hide()
 		pending_respawn_players[member.entity_id] = member
+		_schedule_pending_respawn_retry()
 		if GameSession.is_multiplayer() and GameSession.is_host():
 			NetworkManager.players.broadcast_player_respawn_pending(GameSession.get_match_id(), member.entity_id)
 		selection_controller.ensure_available_selection()
@@ -251,6 +236,46 @@ func request_player_respawn(member: PlayerCharacter) -> bool:
 		_broadcast_player_respawn(member)
 		selection_controller.ensure_available_selection()
 	return was_respawned
+
+
+func _schedule_pending_respawn_retry() -> void:
+	if is_respawn_retry_scheduled or pending_respawn_players.is_empty():
+		return
+	is_respawn_retry_scheduled = true
+	call_deferred("_retry_pending_respawns")
+
+
+func _retry_pending_respawns() -> void:
+	is_respawn_retry_scheduled = false
+	if runtime == null or pending_respawn_players.is_empty() or (GameSession.is_multiplayer() and not GameSession.is_host()):
+		return
+	for entity_id: String in pending_respawn_players.keys():
+		var member: PlayerCharacter = pending_respawn_players.get(entity_id, null) as PlayerCharacter
+		if member == null or not is_instance_valid(member):
+			pending_respawn_players.erase(entity_id)
+			continue
+		var target_cell: Vector2i = WorldPlayerSpawnPlanner.find_available_cell(runtime, member.spawn_cell, true, {}, member)
+		if target_cell == INVALID_SPAWN_CELL or not member.respawn_at_cell(target_cell):
+			continue
+		pending_respawn_players.erase(entity_id)
+		member.can_receive_input = member.is_locally_owned
+		member.show()
+		_broadcast_player_respawn(member)
+		selection_controller.ensure_available_selection()
+
+
+func _connect_runtime_signals() -> void:
+	if runtime != null and not runtime.world_occupancy_changed.is_connected(_on_world_occupancy_changed):
+		runtime.world_occupancy_changed.connect(_on_world_occupancy_changed)
+
+
+func _disconnect_runtime_signals() -> void:
+	if runtime != null and runtime.world_occupancy_changed.is_connected(_on_world_occupancy_changed):
+		runtime.world_occupancy_changed.disconnect(_on_world_occupancy_changed)
+
+
+func _on_world_occupancy_changed() -> void:
+	_schedule_pending_respawn_retry()
 
 
 func execute_character_kill_action(member: PlayerCharacter) -> bool:

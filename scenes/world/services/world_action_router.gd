@@ -30,18 +30,15 @@ func configure_context(
 func broadcast_action_profile_payload(action: WorldActionRecord) -> void:
 	if action == null or network == null:
 		return
-	match action.action_type:
-		WorldActionRecord.ActionType.MOVE_PATH, WorldActionRecord.ActionType.INTERACTION:
+	match WorldActionCatalog.get_profile_channel(action.action_type):
+		WorldActionCatalog.ProfileChannel.CHARACTER:
 			network.broadcast_character_action_payload(action)
-		WorldActionRecord.ActionType.ATTACK:
+		WorldActionCatalog.ProfileChannel.COMBAT:
 			network.broadcast_combat_action_payload(action)
-		WorldActionRecord.ActionType.SPELL_CAST:
+		WorldActionCatalog.ProfileChannel.SPELL:
 			if spells != null:
 				spells.broadcast_action_payload(action)
-		WorldActionRecord.ActionType.INVENTORY_ADD, \
-		WorldActionRecord.ActionType.INVENTORY_MOVE, \
-		WorldActionRecord.ActionType.INVENTORY_DELETE, \
-		WorldActionRecord.ActionType.INVENTORY_USE:
+		WorldActionCatalog.ProfileChannel.INVENTORY:
 			network.broadcast_inventory_action_payload(action)
 
 
@@ -67,7 +64,7 @@ func get_acceptance_rejection_reason(action: WorldActionRecord) -> String:
 			return WorldActionStream.REJECTION_INVALID_ACTION
 		if not runtime.is_player_connected(action.requester_steam_id):
 			return WorldActionStream.REJECTION_ACTOR_DISCONNECTED
-	if not _is_turn_bound_action(action.action_type):
+	if not WorldActionCatalog.is_turn_bound(action.action_type):
 		return get_rejection_reason(action)
 	if turns != null and action.turn_revision != turns.get_turn_revision():
 		return WorldActionStream.REJECTION_STALE_TURN
@@ -81,10 +78,7 @@ func get_acceptance_rejection_reason(action: WorldActionRecord) -> String:
 	if turns != null and turns.is_world_turn_active():
 		return WorldActionStream.REJECTION_WORLD_TURN
 	if (
-		action.action_type in [
-			WorldActionRecord.ActionType.SPELL_CAST,
-			WorldActionRecord.ActionType.INVENTORY_USE,
-		]
+		WorldActionCatalog.requires_active_player(action.action_type)
 		and (turns == null or not turns.is_entity_active_in_turn(player))
 	):
 		return WorldActionStream.REJECTION_NOT_ACTIVE_PLAYER
@@ -113,7 +107,7 @@ func get_rejection_reason(action: WorldActionRecord) -> String:
 		return WorldActionStream.REJECTION_INVALID_ACTION
 	var player: PlayerCharacter = runtime.get_entity_by_id(action.actor_entity_id) as PlayerCharacter
 	if (
-		_is_player_action(action.action_type)
+		WorldActionCatalog.is_external(action.action_type)
 		and action.action_type != WorldActionRecord.ActionType.END_PLAYER_TURN
 		and (player == null or player.health <= 0)
 	):
@@ -321,28 +315,3 @@ func _get_inventory_mutation_reason(character_inventory: CharacterInventory) -> 
 			return "effect_failed"
 		_:
 			return WorldActionStream.REJECTION_INVALID_ACTION
-
-
-func _is_turn_bound_action(action_type: WorldActionRecord.ActionType) -> bool:
-	return action_type in [
-		WorldActionRecord.ActionType.MOVE_PATH,
-		WorldActionRecord.ActionType.ATTACK,
-		WorldActionRecord.ActionType.INTERACTION,
-		WorldActionRecord.ActionType.SPELL_CAST,
-		WorldActionRecord.ActionType.INVENTORY_USE,
-		WorldActionRecord.ActionType.END_PLAYER_TURN,
-	]
-
-
-func _is_player_action(action_type: WorldActionRecord.ActionType) -> bool:
-	return action_type in [
-		WorldActionRecord.ActionType.MOVE_PATH,
-		WorldActionRecord.ActionType.ATTACK,
-		WorldActionRecord.ActionType.INTERACTION,
-		WorldActionRecord.ActionType.SPELL_CAST,
-		WorldActionRecord.ActionType.INVENTORY_ADD,
-		WorldActionRecord.ActionType.INVENTORY_MOVE,
-		WorldActionRecord.ActionType.INVENTORY_DELETE,
-		WorldActionRecord.ActionType.INVENTORY_USE,
-		WorldActionRecord.ActionType.CHARACTER_KILL,
-	]

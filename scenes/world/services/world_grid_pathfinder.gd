@@ -77,8 +77,10 @@ static func find_path_to_any(
 
 	var frontier: Array[Vector2i] = [start_cell]
 	var came_from: Dictionary[Vector2i, Vector2i] = {start_cell: start_cell}
-	while not frontier.is_empty():
-		var cell: Vector2i = frontier.pop_front()
+	var frontier_index: int = 0
+	while frontier_index < frontier.size():
+		var cell: Vector2i = frontier[frontier_index]
+		frontier_index += 1
 		for direction: Vector2i in ORTHOGONAL_DIRECTIONS:
 			var next_cell: Vector2i = cell + direction
 			if came_from.has(next_cell):
@@ -129,6 +131,7 @@ static func _reconstruct_path(
 	var path: Array[Vector2i] = []
 	var cell: Vector2i = end_cell
 	while cell != start_cell:
-		path.push_front(cell)
+		path.append(cell)
 		cell = came_from[cell]
+	path.reverse()
 	return path

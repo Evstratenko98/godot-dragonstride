@@ -43,4 +43,4 @@ static func apply_meteor_targeting() -> void:
 
 
 static func clear_action_cursor() -> void:
-	Input.set_custom_mouse_cursor(null, Input.CURSOR_ARROW)
+	GameCursor.restore_default_cursor()

@@ -1,79 +1,22 @@
 class_name WorldSpawner
 extends Node
 
-const SPAWN_KIND_ENTITY := "entity"
-const SPAWN_KIND_OBJECT := "object"
-
-const SPAWN_FAILURE_MESSAGES := {
-	"network_unavailable": "Network is not ready.",
-	"unknown_type": "Unknown spawn type.",
-	"invalid_placement": "The requested cell cannot be used.",
-	"invalid_clear_type": "Unknown clear type.",
-	"registration_failed": "The spawned item could not be registered.",
-}
-
-const SHEEP_SCENE := preload("res://scenes/entities/sheep/sheep.tscn")
-const WARRIOR_SCENE := preload("res://scenes/entities/enemies/warrior/warrior.tscn")
-const TREE_SCENE := preload("res://scenes/objects/tree/tree.tscn")
-const HOUSE_SCENE := preload("res://scenes/objects/house/house.tscn")
-const MEAT_SCENE := preload("res://scenes/objects/meat/meat.tscn")
-const PRECISION_STONE_SCENE := preload("res://scenes/objects/precision_stone/precision_stone.tscn")
-const METEOR_SCROLL_SCENE := preload("res://scenes/objects/meteor_scroll/meteor_scroll.tscn")
-const CHEST_SCENE := preload("res://scenes/objects/chest/chest.tscn")
-
-const CATALOG := {
-	"sheep": {
-		"kind": SPAWN_KIND_ENTITY,
-		"scene": SHEEP_SCENE,
-		"display_name": "Sheep",
-	},
-	"warrior": {
-		"kind": SPAWN_KIND_ENTITY,
-		"scene": WARRIOR_SCENE,
-		"display_name": "Warrior",
-	},
-	"tree": {
-		"kind": SPAWN_KIND_OBJECT,
-		"scene": TREE_SCENE,
-		"display_name": "Tree",
-	},
-	"house": {
-		"kind": SPAWN_KIND_OBJECT,
-		"scene": HOUSE_SCENE,
-		"display_name": "House",
-	},
-	"meat": {
-		"kind": SPAWN_KIND_OBJECT,
-		"scene": MEAT_SCENE,
-		"display_name": "Meat",
-	},
-	"precision_stone": {
-		"kind": SPAWN_KIND_OBJECT,
-		"scene": PRECISION_STONE_SCENE,
-		"display_name": "Precision Stone",
-	},
-	"meteor_scroll": {
-		"kind": SPAWN_KIND_OBJECT,
-		"scene": METEOR_SCROLL_SCENE,
-		"display_name": "Meteor Scroll",
-	},
-	"chest": {
-		"kind": SPAWN_KIND_OBJECT,
-		"scene": CHEST_SCENE,
-		"display_name": "Chest",
-	},
-}
+const SPAWN_KIND_ENTITY := WorldSpawnCatalog.KIND_ENTITY
+const SPAWN_KIND_OBJECT := WorldSpawnCatalog.KIND_OBJECT
+const CATALOG := WorldSpawnCatalog.DEFINITIONS
 
 var runtime: WorldRuntime = null
 var level: WorldLevel = null
 var spawned_counter: int = 0
-var pending_remote_removals: Dictionary[int, Array] = {}
 var debug_commands: WorldSpawnerDebugCommands = WorldSpawnerDebugCommands.new()
 var snapshot_transaction: WorldSpawnSnapshotTransaction = WorldSpawnSnapshotTransaction.new()
+var batch_operator: WorldSpawnBatchOperator = WorldSpawnBatchOperator.new()
+var network_bridge: WorldSpawnerNetworkBridge = WorldSpawnerNetworkBridge.new()
 
 
 func _ready() -> void:
-	_connect_network_signals()
+	network_bridge.configure(self)
+	network_bridge.connect_signals()
 	if not GameSession.session_cleared.is_connected(_on_session_cleared):
 		GameSession.session_cleared.connect(_on_session_cleared)
 
@@ -82,23 +25,21 @@ func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void
 	runtime = new_runtime
 	level = new_level
 	snapshot_transaction.configure(self)
+	batch_operator.configure(self)
 	debug_commands.configure(self, _can_use_debug_commands(), CATALOG.keys())
-	if runtime.action_stream != null and not runtime.action_stream.action_started.is_connected(_on_stream_action_started):
-		runtime.action_stream.action_started.connect(_on_stream_action_started)
+	network_bridge.connect_action_stream()
 	call_deferred("_apply_cached_world_spawns")
 
 
 func _exit_tree() -> void:
 	debug_commands.unregister_commands()
-	_disconnect_network_signals()
-	if runtime != null and runtime.action_stream != null and runtime.action_stream.action_started.is_connected(_on_stream_action_started):
-		runtime.action_stream.action_started.disconnect(_on_stream_action_started)
+	network_bridge.disconnect_signals()
 	if GameSession.session_cleared.is_connected(_on_session_cleared):
 		GameSession.session_cleared.disconnect(_on_session_cleared)
 
 
 func _on_session_cleared() -> void:
-	pending_remote_removals.clear()
+	network_bridge.clear()
 	snapshot_transaction.commit()
 
 
@@ -139,7 +80,7 @@ func console_create_full(type_key: String) -> void:
 		NetworkManager.world.request_world_fill(normalized_type)
 		return
 
-	_fill_authoritative(normalized_type, 0)
+	batch_operator.fill(normalized_type, 0)
 
 
 func console_clear_full(type_key: String = "") -> void:
@@ -158,7 +99,7 @@ func console_clear_full(type_key: String = "") -> void:
 		NetworkManager.world.request_world_clear(normalized_type)
 		return
 
-	_clear_authoritative(normalized_type, 0)
+	batch_operator.clear(normalized_type, 0)
 
 
 func remove_world_object(target_object: GridObject) -> bool:
@@ -243,32 +184,6 @@ func _try_create_authoritative(type_key: String, cell: Vector2i, should_broadcas
 	return true
 
 
-func _fill_authoritative(type_key: String, requester_peer_id: int) -> void:
-	if not CATALOG.has(type_key):
-		_report_spawn_error("Unknown create type: %s." % type_key, requester_peer_id, "unknown_type")
-		return
-
-	var created_records: Array[Dictionary] = []
-	var grid_size: Vector2i = runtime.get_grid_size()
-	for y in range(grid_size.y):
-		for x in range(grid_size.x):
-			var cell: Vector2i = Vector2i(x, y)
-			if not runtime.is_cell_walkable(cell):
-				continue
-
-			var record: Dictionary = _try_fill_cell(type_key, cell)
-			if not record.is_empty():
-				created_records.append(record)
-
-	if GameSession.is_multiplayer() and not created_records.is_empty():
-		NetworkManager.world.broadcast_world_spawns(created_records)
-
-	ConsoleOutput.print_console("Created %d %s instance(s) on available cells." % [
-		created_records.size(),
-		type_key,
-	], runtime)
-
-
 func _try_fill_cell(type_key: String, cell: Vector2i) -> Dictionary:
 	var spawn_id: String = _make_spawn_id(type_key)
 	var record: Dictionary = {
@@ -281,39 +196,6 @@ func _try_fill_cell(type_key: String, cell: Vector2i) -> Dictionary:
 		return {}
 
 	return record
-
-
-func _clear_authoritative(type_key: String, requester_peer_id: int) -> void:
-	if not type_key.is_empty() and not CATALOG.has(type_key):
-		_report_spawn_error("Unknown clear type: %s." % type_key, requester_peer_id, "invalid_clear_type")
-		return
-
-	var removal_records: Array[Dictionary] = []
-	for entity_variant in runtime.get_registered_entities():
-		var entity: Node = entity_variant as Node
-		if entity is NonPlayerEntity and _matches_catalog_type(entity, type_key):
-			var entity_removal: Dictionary = _remove_world_item(entity)
-			if not entity_removal.is_empty():
-				removal_records.append(entity_removal)
-
-	for object_variant in runtime.get_registered_objects():
-		var target_object: Node = object_variant as Node
-		if target_object is GridObject and _matches_catalog_type(target_object, type_key):
-			var object_removal: Dictionary = _remove_world_item(target_object)
-			if not object_removal.is_empty():
-				removal_records.append(object_removal)
-
-	if GameSession.is_multiplayer() and not removal_records.is_empty():
-		NetworkManager.world.broadcast_world_items_removed(
-			removal_records,
-			runtime.get_current_action_sequence_id()
-		)
-
-	var cleared_type: String = type_key if not type_key.is_empty() else "all world items"
-	ConsoleOutput.print_console("Removed %d %s instance(s)." % [
-		removal_records.size(),
-		cleared_type,
-	], runtime)
 
 
 func _matches_catalog_type(instance: Node, type_key: String) -> bool:
@@ -587,7 +469,7 @@ func _get_spawned_objects_root() -> Node2D:
 
 
 func _normalize_type_key(type_key: String) -> String:
-	return type_key.strip_edges().to_lower()
+	return WorldSpawnCatalog.normalize_type_key(type_key)
 
 
 func _can_use_debug_commands() -> bool:
@@ -614,125 +496,3 @@ func _report_spawn_error(message: String, requester_peer_id: int, reason_code: S
 		return
 
 	_print_spawn_error(message)
-
-
-func _connect_network_signals() -> void:
-	if not NetworkManager.world.world_spawn_requested.is_connected(_on_world_spawn_requested):
-		NetworkManager.world.world_spawn_requested.connect(_on_world_spawn_requested)
-
-	if not NetworkManager.world.world_spawn_received.is_connected(_on_world_spawn_received):
-		NetworkManager.world.world_spawn_received.connect(_on_world_spawn_received)
-
-	if not NetworkManager.world.world_spawns_received.is_connected(_on_world_spawns_received):
-		NetworkManager.world.world_spawns_received.connect(_on_world_spawns_received)
-
-	if not NetworkManager.world.world_fill_requested.is_connected(_on_world_fill_requested):
-		NetworkManager.world.world_fill_requested.connect(_on_world_fill_requested)
-
-	if not NetworkManager.world.world_clear_requested.is_connected(_on_world_clear_requested):
-		NetworkManager.world.world_clear_requested.connect(_on_world_clear_requested)
-
-	if not NetworkManager.world.world_items_removed_received.is_connected(_on_world_items_removed_received):
-		NetworkManager.world.world_items_removed_received.connect(_on_world_items_removed_received)
-
-	if not NetworkManager.world.world_spawn_failed_received.is_connected(_on_world_spawn_failed_received):
-		NetworkManager.world.world_spawn_failed_received.connect(_on_world_spawn_failed_received)
-
-
-func _disconnect_network_signals() -> void:
-	if NetworkManager.world.world_spawn_requested.is_connected(_on_world_spawn_requested):
-		NetworkManager.world.world_spawn_requested.disconnect(_on_world_spawn_requested)
-
-	if NetworkManager.world.world_spawn_received.is_connected(_on_world_spawn_received):
-		NetworkManager.world.world_spawn_received.disconnect(_on_world_spawn_received)
-
-	if NetworkManager.world.world_spawns_received.is_connected(_on_world_spawns_received):
-		NetworkManager.world.world_spawns_received.disconnect(_on_world_spawns_received)
-
-	if NetworkManager.world.world_fill_requested.is_connected(_on_world_fill_requested):
-		NetworkManager.world.world_fill_requested.disconnect(_on_world_fill_requested)
-
-	if NetworkManager.world.world_clear_requested.is_connected(_on_world_clear_requested):
-		NetworkManager.world.world_clear_requested.disconnect(_on_world_clear_requested)
-
-	if NetworkManager.world.world_items_removed_received.is_connected(_on_world_items_removed_received):
-		NetworkManager.world.world_items_removed_received.disconnect(_on_world_items_removed_received)
-
-	if NetworkManager.world.world_spawn_failed_received.is_connected(_on_world_spawn_failed_received):
-		NetworkManager.world.world_spawn_failed_received.disconnect(_on_world_spawn_failed_received)
-
-
-func _on_world_spawn_requested(type_key: String, cell: Vector2i, requester_peer_id: int) -> void:
-	if not GameSession.is_host() or not _can_use_debug_commands():
-		return
-
-	_try_create_authoritative(_normalize_type_key(type_key), cell, true, requester_peer_id)
-
-
-func _on_world_spawn_received(record: Dictionary) -> void:
-	if GameSession.is_host():
-		return
-
-	if _has_spawn_id(str(record.get("spawn_id", ""))):
-		return
-
-	var error: String = _spawn_from_record(record, false)
-	if not error.is_empty():
-		_print_spawn_error("Cannot apply network spawn: %s" % error)
-		return
-
-	_print_created(record)
-
-
-func _on_world_spawns_received(records: Array[Dictionary]) -> void:
-	if GameSession.is_host():
-		return
-
-	_apply_world_spawns(records, "network")
-
-
-func _on_world_fill_requested(type_key: String, requester_peer_id: int) -> void:
-	if not GameSession.is_host() or not _can_use_debug_commands():
-		return
-
-	_fill_authoritative(_normalize_type_key(type_key), requester_peer_id)
-
-
-func _on_world_clear_requested(type_key: String, requester_peer_id: int) -> void:
-	if not GameSession.is_host() or not _can_use_debug_commands():
-		return
-
-	_clear_authoritative(_normalize_type_key(type_key), requester_peer_id)
-
-
-func _on_world_items_removed_received(sequence_id: int, records: Array[Dictionary]) -> void:
-	if GameSession.is_host():
-		return
-	if sequence_id > 0 and runtime.get_current_action_sequence_id() != sequence_id:
-		var expected_sequence_id: int = runtime.get_expected_remote_action_sequence_id()
-		if sequence_id < expected_sequence_id:
-			return
-		if (
-			sequence_id - expected_sequence_id > NetworkProtocol.MAX_FUTURE_SEQUENCE_DISTANCE
-			or pending_remote_removals.size() >= NetworkProtocol.MAX_BUFFERED_SEQUENCES
-		):
-			runtime.action_stream.request_runtime_resync(WorldActionStream.REJECTION_SEQUENCE_GAP)
-			return
-		pending_remote_removals[sequence_id] = records.duplicate(true)
-		return
-	_apply_world_removals(records)
-
-
-func _on_stream_action_started(action: WorldActionRecord) -> void:
-	if action != null and pending_remote_removals.has(action.sequence_id):
-		var records: Array = pending_remote_removals[action.sequence_id]
-		pending_remote_removals.erase(action.sequence_id)
-		var typed_records: Array[Dictionary] = []
-		for record_value: Variant in records:
-			if record_value is Dictionary:
-				typed_records.append(record_value as Dictionary)
-		_apply_world_removals(typed_records)
-
-
-func _on_world_spawn_failed_received(reason_code: String) -> void:
-	_print_spawn_error(str(SPAWN_FAILURE_MESSAGES.get(reason_code, "Spawn operation failed.")))

@@ -22,7 +22,7 @@ func apply(
 		var spawn_id: String = str(record.get("spawn_id", ""))
 		var cell_value: Variant = record.get("cell")
 		if (
-			not WorldSpawner.CATALOG.has(type_key)
+			not WorldSpawnCatalog.DEFINITIONS.has(type_key)
 			or not NetworkProtocol.is_valid_identifier(spawn_id)
 			or seen_spawn_ids.has(spawn_id)
 			or not (cell_value is Vector2i)
@@ -33,7 +33,7 @@ func apply(
 	for record: Dictionary in removal_records:
 		var kind: String = str(record.get("kind", ""))
 		var removed_id: String = str(record.get("id", ""))
-		if not NetworkProtocol.is_valid_identifier(removed_id) or kind not in [WorldSpawner.SPAWN_KIND_ENTITY, WorldSpawner.SPAWN_KIND_OBJECT] or seen_spawn_ids.has(removed_id):
+		if not NetworkProtocol.is_valid_identifier(removed_id) or kind not in [WorldSpawnCatalog.KIND_ENTITY, WorldSpawnCatalog.KIND_OBJECT] or seen_spawn_ids.has(removed_id):
 			return false
 
 	var effective_removals: Array[Dictionary] = removal_records.duplicate(true)
@@ -42,9 +42,9 @@ func apply(
 		if seen_spawn_ids.has(cached_spawn_id):
 			continue
 		var cached_type_key: String = spawner.normalize_type_key(str(cached_record.get("type_key", "")))
-		if not WorldSpawner.CATALOG.has(cached_type_key):
+		if not WorldSpawnCatalog.DEFINITIONS.has(cached_type_key):
 			continue
-		var cached_definition: Dictionary = WorldSpawner.CATALOG[cached_type_key]
+		var cached_definition: Dictionary = WorldSpawnCatalog.DEFINITIONS[cached_type_key]
 		effective_removals.append({
 			"kind": str(cached_definition.get("kind", "")),
 			"id": cached_spawn_id,
@@ -57,7 +57,7 @@ func apply(
 		if spawner.has_spawn_id(spawn_id):
 			continue
 		var type_key: String = spawner.normalize_type_key(str(record.get("type_key", "")))
-		var definition: Dictionary = WorldSpawner.CATALOG[type_key]
+		var definition: Dictionary = WorldSpawnCatalog.DEFINITIONS[type_key]
 		var scene: PackedScene = definition.get("scene") as PackedScene
 		if scene == null:
 			_free_staged(staged_records)

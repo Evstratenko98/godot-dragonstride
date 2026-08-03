@@ -319,8 +319,9 @@ func _on_pause_menu_open_state_changed(is_open: bool) -> void:
 	_apply_modal_input_block()
 
 
-func _on_local_squad_member_pressed(_character: PlayerCharacter) -> void:
-	character_action_menu.close()
+func _on_local_squad_member_pressed(character: PlayerCharacter) -> void:
+	if runtime != null and runtime.get_selected_local_character() == character:
+		character_action_menu.open_for_character(character)
 
 
 func _set_loot_inventory_layer(is_open: bool) -> void:

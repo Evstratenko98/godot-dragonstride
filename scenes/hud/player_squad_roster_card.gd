@@ -89,10 +89,11 @@ func _refresh_member_label(label: Label, member: PlayerCharacter) -> void:
 	if is_active and runtime != null and runtime.turn_manager != null:
 		maximum_steps = runtime.turn_manager.get_max_steps_per_member()
 		steps_text = str(runtime.turn_manager.get_steps_left(member.entity_id))
-	label.text = "%s  %d/%d  Шаги: %s/%d" % [
+	label.text = "%s  %d/%d  Урон: %d  Шаги: %s/%d" % [
 		member.get_display_name(),
 		member.health,
 		member.max_health,
+		member.damage,
 		steps_text,
 		maximum_steps,
 	]

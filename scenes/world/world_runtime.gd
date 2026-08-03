@@ -39,18 +39,20 @@ var action_router: WorldActionRouter = WorldActionRouter.new()
 var state_snapshot: WorldStateSnapshot = WorldStateSnapshot.new()
 var match_startup: WorldMatchStartup = WorldMatchStartup.new()
 var composition: WorldRuntimeComposition = WorldRuntimeComposition.new()
+var event_coordinator: WorldRuntimeEventCoordinator = WorldRuntimeEventCoordinator.new()
 
 
 func configure_for_level(new_level: WorldLevel) -> void:
+	event_coordinator.configure(self)
 	level = new_level
 	if level != null:
 		level.configure_runtime(self)
 	_bind_services()
 	_configure_services()
-	if players_service != null and not players_service.player_connection_changed.is_connected(_on_player_connection_changed):
-		players_service.player_connection_changed.connect(_on_player_connection_changed)
-	if players_service != null and not players_service.selected_local_character_changed.is_connected(_on_selected_local_character_changed):
-		players_service.selected_local_character_changed.connect(_on_selected_local_character_changed)
+	if players_service != null and not players_service.player_connection_changed.is_connected(event_coordinator.on_player_connection_changed):
+		players_service.player_connection_changed.connect(event_coordinator.on_player_connection_changed)
+	if players_service != null and not players_service.selected_local_character_changed.is_connected(event_coordinator.on_selected_local_character_changed):
+		players_service.selected_local_character_changed.connect(event_coordinator.on_selected_local_character_changed)
 
 
 func is_configured_for(target_level: WorldLevel) -> bool:
@@ -80,19 +82,19 @@ func start_match_runtime() -> String:
 func connect_signals() -> void:
 	if network != null:
 		network.connect_signals()
-	if action_stream != null and not action_stream.runtime_sync_failed.is_connected(_on_action_stream_sync_failed):
-		action_stream.runtime_sync_failed.connect(_on_action_stream_sync_failed)
-	if action_stream != null and not action_stream.sync_state_changed.is_connected(_on_action_stream_sync_state_changed):
-		action_stream.sync_state_changed.connect(_on_action_stream_sync_state_changed)
+	if action_stream != null and not action_stream.runtime_sync_failed.is_connected(event_coordinator.on_action_stream_sync_failed):
+		action_stream.runtime_sync_failed.connect(event_coordinator.on_action_stream_sync_failed)
+	if action_stream != null and not action_stream.sync_state_changed.is_connected(event_coordinator.on_action_stream_sync_state_changed):
+		action_stream.sync_state_changed.connect(event_coordinator.on_action_stream_sync_state_changed)
 
 
 func disconnect_signals() -> void:
 	if network != null:
 		network.disconnect_signals()
-	if action_stream != null and action_stream.runtime_sync_failed.is_connected(_on_action_stream_sync_failed):
-		action_stream.runtime_sync_failed.disconnect(_on_action_stream_sync_failed)
-	if action_stream != null and action_stream.sync_state_changed.is_connected(_on_action_stream_sync_state_changed):
-		action_stream.sync_state_changed.disconnect(_on_action_stream_sync_state_changed)
+	if action_stream != null and action_stream.runtime_sync_failed.is_connected(event_coordinator.on_action_stream_sync_failed):
+		action_stream.runtime_sync_failed.disconnect(event_coordinator.on_action_stream_sync_failed)
+	if action_stream != null and action_stream.sync_state_changed.is_connected(event_coordinator.on_action_stream_sync_state_changed):
+		action_stream.sync_state_changed.disconnect(event_coordinator.on_action_stream_sync_state_changed)
 
 
 func notify_local_action_rejected(reason_code: String) -> void:
@@ -717,10 +719,10 @@ func print_console(text: String) -> void:
 
 func _bind_services() -> void:
 	composition.bind_services(self, level)
-	if registry != null and not registry.occupancy_changed.is_connected(_on_registry_occupancy_changed):
-		registry.occupancy_changed.connect(_on_registry_occupancy_changed)
-	if network != null and not network.match_end_requested.is_connected(_on_network_match_end_requested):
-		network.match_end_requested.connect(_on_network_match_end_requested)
+	if registry != null and not registry.occupancy_changed.is_connected(event_coordinator.on_registry_occupancy_changed):
+		registry.occupancy_changed.connect(event_coordinator.on_registry_occupancy_changed)
+	if network != null and not network.match_end_requested.is_connected(event_coordinator.on_network_match_end_requested):
+		network.match_end_requested.connect(event_coordinator.on_network_match_end_requested)
 
 
 func _configure_services() -> void:
@@ -728,69 +730,8 @@ func _configure_services() -> void:
 
 
 func register_level_entities() -> void:
-	if level == null:
-		return
-
-	var world_entities_root: Node = level.get_world_entities_root()
-	if world_entities_root == null:
-		return
-
-	_register_world_entity_children(world_entities_root)
-
-
-func _register_world_entity_children(parent: Node) -> void:
-	for child in parent.get_children():
-		if child.get("entity_type") != null and int(child.get("entity_type")) != Entity.EntityType.CHARACTER:
-			_ensure_world_entity_id(child)
-			register_entity(child)
-
-		_register_world_entity_children(child)
-
-
-func _ensure_world_entity_id(entity: Node) -> void:
-	if entity.get("entity_id") == null:
-		return
-
-	if not str(entity.get("entity_id")).is_empty():
-		return
-
-	entity.set("entity_id", entity.name)
+	event_coordinator.register_level_entities()
 
 
 func _get_grid_service() -> WorldGrid:
 	return grid
-
-
-func _on_network_match_end_requested() -> void:
-	match_end_requested.emit()
-
-
-func _on_action_stream_sync_failed(reason_code: String) -> void:
-	runtime_sync_failed.emit(reason_code)
-
-
-func _on_action_stream_sync_state_changed(is_synchronizing: bool) -> void:
-	for player: PlayerCharacter in get_local_squad_members():
-		player.can_receive_input = not is_synchronizing and GameSession.has_committed_match()
-
-
-func _on_selected_local_character_changed(
-	_previous_character: PlayerCharacter,
-	selected_character: PlayerCharacter
-) -> void:
-	selected_local_character_changed.emit(selected_character)
-
-
-func _on_player_connection_changed(steam_id: int, is_connected: bool) -> void:
-	if is_connected or not GameSession.is_host():
-		return
-	if action_stream != null:
-		action_stream.cancel_actions_for_steam_id(steam_id)
-	if action_stream != null:
-		action_stream.prune_disconnected_snapshot_peers()
-	if turn_manager != null:
-		turn_manager.handle_player_disconnected(steam_id)
-
-
-func _on_registry_occupancy_changed() -> void:
-	world_occupancy_changed.emit()

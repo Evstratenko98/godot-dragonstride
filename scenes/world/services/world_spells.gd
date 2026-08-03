@@ -28,30 +28,28 @@ var usage_ledger: WorldSpellUsageLedger = WorldSpellUsageLedger.new()
 var active_casts_by_entity_id: Dictionary[String, String] = {}
 var active_cast_target_cells_by_entity_id: Dictionary[String, Vector2i] = {}
 var impacted_cast_ids: Dictionary[String, bool] = {}
-var pending_local_spell_request_ids: Dictionary[int, int] = {}
+var signal_bridge: WorldSpellSignalBridge = WorldSpellSignalBridge.new()
 
 
 func _ready() -> void:
-	_connect_network_signals()
+	signal_bridge.configure(self)
+	signal_bridge.connect_network_signals()
 	if not GameSession.session_cleared.is_connected(_on_session_cleared):
 		GameSession.session_cleared.connect(_on_session_cleared)
 
 
 func _exit_tree() -> void:
-	_disconnect_action_stream_signals()
-	_disconnect_turn_signals()
-	_disconnect_network_signals()
+	signal_bridge.disconnect_signals()
 	if GameSession.session_cleared.is_connected(_on_session_cleared):
 		GameSession.session_cleared.disconnect(_on_session_cleared)
 
 
 func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void:
-	_disconnect_action_stream_signals()
-	_disconnect_turn_signals()
+	signal_bridge.disconnect_signals()
 	runtime = new_runtime
 	level = new_level
-	_connect_turn_signals()
-	_connect_action_stream_signals()
+	signal_bridge.connect_network_signals()
+	signal_bridge.connect_runtime_signals()
 
 
 func _on_session_cleared() -> void:
@@ -61,7 +59,7 @@ func _on_session_cleared() -> void:
 	active_casts_by_entity_id.clear()
 	active_cast_target_cells_by_entity_id.clear()
 	impacted_cast_ids.clear()
-	pending_local_spell_request_ids.clear()
+	signal_bridge.clear()
 
 
 func toggle_spell_targeting(player: PlayerCharacter, spell_slot_index: int) -> bool:
@@ -127,7 +125,7 @@ func request_selected_spell_cast(player: PlayerCharacter, target_cell: Vector2i)
 
 	var request_id: int = runtime.create_action_request_id()
 	if GameSession.is_multiplayer():
-		pending_local_spell_request_ids[request_id] = 0
+		signal_bridge.track_local_request(request_id)
 		NetworkManager.spells.request_spell_cast(player.entity_id, spell_slot_index, target_cell, GameSession.get_match_id(), runtime.get_turn_revision(), request_id)
 	else:
 		runtime.enqueue_player_action(
@@ -440,50 +438,6 @@ func _print_rejection(reason_code: String) -> void:
 	ConsoleOutput.print_console(message, runtime)
 
 
-func _on_spell_cast_requested(
-	actor_entity_id: String,
-	spell_slot_index: int,
-	target_cell: Vector2i,
-	match_id: String,
-	turn_revision: int,
-	request_id: int,
-	requester_peer_id: int
-) -> void:
-	if not GameSession.is_host():
-		return
-
-	var player: PlayerCharacter = _get_requesting_player(requester_peer_id, actor_entity_id)
-	if player == null:
-		return
-	runtime.enqueue_player_action(
-		WorldActionRecord.ActionType.SPELL_CAST,
-		player,
-		{
-			"spell_slot_index": spell_slot_index,
-			"target_cell": target_cell,
-			"target_kind": "cell",
-		},
-		request_id,
-		requester_peer_id,
-		turn_revision,
-		match_id
-	)
-
-
-func _on_player_turn_started(_player_id: String) -> void:
-	_clear_targeting()
-
-
-func _on_round_started(_round_number: int) -> void:
-	usage_ledger.clear()
-	spell_usage_changed.emit()
-
-
-func _on_turn_mode_changed(_is_enabled: bool) -> void:
-	usage_ledger.clear()
-	spell_usage_changed.emit()
-
-
 func _clear_targeting() -> void:
 	if selected_spell_slot_index < 0:
 		return
@@ -491,108 +445,6 @@ func _clear_targeting() -> void:
 	selected_player_entity_id = ""
 	selected_spell_slot_index = -1
 	targeting_changed.emit(false, -1)
-
-
-func _connect_turn_signals() -> void:
-	if runtime == null or runtime.turn_manager == null:
-		return
-	if not runtime.turn_manager.player_turn_started.is_connected(_on_player_turn_started):
-		runtime.turn_manager.player_turn_started.connect(_on_player_turn_started)
-	if not runtime.turn_manager.round_started.is_connected(_on_round_started):
-		runtime.turn_manager.round_started.connect(_on_round_started)
-	if not runtime.turn_manager.turn_mode_changed.is_connected(_on_turn_mode_changed):
-		runtime.turn_manager.turn_mode_changed.connect(_on_turn_mode_changed)
-
-
-func _disconnect_turn_signals() -> void:
-	if runtime == null or runtime.turn_manager == null:
-		return
-	if runtime.turn_manager.player_turn_started.is_connected(_on_player_turn_started):
-		runtime.turn_manager.player_turn_started.disconnect(_on_player_turn_started)
-	if runtime.turn_manager.round_started.is_connected(_on_round_started):
-		runtime.turn_manager.round_started.disconnect(_on_round_started)
-	if runtime.turn_manager.turn_mode_changed.is_connected(_on_turn_mode_changed):
-		runtime.turn_manager.turn_mode_changed.disconnect(_on_turn_mode_changed)
-
-
-func _connect_network_signals() -> void:
-	if not NetworkManager.spells.spell_cast_requested.is_connected(_on_spell_cast_requested):
-		NetworkManager.spells.spell_cast_requested.connect(_on_spell_cast_requested)
-	if not NetworkManager.spells.spell_action_payload_received.is_connected(_on_spell_action_payload_received):
-		NetworkManager.spells.spell_action_payload_received.connect(_on_spell_action_payload_received)
-	if not NetworkManager.actions.action_accepted.is_connected(_on_action_accepted):
-		NetworkManager.actions.action_accepted.connect(_on_action_accepted)
-	if not NetworkManager.actions.action_rejected.is_connected(_on_action_rejected):
-		NetworkManager.actions.action_rejected.connect(_on_action_rejected)
-
-
-func _disconnect_network_signals() -> void:
-	if NetworkManager.spells.spell_cast_requested.is_connected(_on_spell_cast_requested):
-		NetworkManager.spells.spell_cast_requested.disconnect(_on_spell_cast_requested)
-	if NetworkManager.spells.spell_action_payload_received.is_connected(_on_spell_action_payload_received):
-		NetworkManager.spells.spell_action_payload_received.disconnect(_on_spell_action_payload_received)
-	if NetworkManager.actions.action_accepted.is_connected(_on_action_accepted):
-		NetworkManager.actions.action_accepted.disconnect(_on_action_accepted)
-	if NetworkManager.actions.action_rejected.is_connected(_on_action_rejected):
-		NetworkManager.actions.action_rejected.disconnect(_on_action_rejected)
-
-
-func _on_spell_action_payload_received(match_id: String, sequence_id: int, payload: Dictionary) -> void:
-	if not GameSession.is_host() and runtime != null and match_id == GameSession.get_match_id():
-		runtime.receive_action_profile_payload(sequence_id, payload)
-
-
-func _connect_action_stream_signals() -> void:
-	if runtime == null or runtime.action_stream == null:
-		return
-	if not runtime.action_stream.action_completed.is_connected(_on_stream_action_completed):
-		runtime.action_stream.action_completed.connect(_on_stream_action_completed)
-	if not runtime.action_stream.action_cancelled.is_connected(_on_stream_action_cancelled):
-		runtime.action_stream.action_cancelled.connect(_on_stream_action_cancelled)
-	if not runtime.action_stream.remote_snapshot_committed.is_connected(_on_remote_snapshot_committed):
-		runtime.action_stream.remote_snapshot_committed.connect(_on_remote_snapshot_committed)
-
-
-func _disconnect_action_stream_signals() -> void:
-	if runtime == null or runtime.action_stream == null:
-		return
-	if runtime.action_stream.action_completed.is_connected(_on_stream_action_completed):
-		runtime.action_stream.action_completed.disconnect(_on_stream_action_completed)
-	if runtime.action_stream.action_cancelled.is_connected(_on_stream_action_cancelled):
-		runtime.action_stream.action_cancelled.disconnect(_on_stream_action_cancelled)
-	if runtime.action_stream.remote_snapshot_committed.is_connected(_on_remote_snapshot_committed):
-		runtime.action_stream.remote_snapshot_committed.disconnect(_on_remote_snapshot_committed)
-
-
-func _on_stream_action_completed(action: WorldActionRecord) -> void:
-	if action != null and action.action_type == WorldActionRecord.ActionType.SPELL_CAST:
-		pending_local_spell_request_ids.erase(action.request_id)
-
-
-func _on_stream_action_cancelled(action: WorldActionRecord, reason_code: String) -> void:
-	if action == null or not pending_local_spell_request_ids.has(action.request_id):
-		return
-	pending_local_spell_request_ids.erase(action.request_id)
-	_print_rejection(reason_code)
-
-
-func _on_action_rejected(request_id: int, reason_code: String) -> void:
-	if not pending_local_spell_request_ids.has(request_id):
-		return
-	pending_local_spell_request_ids.erase(request_id)
-	_print_rejection(reason_code)
-
-
-func _on_action_accepted(request_id: int, sequence_id: int) -> void:
-	if pending_local_spell_request_ids.has(request_id):
-		pending_local_spell_request_ids[request_id] = sequence_id
-
-
-func _on_remote_snapshot_committed(boundary_sequence_id: int) -> void:
-	for request_id: int in pending_local_spell_request_ids.keys():
-		var sequence_id: int = pending_local_spell_request_ids[request_id]
-		if sequence_id > 0 and sequence_id < boundary_sequence_id:
-			pending_local_spell_request_ids.erase(request_id)
 
 
 func _is_authority() -> bool:

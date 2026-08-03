@@ -99,12 +99,7 @@ func _submit_loot_claim(
 		requester_peer_id == 0
 		or not NetworkProtocol.is_valid_identifier(actor_entity_id)
 		or not NetworkProtocol.is_valid_identifier(chest_id)
-		or inventory_kind not in [
-			CharacterInventory.INVENTORY_KIND_ITEM,
-			CharacterInventory.INVENTORY_KIND_SPELL,
-		]
-		or target_slot_index < 0
-		or target_slot_index >= CharacterInventory.ITEM_SLOT_COUNT
+		or not CharacterInventory.is_valid_slot_index_for_kind(inventory_kind, target_slot_index)
 		or expected_inventory_revision < 0
 		or turn_revision < 0
 		or not _is_valid_intent(match_id, request_id, {

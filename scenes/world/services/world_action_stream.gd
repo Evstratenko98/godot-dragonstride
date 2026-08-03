@@ -11,9 +11,6 @@ signal remote_snapshot_committed(boundary_sequence_id: int)
 
 const MAX_QUEUED_ACTIONS := 64
 const MAX_INTERNAL_QUEUED_ACTIONS := 256
-const MAX_PROCESSED_REQUESTS_PER_PLAYER := 256
-const INTENT_RATE_PER_SECOND := 8.0
-const INTENT_RATE_BURST := 12.0
 const REJECTION_QUEUE_FULL := "queue_full"
 const REJECTION_DUPLICATE_REQUEST := "duplicate_request"
 const REJECTION_INVALID_ACTION := "invalid_action"
@@ -37,10 +34,6 @@ const TERMINAL_TIMEOUT_MSEC := 5000
 var runtime: WorldRuntime = null
 var level: WorldLevel = null
 var queued_actions: Array[WorldActionRecord] = []
-var processed_request_keys: Dictionary[String, bool] = {}
-var processed_request_order_by_steam_id: Dictionary[int, Array] = {}
-var intent_tokens_by_steam_id: Dictionary[int, float] = {}
-var intent_refill_msec_by_steam_id: Dictionary[int, int] = {}
 var completed_remote_sequences: Dictionary[int, bool] = {}
 var cancelled_remote_sequences: Dictionary[int, String] = {}
 var remote_action_buffer: Dictionary[int, WorldActionRecord] = {}
@@ -66,6 +59,7 @@ var is_initial_sync: bool = false
 var has_sync_failed: bool = false
 var last_sync_failure_reason: String = ""
 var diagnostics: WorldActionStreamDiagnostics = WorldActionStreamDiagnostics.new()
+var intent_gate: WorldActionIntentGate = WorldActionIntentGate.new()
 
 
 func _ready() -> void:
@@ -262,11 +256,10 @@ func enqueue_external_action(action: WorldActionRecord, requester_peer_id: int) 
 	if not schema_rejection.is_empty():
 		_reject_request(requester_peer_id, action.request_id, schema_rejection)
 		return false
-	var request_key: String = _make_request_key(action)
-	if processed_request_keys.has(request_key):
+	if intent_gate.has_processed(action):
 		_reject_request(requester_peer_id, action.request_id, REJECTION_DUPLICATE_REQUEST)
 		return false
-	if not _consume_intent_token(action.requester_steam_id):
+	if not intent_gate.consume_rate_limit_token(action.requester_steam_id):
 		_reject_request(requester_peer_id, action.request_id, REJECTION_RATE_LIMITED)
 		return false
 	var acceptance_rejection: String = runtime.get_action_acceptance_rejection_reason(action)
@@ -280,7 +273,7 @@ func enqueue_external_action(action: WorldActionRecord, requester_peer_id: int) 
 		_reject_request(requester_peer_id, action.request_id, REJECTION_ACTOR_BUSY)
 		return false
 	if (
-		_is_external_player_action(action.action_type)
+		WorldActionCatalog.is_external(action.action_type)
 		and (
 			runtime.is_world_turn_active()
 			or _has_queued_action_type(WorldActionRecord.ActionType.WORLD_TURN_STARTED)
@@ -300,7 +293,7 @@ func enqueue_external_action(action: WorldActionRecord, requester_peer_id: int) 
 	if not reservation_rejection.is_empty():
 		_reject_request(requester_peer_id, action.request_id, reservation_rejection)
 		return false
-	_record_processed_request(action, request_key)
+	intent_gate.record_processed(action)
 	_assign_sequence(action)
 	queued_actions.append(action)
 	_accept_request(requester_peer_id, action.request_id, action.sequence_id)
@@ -420,7 +413,7 @@ func _process_remote_queue() -> void:
 	while remote_action_buffer.has(next_remote_sequence_id):
 		var action: WorldActionRecord = remote_action_buffer[next_remote_sequence_id]
 		if (
-			_requires_profile_payload(action.action_type)
+			WorldActionCatalog.requires_profile_payload(action.action_type)
 			and not cancelled_remote_sequences.has(action.sequence_id)
 			and not remote_payload_buffer.has(action.sequence_id)
 		):
@@ -492,10 +485,6 @@ func _assign_sequence(action: WorldActionRecord) -> void:
 	next_sequence_id += 1
 
 
-func _make_request_key(action: WorldActionRecord) -> String:
-	return "%s:%d:%d" % [action.match_id, action.requester_steam_id, action.request_id]
-
-
 func _has_pending_external_action_for_actor(actor_entity_id: String) -> bool:
 	if actor_entity_id.is_empty():
 		return false
@@ -523,35 +512,8 @@ func _get_queued_internal_action_count() -> int:
 	return action_count
 
 
-func _consume_intent_token(steam_id: int) -> bool:
-	var now_msec: int = Time.get_ticks_msec()
-	var previous_msec: int = int(intent_refill_msec_by_steam_id.get(steam_id, now_msec))
-	var elapsed_seconds: float = float(maxi(now_msec - previous_msec, 0)) / 1000.0
-	var available_tokens: float = float(intent_tokens_by_steam_id.get(steam_id, INTENT_RATE_BURST))
-	available_tokens = minf(INTENT_RATE_BURST, available_tokens + elapsed_seconds * INTENT_RATE_PER_SECOND)
-	intent_refill_msec_by_steam_id[steam_id] = now_msec
-	if available_tokens < 1.0:
-		intent_tokens_by_steam_id[steam_id] = available_tokens
-		return false
-	intent_tokens_by_steam_id[steam_id] = available_tokens - 1.0
-	return true
-
-
-func _record_processed_request(action: WorldActionRecord, request_key: String) -> void:
-	processed_request_keys[request_key] = true
-	var request_order: Array = processed_request_order_by_steam_id.get(action.requester_steam_id, []) as Array
-	request_order.append(request_key)
-	while request_order.size() > MAX_PROCESSED_REQUESTS_PER_PLAYER:
-		var expired_key: String = str(request_order.pop_front())
-		processed_request_keys.erase(expired_key)
-	processed_request_order_by_steam_id[action.requester_steam_id] = request_order
-
-
 func _on_session_cleared() -> void:
-	processed_request_keys.clear()
-	processed_request_order_by_steam_id.clear()
-	intent_tokens_by_steam_id.clear()
-	intent_refill_msec_by_steam_id.clear()
+	intent_gate.clear()
 	_clear_remote_state()
 	pending_snapshot_peer_ids.clear()
 	diagnostics.reset()
@@ -749,34 +711,11 @@ func _on_stream_snapshot_requested(
 		)
 
 
-func _requires_profile_payload(action_type: WorldActionRecord.ActionType) -> bool:
-	return action_type in [
-		WorldActionRecord.ActionType.MOVE_PATH,
-		WorldActionRecord.ActionType.ATTACK,
-		WorldActionRecord.ActionType.INTERACTION,
-		WorldActionRecord.ActionType.SPELL_CAST,
-		WorldActionRecord.ActionType.INVENTORY_ADD,
-		WorldActionRecord.ActionType.INVENTORY_MOVE,
-		WorldActionRecord.ActionType.INVENTORY_DELETE,
-		WorldActionRecord.ActionType.INVENTORY_USE,
-	]
-
-
 func _has_required_auxiliary_profiles(action: WorldActionRecord) -> bool:
-	var requires_turn_profile: bool = action.action_type in [
-		WorldActionRecord.ActionType.END_PLAYER_TURN,
-		WorldActionRecord.ActionType.PLAYER_TURN_STARTED,
-		WorldActionRecord.ActionType.PLAYER_TURN_SKIPPED,
-		WorldActionRecord.ActionType.WORLD_TURN_STARTED,
-		WorldActionRecord.ActionType.WORLD_TURN_ENDED,
-		WorldActionRecord.ActionType.SET_TURN_MODE,
-	]
-	if runtime.is_turn_mode_enabled() and action.action_type in [
-		WorldActionRecord.ActionType.MOVE_PATH,
-		WorldActionRecord.ActionType.ATTACK,
-		WorldActionRecord.ActionType.INTERACTION,
-	]:
-		requires_turn_profile = true
+	var requires_turn_profile: bool = WorldActionCatalog.requires_turn_profile(
+		action.action_type,
+		runtime.is_turn_mode_enabled()
+	)
 	if not requires_turn_profile:
 		return true
 	var profiles: Dictionary = remote_auxiliary_profiles.get(action.sequence_id, {}) as Dictionary
@@ -939,21 +878,6 @@ func _clear_remote_state() -> void:
 
 func _increment_diagnostic(counter_name: String) -> void:
 	diagnostics.increment(counter_name)
-
-
-func _is_external_player_action(action_type: WorldActionRecord.ActionType) -> bool:
-	return action_type in [
-		WorldActionRecord.ActionType.MOVE_PATH,
-		WorldActionRecord.ActionType.ATTACK,
-		WorldActionRecord.ActionType.INTERACTION,
-		WorldActionRecord.ActionType.SPELL_CAST,
-		WorldActionRecord.ActionType.INVENTORY_ADD,
-		WorldActionRecord.ActionType.INVENTORY_MOVE,
-		WorldActionRecord.ActionType.INVENTORY_DELETE,
-		WorldActionRecord.ActionType.INVENTORY_USE,
-		WorldActionRecord.ActionType.CHARACTER_KILL,
-		WorldActionRecord.ActionType.END_PLAYER_TURN,
-	]
 
 
 func _connect_network_signals() -> void:

@@ -1,3 +1,4 @@
+class_name Warrior
 extends "res://scenes/entities/non_player_entity/non_player_entity.gd"
 
 const WARRIOR_MAX_HEALTH := 50
@@ -12,22 +13,21 @@ const REASON_TARGET_MISSING := "target missing"
 const REASON_TARGET_UNREACHABLE := "target unreachable"
 const MAX_STEPS_PER_TURN := 3
 const MAX_ATTACKS_PER_TURN := 1
-const MAX_REMOTE_ACTIONS := 8
-var incoming_guard_token: int = 0
 var ai_state: String = STATE_PASSIVE
 var target_entity_id: String = ""
 var attacks_used_this_turn: int = 0
 var is_running_behavior_turn: bool = false
 var ignored_defeated_character_ids: Dictionary[String, bool] = {}
 var pending_behavior_attack_target_id: String = ""
-var remote_action_queue: Array[Dictionary] = []
-var is_processing_remote_actions: bool = false
-var is_replaying_remote_action: bool = false
+var remote_presentation: WarriorRemotePresentation = WarriorRemotePresentation.new()
+var ai_logger: WarriorAiLogger = WarriorAiLogger.new()
 
 
 func _ready() -> void:
 	_apply_base_stats()
 	super._ready()
+	remote_presentation.configure(self)
+	ai_logger.configure(self)
 	entity_type = EntityType.ENEMY
 	if entity_name.is_empty():
 		entity_name = "Warrior"
@@ -209,113 +209,15 @@ func apply_remote_ai_state(new_state: String, new_target_entity_id: String, reas
 
 
 func play_remote_move(from_cell: Vector2i, target_cell: Vector2i) -> void:
-	if remote_action_queue.size() >= MAX_REMOTE_ACTIONS:
-		if runtime != null and runtime.action_stream != null:
-			runtime.action_stream.request_runtime_resync(WorldActionStream.REJECTION_SEQUENCE_GAP)
-		return
-	remote_action_queue.append({
-		"type": "move",
-		"from_cell": from_cell,
-		"target_cell": target_cell,
-	})
-	_process_remote_action_queue()
+	remote_presentation.enqueue_move(from_cell, target_cell)
 
 
 func play_remote_attack(target_cell: Vector2i, should_apply: bool = true) -> void:
-	if remote_action_queue.size() >= MAX_REMOTE_ACTIONS:
-		if runtime != null and runtime.action_stream != null:
-			runtime.action_stream.request_runtime_resync(WorldActionStream.REJECTION_SEQUENCE_GAP)
-		return
-	remote_action_queue.append({
-		"type": "attack",
-		"target_cell": target_cell,
-		"should_apply": should_apply,
-	})
-	_process_remote_action_queue()
+	remote_presentation.enqueue_attack(target_cell, should_apply)
 
 
 func play_incoming_attack_guard(duration: float) -> void:
-	if duration <= 0.0 or is_moving or is_attacking or health <= 0 or not is_inside_tree():
-		return
-
-	var scene_tree: SceneTree = get_tree()
-	incoming_guard_token += 1
-	var guard_token: int = incoming_guard_token
-	if view != null:
-		view.play_guard()
-
-	await scene_tree.create_timer(duration).timeout
-	if not is_inside_tree():
-		return
-
-	if incoming_guard_token != guard_token:
-		return
-
-	if health <= 0 or is_moving or is_attacking:
-		return
-
-	if view != null:
-		view.play_idle()
-
-
-func _process_remote_action_queue() -> void:
-	if is_processing_remote_actions or not is_inside_tree():
-		return
-
-	var scene_tree: SceneTree = get_tree()
-	is_processing_remote_actions = true
-	while not remote_action_queue.is_empty():
-		if is_moving or is_attacking:
-			await scene_tree.process_frame
-			if not is_inside_tree():
-				return
-			continue
-
-		var action: Dictionary = remote_action_queue.pop_front()
-		is_replaying_remote_action = true
-		if str(action.get("type", "")) == "move":
-			await _play_remote_move_now(action)
-		elif str(action.get("type", "")) == "attack":
-			await _play_remote_attack_now(action)
-		is_replaying_remote_action = false
-
-	is_processing_remote_actions = false
-
-
-func _play_remote_move_now(action: Dictionary) -> void:
-	if runtime == null:
-		runtime = _find_runtime()
-
-	if runtime == null:
-		return
-
-	var from_cell: Vector2i = action.get("from_cell", current_cell)
-	var target_cell: Vector2i = action.get("target_cell", current_cell)
-	current_cell = from_cell
-	global_position = runtime.cell_to_world(from_cell)
-	if not runtime.reserve_entity_cell(self, from_cell, target_cell):
-		return
-
-	_move_to_cell(target_cell, false)
-	await _wait_until_ready_for_next_action()
-
-
-func _play_remote_attack_now(action: Dictionary) -> void:
-	if runtime == null:
-		runtime = _find_runtime()
-
-	if runtime == null:
-		return
-
-	current_cell = runtime.world_to_cell(global_position)
-	var target_cell: Vector2i = action.get("target_cell", current_cell)
-	var should_apply: bool = bool(action.get("should_apply", false))
-	request_attack_cell(
-		target_cell,
-		should_apply,
-		false
-	)
-	await _wait_until_ready_for_next_action()
+	remote_presentation.play_guard(duration)
 
 
 func _attack_cell(target_cell: Vector2i, direction: Vector2i, should_apply: bool, should_broadcast: bool) -> void:
@@ -338,7 +240,7 @@ func _attack(
 ) -> void:
 	is_attacking = true
 	var attack_generation: int = get_action_generation()
-	incoming_guard_token += 1
+	remote_presentation.cancel_guard()
 	attack_target_cell = target_cell
 	var was_action_broadcast: bool = (
 		should_apply
@@ -405,7 +307,7 @@ func cancel_behavior() -> void:
 
 
 func _on_move_started(target_cell: Vector2i) -> void:
-	incoming_guard_token += 1
+	remote_presentation.cancel_guard()
 	super._on_move_started(target_cell)
 
 
@@ -413,7 +315,7 @@ func _on_move_stopped() -> void:
 	if view != null:
 		view.play_idle()
 
-	if is_running_behavior_turn or is_replaying_remote_action:
+	if is_running_behavior_turn or remote_presentation.is_replaying_action:
 		return
 
 	_finish_behavior()
@@ -503,7 +405,7 @@ func _set_ai_state(new_state: String, new_target_entity_id: String, reason: Stri
 	var previous_target_entity_id: String = target_entity_id
 	ai_state = new_state
 	target_entity_id = new_target_entity_id
-	_print_ai_state_log(previous_state, previous_target_entity_id, reason)
+	ai_logger.print_state_change(previous_state, previous_target_entity_id, reason)
 
 	if (
 		should_broadcast
@@ -513,49 +415,6 @@ func _set_ai_state(new_state: String, new_target_entity_id: String, reason: Stri
 		and runtime != null
 	):
 		runtime.broadcast_entity_ai_state(entity_id, ai_state, target_entity_id, reason)
-
-
-func _print_ai_state_log(previous_state: String, previous_target_entity_id: String, reason: String) -> void:
-	if runtime == null:
-		return
-
-	if previous_state != STATE_ACTIVE and ai_state == STATE_ACTIVE:
-		_print_ai_log("%s became active and targets %s." % [get_display_name(), _get_target_display_name(target_entity_id)])
-		return
-
-	if previous_state == STATE_ACTIVE and ai_state == STATE_ACTIVE and previous_target_entity_id != target_entity_id:
-		_print_ai_log("%s switched target from %s to %s." % [
-			get_display_name(),
-			_get_target_display_name(previous_target_entity_id),
-			_get_target_display_name(target_entity_id),
-		])
-		return
-
-	if previous_state == STATE_ACTIVE and ai_state == STATE_PASSIVE:
-		_print_ai_log("%s became passive: %s." % [get_display_name(), _get_passive_reason_text(reason)])
-
-
-func _print_ai_log(text: String) -> void:
-	ConsoleOutput.print_console(text, runtime)
-
-
-func _get_target_display_name(id: String) -> String:
-	if id.is_empty():
-		return "none"
-
-	if runtime != null:
-		var entity: Node = runtime.get_entity_by_id(id)
-		if entity != null:
-			return runtime.get_entity_display_name(entity)
-
-	return id
-
-
-func _get_passive_reason_text(reason: String) -> String:
-	if reason.is_empty():
-		return "no target"
-
-	return reason
 
 
 func _get_registered_characters() -> Array[Node]:

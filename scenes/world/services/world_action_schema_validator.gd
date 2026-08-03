@@ -11,6 +11,8 @@ static func get_rejection_reason(action: WorldActionRecord) -> String:
 		return WorldActionStream.REJECTION_INVALID_ACTION
 	if not NetworkProtocol.is_valid_intent_payload(action.payload):
 		return "payload_too_large"
+	if not WorldActionCatalog.is_external(action.action_type):
+		return WorldActionStream.REJECTION_INVALID_ACTION
 
 	match action.action_type:
 		WorldActionRecord.ActionType.MOVE_PATH:
@@ -33,7 +35,7 @@ static func get_rejection_reason(action: WorldActionRecord) -> String:
 			if (
 				str(action.payload.get("item_id", "")).is_empty()
 				or int(action.payload.get("amount", 0)) <= 0
-				or int(action.payload.get("amount", 0)) > CharacterInventory.ITEM_SLOT_COUNT * CharacterInventory.DEFAULT_MAX_STACK_SIZE
+				or int(action.payload.get("amount", 0)) > CharacterInventory.get_max_intent_amount()
 				or int(action.payload.get("expected_inventory_revision", -1)) < 0
 			):
 				return WorldActionStream.REJECTION_INVALID_ACTION
@@ -41,21 +43,24 @@ static func get_rejection_reason(action: WorldActionRecord) -> String:
 				var inventory_kind: String = str(action.payload.get(WorldLoot.PAYLOAD_INVENTORY_KIND, ""))
 				if (
 					not NetworkProtocol.is_valid_identifier(str(action.payload.get(WorldLoot.PAYLOAD_SOURCE_CHEST_ID, "")))
-					or inventory_kind not in [CharacterInventory.INVENTORY_KIND_ITEM, CharacterInventory.INVENTORY_KIND_SPELL]
-					or int(action.payload.get(WorldLoot.PAYLOAD_TARGET_SLOT_INDEX, -1)) < 0
-					or int(action.payload.get(WorldLoot.PAYLOAD_TARGET_SLOT_INDEX, -1)) >= CharacterInventory.ITEM_SLOT_COUNT
+					or not CharacterInventory.is_valid_slot_index_for_kind(
+						inventory_kind,
+						int(action.payload.get(WorldLoot.PAYLOAD_TARGET_SLOT_INDEX, -1))
+					)
 				):
 					return WorldActionStream.REJECTION_INVALID_ACTION
 		WorldActionRecord.ActionType.INVENTORY_MOVE:
-			if str(action.payload.get("inventory_kind", "")).is_empty() or int(action.payload.get("expected_inventory_revision", -1)) < 0:
+			var move_inventory_kind: String = str(action.payload.get("inventory_kind", ""))
+			if not CharacterInventory.is_valid_inventory_kind(move_inventory_kind) or int(action.payload.get("expected_inventory_revision", -1)) < 0:
 				return WorldActionStream.REJECTION_INVALID_ACTION
-			if int(action.payload.get("source_slot_index", -1)) < 0 or int(action.payload.get("target_slot_index", -1)) < 0:
+			if not CharacterInventory.is_valid_slot_index_for_kind(move_inventory_kind, int(action.payload.get("source_slot_index", -1))) or not CharacterInventory.is_valid_slot_index_for_kind(move_inventory_kind, int(action.payload.get("target_slot_index", -1))):
 				return WorldActionStream.REJECTION_INVALID_ACTION
 		WorldActionRecord.ActionType.INVENTORY_DELETE:
-			if str(action.payload.get("inventory_kind", "")).is_empty() or int(action.payload.get("slot_index", -1)) < 0 or int(action.payload.get("expected_inventory_revision", -1)) < 0:
+			var delete_inventory_kind: String = str(action.payload.get("inventory_kind", ""))
+			if not CharacterInventory.is_valid_slot_index_for_kind(delete_inventory_kind, int(action.payload.get("slot_index", -1))) or int(action.payload.get("expected_inventory_revision", -1)) < 0:
 				return WorldActionStream.REJECTION_INVALID_ACTION
 		WorldActionRecord.ActionType.INVENTORY_USE:
-			if int(action.payload.get("slot_index", -1)) < 0 or int(action.payload.get("expected_inventory_revision", -1)) < 0:
+			if not CharacterInventory.is_valid_slot_index_for_kind(CharacterInventory.INVENTORY_KIND_ITEM, int(action.payload.get("slot_index", -1))) or int(action.payload.get("expected_inventory_revision", -1)) < 0:
 				return WorldActionStream.REJECTION_INVALID_ACTION
 		WorldActionRecord.ActionType.CHARACTER_KILL, WorldActionRecord.ActionType.END_PLAYER_TURN:
 			pass

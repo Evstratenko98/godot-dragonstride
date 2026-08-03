@@ -25,17 +25,11 @@ func can_interact_with_cell(interactor: PlayerCharacter, target_cell: Vector2i) 
 	if interactor == null or runtime == null or not interactor.can_act():
 		return false
 	var anchor_cell: Vector2i = runtime.world_to_cell(interactor.global_position)
-	if (
+	return not (
 		not runtime.is_cell_inside(target_cell)
 		or not interactor.can_attack_cell_from(anchor_cell, target_cell)
 		or not runtime.can_entity_interact_in_turn(interactor)
-	):
-		return false
-	var target_entity: Entity = runtime.get_entity_at_cell(target_cell) as Entity
-	if target_entity != null and target_entity != interactor:
-		return target_entity.can_interact(interactor, runtime)
-	var target_object: GridObject = runtime.get_object_at_cell(target_cell) as GridObject
-	return target_object != null and target_object.can_interact(interactor, runtime)
+	)
 
 
 func try_interact(interactor: PlayerCharacter, target_cell: Vector2i) -> bool:
@@ -44,14 +38,12 @@ func try_interact(interactor: PlayerCharacter, target_cell: Vector2i) -> bool:
 
 	interactor.current_cell = runtime.world_to_cell(interactor.global_position)
 	var target_entity: Entity = runtime.get_entity_at_cell(target_cell) as Entity
-	var was_successful: bool = false
 	if target_entity != null and target_entity != interactor:
-		was_successful = target_entity.interact(interactor, runtime)
+		target_entity.interact(interactor, runtime)
 	else:
 		var target_object: GridObject = runtime.get_object_at_cell(target_cell) as GridObject
 		if target_object != null:
-			was_successful = target_object.interact(interactor, runtime)
+			target_object.interact(interactor, runtime)
 
-	if was_successful:
-		runtime.notify_entity_interacted_in_turn(interactor)
-	return was_successful
+	runtime.notify_entity_interacted_in_turn(interactor)
+	return true

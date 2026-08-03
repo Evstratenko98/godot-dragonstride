@@ -8,10 +8,13 @@ const CELL_SIZE := 64
 @export var character_walkable_layer_names: PackedStringArray = ["Hay", "Bridge"]
 
 var level: WorldLevel = null
+var walkable_layers: Array[TileMapLayer] = []
+var character_walkable_layers: Array[TileMapLayer] = []
 
 
 func configure_context(_runtime: WorldRuntime, new_level: WorldLevel) -> void:
 	level = new_level
+	_rebuild_layer_cache()
 
 
 func configure(
@@ -22,10 +25,11 @@ func configure(
 	grid_size = new_grid_size
 	walkable_layer_names = new_walkable_layer_names
 	character_walkable_layer_names = new_character_walkable_layer_names
+	_rebuild_layer_cache()
 
 
 func is_cell_walkable(cell: Vector2i) -> bool:
-	return _is_cell_in_layers(cell, walkable_layer_names)
+	return _is_cell_in_layers(cell, walkable_layers)
 
 
 func is_cell_walkable_for_entity(cell: Vector2i, entity: Entity) -> bool:
@@ -40,7 +44,7 @@ func is_cell_walkable_for_entity(cell: Vector2i, entity: Entity) -> bool:
 
 
 func is_cell_walkable_for_character(cell: Vector2i) -> bool:
-	return is_cell_walkable(cell) or _is_cell_in_layers(cell, character_walkable_layer_names)
+	return is_cell_walkable(cell) or _is_cell_in_layers(cell, character_walkable_layers)
 
 
 func is_cell_inside(cell: Vector2i) -> bool:
@@ -93,13 +97,28 @@ func get_adjacent_cell_center(world_position: Vector2, direction: Vector2i) -> V
 	return cell_to_world(world_to_cell(world_position) + direction)
 
 
-func _is_cell_in_layers(cell: Vector2i, layer_names: PackedStringArray) -> bool:
-	for layer_name in layer_names:
-		var layer: Node = _get_level().get_node_or_null(NodePath(layer_name))
-		if layer is TileMapLayer and layer.get_cell_source_id(cell) != -1:
+func _is_cell_in_layers(cell: Vector2i, layers: Array[TileMapLayer]) -> bool:
+	for layer: TileMapLayer in layers:
+		if layer.get_cell_source_id(cell) != -1:
 			return true
 
 	return false
+
+
+func _rebuild_layer_cache() -> void:
+	walkable_layers = _resolve_layers(walkable_layer_names)
+	character_walkable_layers = _resolve_layers(character_walkable_layer_names)
+
+
+func _resolve_layers(layer_names: PackedStringArray) -> Array[TileMapLayer]:
+	var layers: Array[TileMapLayer] = []
+	if level == null:
+		return layers
+	for layer_name: String in layer_names:
+		var layer: TileMapLayer = level.get_node_or_null(NodePath(layer_name)) as TileMapLayer
+		if layer != null:
+			layers.append(layer)
+	return layers
 
 
 func _get_level() -> WorldLevel:

@@ -1,8 +1,6 @@
 class_name MenuPresentation
 extends Node
 
-const CURSOR_TEXTURE: Texture2D = preload("res://art/pointers/hand_small_point_n.svg")
-const CURSOR_HOTSPOT := Vector2(15.0, 4.0)
 const TEXT_COLOR := Color(0.94, 0.96, 1.0, 1.0)
 const MUTED_TEXT_COLOR := Color(0.58, 0.63, 0.72, 1.0)
 const ACCENT_COLOR := Color(1.0, 0.82, 0.20, 1.0)
@@ -14,18 +12,6 @@ func _ready() -> void:
 	var screen: Control = get_parent() as Control
 	if screen != null:
 		screen.theme = _create_theme()
-	_apply_menu_cursor()
-
-
-func _exit_tree() -> void:
-	Input.set_custom_mouse_cursor(null, Input.CURSOR_ARROW)
-	Input.set_custom_mouse_cursor(null, Input.CURSOR_POINTING_HAND)
-
-
-func _apply_menu_cursor() -> void:
-	Input.set_custom_mouse_cursor(CURSOR_TEXTURE, Input.CURSOR_ARROW, CURSOR_HOTSPOT)
-	Input.set_custom_mouse_cursor(CURSOR_TEXTURE, Input.CURSOR_POINTING_HAND, CURSOR_HOTSPOT)
-	Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 
 
 func _create_theme() -> Theme:

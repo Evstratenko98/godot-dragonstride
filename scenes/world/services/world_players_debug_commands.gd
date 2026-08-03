@@ -67,7 +67,7 @@ func add_inventory_item(item_id: String, amount_text: String) -> void:
 	if (
 		not amount_text.is_valid_int()
 		or amount_text.to_int() <= 0
-		or amount_text.to_int() > CharacterInventory.ITEM_SLOT_COUNT * CharacterInventory.DEFAULT_MAX_STACK_SIZE
+		or amount_text.to_int() > CharacterInventory.get_max_intent_amount()
 	):
 		ConsoleOutput.print_console(
 			"ERROR: Usage: %s <item_id> <positive_amount>." % INVENTORY_ADD_COMMAND_NAME,

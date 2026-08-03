@@ -44,6 +44,8 @@ func configure_context(new_runtime: WorldRuntime, new_cell_hover: CellHover) -> 
 			runtime.world_occupancy_changed.connect(_on_world_occupancy_changed)
 		if runtime.turn_manager != null and not runtime.turn_manager.turn_state_changed.is_connected(_on_turn_state_changed):
 			runtime.turn_manager.turn_state_changed.connect(_on_turn_state_changed)
+		if runtime.spells != null and not runtime.spells.targeting_changed.is_connected(_on_spell_targeting_changed):
+			runtime.spells.targeting_changed.connect(_on_spell_targeting_changed)
 	if cell_hover != null:
 		hovered_entity = cell_hover.get_hovered_entity()
 		if not cell_hover.hovered_entity_changed.is_connected(_on_cell_hover_hovered_entity_changed):
@@ -71,6 +73,7 @@ func _refresh_range() -> void:
 		or not is_instance_valid(hovered_entity)
 		or hovered_entity.health <= 0
 		or hovered_entity.is_moving
+		or _is_local_spell_targeting()
 	):
 		queue_redraw()
 		return
@@ -107,6 +110,8 @@ func _disconnect_runtime_signals() -> void:
 		runtime.world_occupancy_changed.disconnect(_on_world_occupancy_changed)
 	if runtime.turn_manager != null and runtime.turn_manager.turn_state_changed.is_connected(_on_turn_state_changed):
 		runtime.turn_manager.turn_state_changed.disconnect(_on_turn_state_changed)
+	if runtime.spells != null and runtime.spells.targeting_changed.is_connected(_on_spell_targeting_changed):
+		runtime.spells.targeting_changed.disconnect(_on_spell_targeting_changed)
 
 
 func _disconnect_hover_signal() -> void:
@@ -139,11 +144,22 @@ func _get_hover_fill_color(entity: Entity) -> Color:
 	return hostile_fill_color
 
 
+func _is_local_spell_targeting() -> bool:
+	if runtime == null:
+		return false
+	var selected_character: PlayerCharacter = runtime.get_selected_local_character()
+	return selected_character != null and runtime.has_selected_spell(selected_character)
+
+
 func _on_turn_state_changed() -> void:
 	_refresh_range()
 
 
 func _on_world_occupancy_changed() -> void:
+	_refresh_range()
+
+
+func _on_spell_targeting_changed(_is_targeting: bool, _selected_slot_index: int) -> void:
 	_refresh_range()
 
 

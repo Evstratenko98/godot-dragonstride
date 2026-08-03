@@ -112,15 +112,15 @@ func execute_open_action(action: WorldActionRecord, player: PlayerCharacter) -> 
 func play_remote_open_action(action: WorldActionRecord) -> void:
 	if not is_chest_interaction_action(action):
 		return
-	var chest: Chest = runtime.get_object_by_id(str(action.payload.get(PAYLOAD_CHEST_ID, ""))) as Chest
-	if chest == null:
-		return
-	await chest.play_opening_animation()
-	chest.set_opened()
 	var record: ChestLootRecord = _record_from_action(action)
-	if record != null:
-		pending_records[record.chest_id] = record
-		_reveal_if_local(record)
+	if record == null:
+		return
+	pending_records[record.chest_id] = record
+	var chest: Chest = runtime.get_object_by_id(str(action.payload.get(PAYLOAD_CHEST_ID, ""))) as Chest
+	if chest != null and chest.can_open():
+		await chest.play_opening_animation()
+		chest.set_opened()
+	_reveal_if_local(record)
 
 
 func execute_claim_action(action: WorldActionRecord, player: PlayerCharacter) -> bool:
@@ -138,9 +138,9 @@ func execute_claim_action(action: WorldActionRecord, player: PlayerCharacter) ->
 
 
 func request_claim(chest_id: String, inventory_kind: String, target_slot_index: int) -> bool:
-	var player: PlayerCharacter = runtime.get_selected_local_character()
 	var record: ChestLootRecord = _get_record(chest_id)
-	if player == null or record == null or record.opener_entity_id != player.entity_id:
+	var player: PlayerCharacter = _get_local_opener(record)
+	if player == null:
 		return false
 	if record.is_local_request_pending or not _is_matching_inventory_kind(record, player, inventory_kind):
 		return false
@@ -165,6 +165,7 @@ func request_claim(chest_id: String, inventory_kind: String, target_slot_index: 
 		record.is_local_request_pending = false
 		return false
 	network_bridge.request_claim(
+		player,
 		chest_id,
 		inventory_kind,
 		target_slot_index,
@@ -175,9 +176,9 @@ func request_claim(chest_id: String, inventory_kind: String, target_slot_index: 
 
 
 func request_discard(chest_id: String) -> bool:
-	var player: PlayerCharacter = runtime.get_selected_local_character()
 	var record: ChestLootRecord = _get_record(chest_id)
-	if player == null or record == null or record.opener_entity_id != player.entity_id:
+	var player: PlayerCharacter = _get_local_opener(record)
+	if player == null:
 		return false
 	if record.is_local_request_pending:
 		return false
@@ -190,7 +191,7 @@ func request_discard(chest_id: String) -> bool:
 	if not NetworkManager.connection.is_ready():
 		record.is_local_request_pending = false
 		return false
-	network_bridge.request_discard(chest_id, request_id)
+	network_bridge.request_discard(player, chest_id, request_id)
 	return true
 
 
@@ -228,11 +229,8 @@ func apply_snapshot(snapshot: Dictionary) -> bool:
 
 
 func reveal_pending_for_local_player() -> void:
-	var player: PlayerCharacter = runtime.get_selected_local_character()
-	if player == null:
-		return
 	for record: ChestLootRecord in pending_records.values():
-		if record.opener_entity_id == player.entity_id:
+		if _get_local_opener(record) != null:
 			_reveal_if_local(record)
 			return
 
@@ -393,15 +391,14 @@ func _is_matching_inventory_kind(
 
 
 func _reveal_if_local(record: ChestLootRecord) -> void:
-	var player: PlayerCharacter = runtime.get_selected_local_character()
-	if player != null and record.opener_entity_id == player.entity_id:
+	if _get_local_opener(record) != null:
 		loot_revealed.emit(record.chest_id, record.loot_entries.duplicate(true))
 
 
 func apply_discarded(chest_id: String, opener_entity_id: String) -> void:
 	pending_records.erase(chest_id)
-	var player: PlayerCharacter = runtime.get_selected_local_character()
-	if player != null and player.entity_id == opener_entity_id:
+	var player: PlayerCharacter = runtime.get_player_by_entity_id(opener_entity_id)
+	if player != null and player.is_locally_owned:
 		loot_resolved.emit(chest_id)
 
 
@@ -442,9 +439,15 @@ func handle_local_action_rejected(reason_code: String) -> void:
 
 
 func _reveal_resolution_if_local(record: ChestLootRecord) -> void:
-	var player: PlayerCharacter = runtime.get_selected_local_character()
-	if player != null and player.entity_id == record.opener_entity_id:
+	if _get_local_opener(record) != null:
 		loot_resolved.emit(record.chest_id)
+
+
+func _get_local_opener(record: ChestLootRecord) -> PlayerCharacter:
+	if runtime == null or record == null:
+		return null
+	var player: PlayerCharacter = runtime.get_player_by_entity_id(record.opener_entity_id)
+	return player if player != null and player.is_locally_owned else null
 
 
 func clear_state() -> void:
