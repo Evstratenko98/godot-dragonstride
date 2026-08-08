@@ -107,7 +107,6 @@ func _initialize_match() -> void:
 	movement_range_overlay.configure_context(runtime, cell_hover)
 	action_target_range_overlay.configure_context(runtime)
 	movement_path_overlay.configure_context(runtime, cell_hover)
-	hud.configure_world_input(cell_hover)
 	hud.configure_runtime(runtime)
 	_configure_level_audio()
 	runtime.connect_signals()

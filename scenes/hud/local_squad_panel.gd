@@ -6,6 +6,7 @@ signal member_pressed(character: PlayerCharacter)
 var runtime: WorldRuntime = null
 var rows_container: VBoxContainer = null
 var rows: Array[SquadMemberStatusRow] = []
+var is_input_blocked: bool = false
 
 
 func _ready() -> void:
@@ -23,13 +24,24 @@ func bind_squad(new_runtime: WorldRuntime, members: Array[PlayerCharacter]) -> v
 		rows.append(row)
 		rows_container.add_child.call_deferred(row)
 		row.bind_member(runtime, member)
+		row.set_input_blocked(is_input_blocked)
 		row.member_pressed.connect(_on_member_pressed)
 	visible = not members.is_empty()
 
 
 func set_selected_character(character: PlayerCharacter) -> void:
 	for row: SquadMemberStatusRow in rows:
-		row.set_selected(row.character == character)
+		row.set_selected(false)
+	for row: SquadMemberStatusRow in rows:
+		if row.character == character:
+			row.set_selected(true)
+			break
+
+
+func set_input_blocked(should_be_blocked: bool) -> void:
+	is_input_blocked = should_be_blocked
+	for row: SquadMemberStatusRow in rows:
+		row.set_input_blocked(is_input_blocked)
 
 
 func _build_content() -> void:

@@ -21,10 +21,8 @@ enum ModalContext {
 @onready var chest_loot_dialog: ChestLootDialog = get_node("ChestLootDialog") as ChestLootDialog
 @onready var cursor_controller: HudCursorController = get_node("CursorController") as HudCursorController
 @onready var pause_menu: GamePauseMenu = get_node("GamePauseMenu") as GamePauseMenu
-@onready var character_action_menu: CharacterActionMenu = get_node("CharacterActionMenu") as CharacterActionMenu
 
 var runtime: WorldRuntime = null
-var cell_hover: CellHover = null
 var bound_player: PlayerCharacter = null
 var modal_context: ModalContext = ModalContext.NONE
 var pending_spell_target_cell: Vector2i = Vector2i.ZERO
@@ -43,8 +41,6 @@ func _ready() -> void:
 		modal_dialog.resolved.connect(_on_modal_resolved)
 	if not chest_loot_dialog.open_state_changed.is_connected(_on_chest_loot_open_state_changed):
 		chest_loot_dialog.open_state_changed.connect(_on_chest_loot_open_state_changed)
-	if not local_squad_panel.member_pressed.is_connected(_on_local_squad_member_pressed):
-		local_squad_panel.member_pressed.connect(_on_local_squad_member_pressed)
 
 
 func _exit_tree() -> void:
@@ -53,7 +49,6 @@ func _exit_tree() -> void:
 	_disconnect_turn_signal()
 	_disconnect_selection_signal()
 	inventory_bar.set_loot_modal_mode(false)
-	character_action_menu.set_input_blocked(false)
 	inventory_bar.z_index = inventory_bar_default_z_index
 	_set_local_squad_input_blocked(false)
 	if runtime != null:
@@ -62,9 +57,6 @@ func _exit_tree() -> void:
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	if not event.is_action_pressed("ui_cancel") or event.is_echo():
-		return
-	if character_action_menu.handle_cancel():
-		get_viewport().set_input_as_handled()
 		return
 	if pause_menu.is_open():
 		pause_menu.handle_cancel()
@@ -81,7 +73,6 @@ func configure_runtime(new_runtime: WorldRuntime) -> void:
 	_disconnect_turn_signal()
 	_disconnect_selection_signal()
 	runtime = new_runtime
-	character_action_menu.configure_context(runtime, cell_hover)
 	chest_loot_dialog.configure_runtime(runtime)
 	if runtime == null:
 		_refresh_end_turn_button()
@@ -95,11 +86,6 @@ func configure_runtime(new_runtime: WorldRuntime) -> void:
 	_refresh_end_turn_button()
 
 
-func configure_world_input(new_cell_hover: CellHover) -> void:
-	cell_hover = new_cell_hover
-	character_action_menu.configure_context(runtime, cell_hover)
-
-
 func bind_session() -> void:
 	if runtime == null:
 		return
@@ -107,7 +93,6 @@ func bind_session() -> void:
 	_bind_local_player(local_player)
 	local_squad_panel.bind_squad(runtime, runtime.get_local_squad_members())
 	local_squad_panel.set_selected_character(local_player)
-	character_action_menu.bind_character(local_player)
 	if local_player != null:
 		inventory_bar.bind_character(local_player)
 	chest_loot_dialog.bind_character(local_player)
@@ -238,15 +223,16 @@ func _get_local_turn_representative() -> PlayerCharacter:
 func _apply_modal_input_block() -> void:
 	var should_block: bool = is_modal_open()
 	_set_local_squad_input_blocked(should_block)
-	character_action_menu.set_input_blocked(should_block)
 	_refresh_end_turn_button()
 
 
 func _set_local_squad_input_blocked(should_be_blocked: bool) -> void:
 	if runtime == null:
+		local_squad_panel.set_input_blocked(should_be_blocked)
 		return
 	for member: PlayerCharacter in runtime.get_local_squad_members():
 		member.set_local_input_blocked(should_be_blocked)
+	local_squad_panel.set_input_blocked(should_be_blocked)
 
 
 func _is_gameplay_modal_open() -> bool:
@@ -317,11 +303,6 @@ func _on_pause_menu_open_state_changed(is_open: bool) -> void:
 	if runtime != null:
 		runtime.set_local_camera_input_blocked(is_open)
 	_apply_modal_input_block()
-
-
-func _on_local_squad_member_pressed(character: PlayerCharacter) -> void:
-	if runtime != null and runtime.get_selected_local_character() == character:
-		character_action_menu.open_for_character(character)
 
 
 func _set_loot_inventory_layer(is_open: bool) -> void:

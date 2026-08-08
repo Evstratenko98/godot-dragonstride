@@ -9,6 +9,7 @@
 [ext_resource type="PackedScene" uid="uid://bie7ombabnhor" path="res://scenes/objects/meteor_scroll/meteor_scroll.tscn" id="10_3emkg"]
 [ext_resource type="PackedScene" path="res://scenes/entities/sheep/sheep.tscn" id="10_sheep"]
 [ext_resource type="Texture2D" uid="uid://b5blnrd4g1rqe" path="res://art/Tiny Swords (Update 010)/Terrain/Ground/Tilemap_Flat.png" id="13_qcyxm"]
+[ext_resource type="Texture2D" uid="uid://col8etsry028o" path="res://art/Tiny Swords (Free Pack)/Terrain/Tileset/Tilemap_color5.png" id="13_uuej0"]
 [ext_resource type="Texture2D" uid="uid://1nkuwf8grh3o" path="res://art/Tiny Swords (Update 010)/Terrain/Bridge/Bridge_All.png" id="15_ditf4"]
 [ext_resource type="PackedScene" path="res://scenes/entities/enemies/warrior/warrior.tscn" id="21_hswqa"]
 [ext_resource type="PackedScene" path="res://scenes/objects/chest/chest.tscn" id="22_chest"]
@@ -275,6 +276,58 @@ texture_region_size = Vector2i(256, 256)
 tile_size = Vector2i(256, 256)
 sources/0 = SubResource("TileSetAtlasSource_14r8b")
 
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_4po2s"]
+texture = ExtResource("13_uuej0")
+texture_region_size = Vector2i(64, 64)
+3:4/0 = 0
+0:5/0 = 0
+3:5/0 = 0
+0:4/0 = 0
+0:0/0 = 0
+1:1/0 = 0
+2:2/0 = 0
+3:2/0 = 0
+3:3/0 = 0
+5:4/0 = 0
+6:4/0 = 0
+6:5/0 = 0
+7:5/0 = 0
+5:5/0 = 0
+2:3/0 = 0
+1:3/0 = 0
+0:3/0 = 0
+0:2/0 = 0
+0:1/0 = 0
+1:0/0 = 0
+2:0/0 = 0
+3:0/0 = 0
+3:1/0 = 0
+2:1/0 = 0
+1:2/0 = 0
+7:4/0 = 0
+7:3/0 = 0
+7:2/0 = 0
+6:2/0 = 0
+6:3/0 = 0
+5:3/0 = 0
+5:2/0 = 0
+5:1/0 = 0
+5:0/0 = 0
+6:0/0 = 0
+7:0/0 = 0
+7:1/0 = 0
+6:1/0 = 0
+8:0/0 = 0
+8:1/0 = 0
+8:2/0 = 0
+8:3/0 = 0
+8:4/0 = 0
+8:5/0 = 0
+
+[sub_resource type="TileSet" id="TileSet_sy4oe"]
+tile_size = Vector2i(64, 64)
+sources/1 = SubResource("TileSetAtlasSource_4po2s")
+
 [node name="Sandbox" type="Node2D" unique_id=786344412]
 y_sort_enabled = true
 script = ExtResource("1")
@@ -315,7 +368,7 @@ position = Vector2(94, 340)
 [node name="MeteorScroll" parent="WorldEntities" unique_id=740941564 instance=ExtResource("10_3emkg")]
 position = Vector2(92, 987)
 
-[node name="Chest" parent="WorldEntities" instance=ExtResource("22_chest")]
+[node name="Chest" parent="WorldEntities" unique_id=2093048575 instance=ExtResource("22_chest")]
 position = Vector2(608, 672)
 object_id = "chest_1"
 
@@ -324,3 +377,7 @@ object_id = "chest_1"
 [node name="Clouds" type="TileMapLayer" parent="." unique_id=847400242]
 tile_map_data = PackedByteArray("AAD+////AAAAAAAAAAD/////AAABAAAAAAABAP//AAAAAAAAAAACAP//AAABAAAAAAAFAAAAAAAAAAAAAAAGAAAAAAABAAAAAAD9/wEAAAAAAAAAAAD+/wEAAAABAAAAAAAEAAUAAAAAAAAAAAAFAAUAAAABAAAAAAD//wQAAAAAAAAAAAAAAAQAAAABAAAAAAAEAAIAAAAAAAAAAAAFAAIAAAABAAAAAAA=")
 tile_set = SubResource("TileSet_3emkg")
+
+[node name="test" type="TileMapLayer" parent="." unique_id=1931140209]
+tile_map_data = PackedByteArray("AAADAAsAAQAGAAQAAAAEAAsAAQAGAAQAAAAFAAsAAQAGAAQAAAADAAoAAQAGAAIAAAAEAAoAAQAGAAIAAAAFAAoAAQAGAAIAAAAGAAsAAQADAAUAAAADAAkAAQAFAAEAAAAEAAkAAQABAAEAAAAFAAkAAQAHAAEAAAADAAgAAQABAAAAAAAEAAgAAQABAAAAAAAFAAgAAQABAAAAAAACAAkAAQAAAAUAAAACAAgAAQAAAAQAAAAGAAkAAQADAAUAAAAGAAgAAQADAAQAAAACAAoAAQAAAAQAAAACAAsAAQAAAAUAAAAGAAoAAQADAAQAAAA=")
+tile_set = SubResource("TileSet_sy4oe")

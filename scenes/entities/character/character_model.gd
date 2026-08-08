@@ -4,15 +4,21 @@ extends Node
 signal spell_target_selected(target_cell: Vector2i)
 
 var character: PlayerCharacter = null
+var console: Node = null
 
 
 func _ready() -> void:
 	character = get_parent() as PlayerCharacter
+	console = get_node_or_null("/root/Console")
 
 
 func _process(_delta: float) -> void:
 	if character == null or not character.is_locally_owned:
 		return
+	var movement_input_direction: Vector2i = Vector2i.ZERO
+	if _can_present_movement_input():
+		movement_input_direction = get_input_direction()
+	character.set_local_movement_input_state(movement_input_direction != Vector2i.ZERO)
 	if character.is_executing_move_path:
 		return
 
@@ -79,7 +85,7 @@ func get_input_direction() -> Vector2i:
 
 
 func should_play_move_animation() -> bool:
-	return _can_read_movement_input() and get_input_direction() != Vector2i.ZERO
+	return character != null and character.is_movement_input_held
 
 
 func try_continue_moving() -> bool:
@@ -130,6 +136,20 @@ func _can_read_movement_input() -> bool:
 	return true
 
 
+func _can_present_movement_input() -> bool:
+	if (
+		character == null
+		or not character.is_locally_owned
+		or not character.is_selected_local_character
+		or not character.can_receive_input
+		or character.is_local_input_blocked
+		or character.is_attacking
+		or character.health <= 0
+		or _is_console_open()
+	):
+		return false
+	return character.runtime == null or character.runtime.can_entity_move_in_turn(character)
+
+
 func _is_console_open() -> bool:
-	var console: Node = get_node_or_null("/root/Console")
 	return console != null and console.has_method("is_visible") and console.is_visible()

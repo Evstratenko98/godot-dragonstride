@@ -6,7 +6,7 @@ signal match_end_requested()
 var runtime: WorldRuntime = null
 var level: WorldLevel = null
 var signal_bindings: WorldNetworkSignalBindings = WorldNetworkSignalBindings.new()
-var move_request_tracker: WorldMoveRequestTracker = WorldMoveRequestTracker.new()
+var character_movement: WorldCharacterMovementBridge = WorldCharacterMovementBridge.new()
 var inventory_intents: WorldInventoryIntentController = WorldInventoryIntentController.new()
 var message_buffer: WorldNetworkMessageBuffer = WorldNetworkMessageBuffer.new()
 var inventory_bridge: WorldInventoryNetworkBridge = WorldInventoryNetworkBridge.new()
@@ -15,6 +15,7 @@ var inventory_bridge: WorldInventoryNetworkBridge = WorldInventoryNetworkBridge.
 func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void:
 	runtime = new_runtime
 	level = new_level
+	character_movement.configure(self)
 	inventory_intents.configure(runtime)
 	message_buffer.configure(self)
 	inventory_bridge.configure(self)
@@ -23,9 +24,11 @@ func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void
 
 func connect_signals() -> void:
 	signal_bindings.connect_signals()
+	character_movement.connect_signals()
 
 
 func disconnect_signals() -> void:
+	character_movement.disconnect_signals()
 	signal_bindings.disconnect_signals()
 
 
@@ -99,30 +102,7 @@ func broadcast_entity_ai_state(
 
 
 func request_character_move_path(player: PlayerCharacter, requested_path: Array[Vector2i]) -> bool:
-	if player == null or player != runtime.get_selected_local_character() or requested_path.is_empty():
-		return false
-	if runtime.has_pending_move_path(player) or move_request_tracker.is_pending():
-		return false
-	var request_id: int = runtime.create_action_request_id()
-	if GameSession.is_singleplayer():
-		return runtime.enqueue_player_action(
-			WorldActionRecord.ActionType.MOVE_PATH,
-			player,
-			{WorldMovePathPolicy.REQUESTED_PATH_KEY: requested_path},
-			request_id,
-			0
-		)
-	if not NetworkManager.connection.is_ready():
-		return false
-	move_request_tracker.begin(request_id)
-	NetworkManager.character.request_character_move_path(
-		player.entity_id,
-		requested_path,
-		GameSession.get_match_id(),
-		runtime.get_turn_revision(),
-		request_id
-	)
-	return true
+	return character_movement.request_move_path(player, requested_path)
 
 
 func broadcast_character_action_payload(action: WorldActionRecord) -> void:
@@ -323,37 +303,6 @@ func _apply_npc_move_message(entity_id: String, from_cell: Vector2i, target_cell
 		return
 
 	runtime.reserve_entity_cell(entity, from_cell, target_cell)
-
-
-func _on_character_move_path_requested(
-	requester_steam_id: int,
-	actor_entity_id: String,
-	requested_path: Array[Vector2i],
-	match_id: String,
-	turn_revision: int,
-	request_id: int
-) -> void:
-	var player: PlayerCharacter = _get_requested_player(requester_steam_id, actor_entity_id)
-	if player == null:
-		return
-	var peer_id: int = NetworkManager.peers.get_peer_id_for_steam_id(requester_steam_id)
-	runtime.enqueue_player_action(
-		WorldActionRecord.ActionType.MOVE_PATH,
-		player,
-		{WorldMovePathPolicy.REQUESTED_PATH_KEY: requested_path},
-		request_id,
-		peer_id,
-		turn_revision,
-		match_id
-	)
-
-
-func _get_requested_player(requester_steam_id: int, actor_entity_id: String) -> PlayerCharacter:
-	if not GameSession.is_host() or requester_steam_id == 0:
-		return null
-	if not runtime.is_character_owned_by_steam_id(actor_entity_id, requester_steam_id):
-		return null
-	return runtime.get_player_by_entity_id(actor_entity_id)
 
 
 func _on_entity_attack_received(
@@ -612,7 +561,7 @@ func _on_stream_action_started(action: WorldActionRecord) -> void:
 
 
 func _on_stream_action_finished(action: WorldActionRecord) -> void:
-	move_request_tracker.finish_action(action)
+	character_movement.handle_action_finished(action)
 
 
 func _on_stream_action_cancelled(action: WorldActionRecord, reason_code: String) -> void:
@@ -626,21 +575,21 @@ func _on_stream_action_cancelled(action: WorldActionRecord, reason_code: String)
 
 
 func _on_action_rejected(request_id: int, reason_code: String) -> void:
-	move_request_tracker.handle_rejected(request_id)
+	character_movement.handle_action_rejected(request_id)
 	runtime.notify_local_action_rejected(reason_code)
 
 
 func _on_action_accepted(request_id: int, sequence_id: int) -> void:
-	move_request_tracker.handle_accepted(request_id, sequence_id)
+	character_movement.handle_action_accepted(request_id, sequence_id)
 
 
 func _on_remote_snapshot_committed(boundary_sequence_id: int) -> void:
-	move_request_tracker.handle_snapshot_committed(boundary_sequence_id)
+	character_movement.handle_snapshot_committed(boundary_sequence_id)
 
 
 func _on_session_cleared() -> void:
 	message_buffer.clear()
-	move_request_tracker.clear()
+	character_movement.clear()
 
 
 func _send_entity_vitality_states_to_peer(peer_id: int) -> void:

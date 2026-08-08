@@ -1,9 +1,10 @@
 class_name ActionModeBar
-extends HBoxContainer
+extends VBoxContainer
 
-const BUTTON_SIZE := Vector2(26.0, 26.0)
-const BUTTON_ICON_MAX_WIDTH := 18
-const BUTTON_SEPARATION := 5
+const BUTTON_SIZE := Vector2(24.0, 24.0)
+const BUTTON_ICON_MAX_WIDTH := 17
+const BUTTON_SEPARATION := 0
+const COLUMN_SIZE := Vector2(24.0, 72.0)
 const MODE_ORDER: Array[int] = [
 	PlayerCharacter.ActionMode.MOVE,
 	PlayerCharacter.ActionMode.ATTACK,
@@ -23,7 +24,9 @@ var action_buttons: Dictionary[int, Button] = {}
 var shortcut_labels: Dictionary[int, Label] = {}
 var is_spell_targeting: bool = false
 var selected_spell_slot_index: int = -1
-var is_cursor_suspended: bool = false
+var is_character_selected: bool = false
+var is_input_blocked: bool = false
+var is_action_cursor_owner: bool = false
 
 
 func _ready() -> void:
@@ -31,19 +34,20 @@ func _ready() -> void:
 	_build_buttons()
 	if bound_player != null:
 		_refresh_buttons(bound_player.action_mode)
-	else:
-		InventoryBarCursor.apply(PlayerCharacter.ActionMode.MOVE)
 
 
 func _exit_tree() -> void:
-	InventoryBarCursor.clear_action_cursor()
-	_disconnect_player_signal()
+	if is_action_cursor_owner:
+		InventoryBarCursor.clear_action_cursor()
+	_disconnect_player_signals()
 	_disconnect_runtime_signals()
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	if (
 		bound_player == null
+		or not is_character_selected
+		or is_input_blocked
 		or not bound_player.can_process_local_input()
 		or _is_console_open()
 		or _is_text_input_focused()
@@ -71,26 +75,27 @@ func bind_character(player: PlayerCharacter) -> void:
 		if bound_player != null and is_node_ready():
 			_refresh_buttons(bound_player.action_mode)
 		return
-	_disconnect_player_signal()
+	_disconnect_player_signals()
 	bound_player = player
-	if bound_player != null and not bound_player.action_mode_changed.is_connected(_on_player_action_mode_changed):
-		bound_player.action_mode_changed.connect(_on_player_action_mode_changed)
+	_connect_player_signals()
 	if bound_player != null and is_node_ready():
 		_refresh_buttons(bound_player.action_mode)
 
 
-func set_cursor_suspended(should_suspend: bool) -> void:
-	is_cursor_suspended = should_suspend
-	if is_cursor_suspended:
-		InventoryBarCursor.clear_action_cursor()
-	elif bound_player != null and is_node_ready():
-		_refresh_cursor(bound_player.action_mode)
-
-
-func refresh_cursor() -> void:
-	if bound_player == null:
+func set_character_selected(should_be_selected: bool) -> void:
+	if is_character_selected == should_be_selected:
 		return
-	_refresh_cursor(bound_player.action_mode)
+	is_character_selected = should_be_selected
+	if bound_player != null and is_node_ready():
+		_refresh_buttons(bound_player.action_mode)
+
+
+func set_input_blocked(should_be_blocked: bool) -> void:
+	if is_input_blocked == should_be_blocked:
+		return
+	is_input_blocked = should_be_blocked
+	if bound_player != null and is_node_ready():
+		_refresh_buttons(bound_player.action_mode)
 
 
 func _build_buttons() -> void:
@@ -190,7 +195,14 @@ func _select_action_mode(action_mode: int) -> void:
 
 
 func _is_action_available(action_mode: int) -> bool:
-	if runtime == null or runtime.turn_manager == null or bound_player == null:
+	if (
+		bound_player == null
+		or not is_character_selected
+		or is_input_blocked
+		or not bound_player.can_process_local_input()
+	):
+		return false
+	if runtime == null or runtime.turn_manager == null:
 		return true
 	var turn_manager: WorldTurns = runtime.turn_manager
 	if not turn_manager.is_turn_mode_enabled():
@@ -205,13 +217,17 @@ func _is_action_available(action_mode: int) -> bool:
 
 
 func _refresh_cursor(action_mode: int) -> void:
-	if is_cursor_suspended:
-		InventoryBarCursor.clear_action_cursor()
+	if not is_character_selected or is_input_blocked or bound_player == null:
+		if is_action_cursor_owner:
+			InventoryBarCursor.clear_action_cursor()
+			is_action_cursor_owner = false
 		return
 	if _is_meteor_targeting():
 		InventoryBarCursor.apply_meteor_targeting()
+		is_action_cursor_owner = true
 		return
 	InventoryBarCursor.apply(action_mode, _is_action_available(action_mode))
+	is_action_cursor_owner = true
 
 
 func _is_meteor_targeting() -> bool:
@@ -246,13 +262,34 @@ func _disconnect_runtime_signals() -> void:
 		runtime.spells.targeting_changed.disconnect(_on_spell_targeting_changed)
 
 
-func _disconnect_player_signal() -> void:
-	if (
-		bound_player != null
-		and is_instance_valid(bound_player)
-		and bound_player.action_mode_changed.is_connected(_on_player_action_mode_changed)
-	):
+func _connect_player_signals() -> void:
+	if bound_player == null:
+		return
+	if not bound_player.action_mode_changed.is_connected(_on_player_action_mode_changed):
+		bound_player.action_mode_changed.connect(_on_player_action_mode_changed)
+	if not bound_player.movement_started.is_connected(_on_player_activity_changed):
+		bound_player.movement_started.connect(_on_player_activity_changed)
+	if not bound_player.movement_finished.is_connected(_on_player_activity_changed):
+		bound_player.movement_finished.connect(_on_player_activity_changed)
+	if not bound_player.attack_finished.is_connected(_on_player_attack_finished):
+		bound_player.attack_finished.connect(_on_player_attack_finished)
+	if not bound_player.vitality_changed.is_connected(_on_player_vitality_changed):
+		bound_player.vitality_changed.connect(_on_player_vitality_changed)
+
+
+func _disconnect_player_signals() -> void:
+	if bound_player == null or not is_instance_valid(bound_player):
+		return
+	if bound_player.action_mode_changed.is_connected(_on_player_action_mode_changed):
 		bound_player.action_mode_changed.disconnect(_on_player_action_mode_changed)
+	if bound_player.movement_started.is_connected(_on_player_activity_changed):
+		bound_player.movement_started.disconnect(_on_player_activity_changed)
+	if bound_player.movement_finished.is_connected(_on_player_activity_changed):
+		bound_player.movement_finished.disconnect(_on_player_activity_changed)
+	if bound_player.attack_finished.is_connected(_on_player_attack_finished):
+		bound_player.attack_finished.disconnect(_on_player_attack_finished)
+	if bound_player.vitality_changed.is_connected(_on_player_vitality_changed):
+		bound_player.vitality_changed.disconnect(_on_player_vitality_changed)
 
 
 func _is_text_input_focused() -> bool:
@@ -271,6 +308,21 @@ func _on_action_button_pressed(action_mode: int) -> void:
 
 func _on_player_action_mode_changed(action_mode: int) -> void:
 	_refresh_buttons(action_mode)
+
+
+func _on_player_activity_changed(_from_cell: Vector2i, _target_cell: Vector2i) -> void:
+	if bound_player != null:
+		_refresh_buttons.call_deferred(bound_player.action_mode)
+
+
+func _on_player_attack_finished(_target_cell: Vector2i) -> void:
+	if bound_player != null:
+		_refresh_buttons(bound_player.action_mode)
+
+
+func _on_player_vitality_changed(_current_health: int, _maximum_health: int) -> void:
+	if bound_player != null:
+		_refresh_buttons(bound_player.action_mode)
 
 
 func _on_spell_targeting_changed(next_is_targeting: bool, spell_slot_index: int) -> void:

@@ -3,7 +3,6 @@ extends Node2D
 
 signal hovered_entity_changed(entity: Entity)
 signal hovered_cell_changed(cell: Vector2i, is_inside_world: bool)
-signal selected_local_character_clicked(character: PlayerCharacter)
 
 @export var hover_color: Color = Color(1.0, 0.85, 0.2, 0.28)
 @export var spell_target_color: Color = Color(1.0, 0.3, 0.08, 0.38)
@@ -75,10 +74,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	var local_character: PlayerCharacter = get_hovered_entity() as PlayerCharacter
 	if local_character == null or not local_character.is_locally_owned:
-		return
-	if local_character == runtime.get_selected_local_character():
-		selected_local_character_clicked.emit(local_character)
-		get_viewport().set_input_as_handled()
 		return
 	if runtime.select_local_character(local_character):
 		get_viewport().set_input_as_handled()

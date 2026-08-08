@@ -2,6 +2,7 @@ class_name PlayerCharacter
 extends "res://scenes/entities/entity/entity.gd"
 
 signal action_mode_changed(action_mode: ActionMode)
+signal movement_input_state_requested(character: PlayerCharacter, is_held: bool)
 
 enum ActionMode {
 	MOVE,
@@ -30,6 +31,7 @@ var is_selected_local_character: bool = false
 var can_receive_input: bool = true
 var is_local_input_blocked: bool = false
 var is_executing_move_path: bool = false
+var is_movement_input_held: bool = false
 var action_mode: ActionMode = ActionMode.MOVE
 var warrior_color: String = DEFAULT_WARRIOR_COLOR
 
@@ -58,6 +60,7 @@ func start(
 ) -> void:
 	can_receive_input = receive_input
 	is_executing_move_path = false
+	is_movement_input_held = false
 	action_mode = ActionMode.MOVE
 	start_entity(start_position, new_entity_id, new_entity_name, EntityType.CHARACTER)
 	character_inventory.configure_owner(entity_id)
@@ -85,10 +88,31 @@ func set_action_mode(new_action_mode: ActionMode) -> void:
 
 func set_local_input_blocked(should_block: bool) -> void:
 	is_local_input_blocked = should_block
+	if should_block:
+		set_local_movement_input_state(false)
 
 
 func set_selected_local_character(should_be_selected: bool) -> void:
 	is_selected_local_character = should_be_selected
+	if not should_be_selected:
+		set_local_movement_input_state(false)
+
+
+func set_local_movement_input_state(is_held: bool) -> void:
+	if not is_locally_owned or is_movement_input_held == is_held:
+		return
+	apply_movement_input_state(is_held)
+	movement_input_state_requested.emit(self, is_held)
+
+
+func apply_movement_input_state(is_held: bool) -> void:
+	is_movement_input_held = is_held
+	if is_held:
+		if health > 0 and not is_attacking:
+			update_move_animation(true)
+		return
+	if not is_moving and not is_executing_move_path:
+		update_move_animation(false)
 
 
 func can_process_local_input() -> bool:
@@ -171,6 +195,7 @@ func update_move_animation(should_walk: bool) -> void:
 
 
 func die() -> void:
+	set_local_movement_input_state(false)
 	if runtime != null:
 		runtime.notify_character_defeated(self)
 	respawn()
@@ -182,6 +207,7 @@ func respawn() -> bool:
 	var character_view: CharacterView = _get_view()
 	if character_view != null:
 		character_view.play_idle()
+	is_movement_input_held = false
 	update_move_animation(false)
 	_sync_facing_from_view()
 	return true
@@ -262,15 +288,13 @@ func _try_continue_moving() -> bool:
 func _on_move_stopped() -> void:
 	if is_executing_move_path:
 		return
-
-	var character_model: CharacterModel = _get_model()
-	update_move_animation(character_model != null and character_model.should_play_move_animation())
+	update_move_animation(is_movement_input_held)
 
 
 func _finish_move_path() -> void:
 	is_executing_move_path = false
 	if is_inside_tree():
-		update_move_animation(false)
+		update_move_animation(is_movement_input_held)
 
 
 func _attack_cell(target_cell: Vector2i, direction: Vector2i, should_apply: bool, should_broadcast: bool) -> void:

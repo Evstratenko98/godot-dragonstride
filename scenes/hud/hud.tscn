@@ -9,7 +9,6 @@
 [ext_resource type="PackedScene" path="res://scenes/hud/chest_loot_dialog.tscn" id="7_chest_loot"]
 [ext_resource type="Script" path="res://scenes/hud/hud_cursor_controller.gd" id="8_cursor"]
 [ext_resource type="PackedScene" path="res://scenes/hud/game_pause_menu.tscn" id="9_pause"]
-[ext_resource type="PackedScene" path="res://scenes/hud/character_action_menu.tscn" id="10_action_menu"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_end_turn"]
 bg_color = Color(0.06, 0.06, 0.08, 0.7)
@@ -60,7 +59,7 @@ anchor_top = 1.0
 anchor_bottom = 1.0
 offset_left = 24.0
 offset_top = -174.0
-offset_right = 284.0
+offset_right = 250.0
 offset_bottom = -24.0
 grow_vertical = 0
 script = ExtResource("3_player_status")
@@ -78,8 +77,6 @@ offset_bottom = -24.0
 grow_horizontal = 2
 grow_vertical = 0
 script = ExtResource("2_inventory_bar")
-
-[node name="CharacterActionMenu" parent="." instance=ExtResource("10_action_menu")]
 
 [node name="EndTurnButton" type="Button" parent="." unique_id=216910845]
 custom_minimum_size = Vector2(130, 38)
