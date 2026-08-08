@@ -26,7 +26,7 @@ var selected_player_entity_id: String = ""
 var selected_spell_slot_index: int = -1
 var usage_ledger: WorldSpellUsageLedger = WorldSpellUsageLedger.new()
 var active_casts_by_entity_id: Dictionary[String, String] = {}
-var active_cast_target_cells_by_entity_id: Dictionary[String, Vector2i] = {}
+var active_cast_target_surfaces_by_entity_id: Dictionary[String, Vector3i] = {}
 var impacted_cast_ids: Dictionary[String, bool] = {}
 var signal_bridge: WorldSpellSignalBridge = WorldSpellSignalBridge.new()
 
@@ -57,7 +57,7 @@ func _on_session_cleared() -> void:
 	selected_spell_slot_index = -1
 	usage_ledger.clear()
 	active_casts_by_entity_id.clear()
-	active_cast_target_cells_by_entity_id.clear()
+	active_cast_target_surfaces_by_entity_id.clear()
 	impacted_cast_ids.clear()
 	signal_bridge.clear()
 
@@ -109,13 +109,13 @@ func get_selected_spell_slot_index(player: PlayerCharacter) -> int:
 	return selected_spell_slot_index
 
 
-func request_selected_spell_cast(player: PlayerCharacter, target_cell: Vector2i) -> bool:
+func request_selected_spell_cast(player: PlayerCharacter, target_surface: Vector3i) -> bool:
 	if not has_selected_spell(player):
 		return false
 
 	var spell_slot_index: int = selected_spell_slot_index
 	cancel_spell_targeting(player)
-	if not runtime.is_cell_inside(target_cell):
+	if not runtime.is_surface_inside(target_surface):
 		_print_rejection(REJECTION_INVALID_TARGET)
 		return true
 
@@ -126,15 +126,15 @@ func request_selected_spell_cast(player: PlayerCharacter, target_cell: Vector2i)
 	var request_id: int = runtime.create_action_request_id()
 	if GameSession.is_multiplayer():
 		signal_bridge.track_local_request(request_id)
-		NetworkManager.spells.request_spell_cast(player.entity_id, spell_slot_index, target_cell, GameSession.get_match_id(), runtime.get_turn_revision(), request_id)
+		NetworkManager.spells.request_spell_cast(player.entity_id, spell_slot_index, target_surface, GameSession.get_match_id(), runtime.get_turn_revision(), request_id)
 	else:
 		runtime.enqueue_player_action(
 			WorldActionRecord.ActionType.SPELL_CAST,
 			player,
 			{
 				"spell_slot_index": spell_slot_index,
-				"target_cell": target_cell,
-				"target_kind": "cell",
+				"target_surface": target_surface,
+				"target_kind": "surface",
 			},
 			request_id,
 			0
@@ -155,9 +155,9 @@ func is_entity_movement_blocked(entity: Node) -> bool:
 	if player == null or runtime == null:
 		return false
 
-	var player_cell: Vector2i = runtime.world_to_cell(player.global_position)
-	for target_cell: Vector2i in active_cast_target_cells_by_entity_id.values():
-		if target_cell == player_cell:
+	var player_cell: Vector3i = player.current_surface
+	for target_surface: Vector3i in active_cast_target_surfaces_by_entity_id.values():
+		if target_surface == player_cell:
 			return true
 
 	return false
@@ -219,21 +219,21 @@ func get_action_rejection_reason(action: WorldActionRecord) -> String:
 		return REJECTION_INVALID_PLAYER
 	var player: PlayerCharacter = runtime.get_entity_by_id(action.actor_entity_id) as PlayerCharacter
 	var spell_slot_index: int = int(action.payload.get("spell_slot_index", -1))
-	var target_kind: String = str(action.payload.get("target_kind", "cell"))
-	var target_cell: Vector2i = action.payload.get("target_cell", Vector2i(-1, -1))
+	var target_kind: String = str(action.payload.get("target_kind", "surface"))
+	var target_surface: Vector3i = action.payload.get("target_surface", Vector3i(-1, -1, -1))
 	if target_kind == "entity":
 		var target_entity_id: String = str(action.payload.get("target_entity_id", ""))
 		var target_entity: Entity = runtime.get_entity_by_id(target_entity_id) as Entity
 		if target_entity == null or target_entity.health <= 0:
 			return REJECTION_INVALID_TARGET
-		target_cell = target_entity.current_cell
-		action.payload["target_cell"] = target_cell
-	elif target_kind != "cell":
+		target_surface = target_entity.current_surface
+		action.payload["target_surface"] = target_surface
+	elif target_kind != "surface":
 		return REJECTION_INVALID_TARGET
 	var rejection_reason: String = _get_cast_rejection_reason(
 		player,
 		spell_slot_index,
-		target_cell,
+		target_surface,
 		str(action.payload.get("reservation_key", ""))
 	)
 	if not rejection_reason.is_empty():
@@ -251,20 +251,20 @@ func execute_action_cast(action: WorldActionRecord, is_authority: bool) -> bool:
 	if player == null:
 		return false
 	var spell_slot_index: int = int(action.payload.get("spell_slot_index", -1))
-	var target_cell: Vector2i = action.payload.get("target_cell", Vector2i(-1, -1))
+	var target_surface: Vector3i = action.payload.get("target_surface", Vector3i(-1, -1, -1))
 	var spell_id: String = str(action.payload.get("spell_id", ""))
 	var cast_id: String = str(action.payload.get("cast_id", "spell_cast_%d" % action.sequence_id))
-	var effect: SpellCastEffect = _create_effect(cast_id, player.entity_id, spell_id, target_cell)
+	var effect: SpellCastEffect = _create_effect(cast_id, player.entity_id, spell_id, target_surface)
 	if effect == null:
 		return false
 	if is_authority:
-		runtime.notify_entity_attacked_in_turn(player, target_cell)
+		runtime.notify_entity_attacked_in_turn(player, target_surface)
 	active_casts_by_entity_id[player.entity_id] = cast_id
-	active_cast_target_cells_by_entity_id[player.entity_id] = target_cell
+	active_cast_target_surfaces_by_entity_id[player.entity_id] = target_surface
 	release_action_reservation(action)
 	_record_spell_slot_use(player.entity_id, spell_slot_index)
 	spell_usage_changed.emit()
-	_start_effect(effect, target_cell)
+	_start_effect(effect, target_surface)
 	var presentation_deadline_msec: int = Time.get_ticks_msec() + int((effect.get_expected_duration() + 2.0) * 1000.0)
 	while (
 		active_casts_by_entity_id.get(player.entity_id, "") == cast_id
@@ -286,12 +286,12 @@ func execute_action_cast(action: WorldActionRecord, is_authority: bool) -> bool:
 func _get_cast_rejection_reason(
 	player: PlayerCharacter,
 	spell_slot_index: int,
-	target_cell: Vector2i,
+	target_surface: Vector3i,
 	ignored_reservation_key: String = ""
 ) -> String:
 	if player == null or player.health <= 0:
 		return REJECTION_INVALID_PLAYER
-	if not runtime.is_cell_inside(target_cell):
+	if not runtime.is_surface_inside(target_surface):
 		return REJECTION_INVALID_TARGET
 	if not runtime.can_entity_cast_spell_in_turn(player):
 		return REJECTION_INVALID_TURN
@@ -314,7 +314,7 @@ func _create_effect(
 	cast_id: String,
 	caster_entity_id: String,
 	spell_id: String,
-	target_cell: Vector2i
+	target_surface: Vector3i
 ) -> SpellCastEffect:
 	if effects_root == null or spell_id != SPELL_ID_METEOR:
 		return null
@@ -324,24 +324,24 @@ func _create_effect(
 		return null
 
 	effect.name = cast_id
-	effect.impact.connect(_on_effect_impact.bind(cast_id, caster_entity_id, spell_id, target_cell))
+	effect.impact.connect(_on_effect_impact.bind(cast_id, caster_entity_id, spell_id, target_surface))
 	effect.finished.connect(_on_effect_finished.bind(cast_id, caster_entity_id))
 	return effect
 
 
-func _start_effect(effect: SpellCastEffect, target_cell: Vector2i) -> void:
+func _start_effect(effect: SpellCastEffect, target_surface: Vector3i) -> void:
 	effects_root.add_child.call_deferred(effect)
-	call_deferred("_begin_effect", effect, target_cell)
+	call_deferred("_begin_effect", effect, target_surface)
 
 
-func _begin_effect(effect: SpellCastEffect, target_cell: Vector2i) -> void:
+func _begin_effect(effect: SpellCastEffect, target_surface: Vector3i) -> void:
 	if effect == null or not is_instance_valid(effect):
 		return
 	if not effect.is_inside_tree():
-		call_deferred("_begin_effect", effect, target_cell)
+		call_deferred("_begin_effect", effect, target_surface)
 		return
 
-	var target_position: Vector2 = runtime.cell_to_world(target_cell)
+	var target_position: Vector2 = runtime.surface_to_world(target_surface)
 	effect.play_effect(target_position + METEOR_START_OFFSET, target_position)
 
 
@@ -349,7 +349,7 @@ func _on_effect_impact(
 	cast_id: String,
 	caster_entity_id: String,
 	spell_id: String,
-	target_cell: Vector2i
+	target_surface: Vector3i
 ) -> void:
 	if not _is_authority() or spell_id != SPELL_ID_METEOR:
 		return
@@ -360,7 +360,7 @@ func _on_effect_impact(
 
 	impacted_cast_ids[cast_id] = true
 	var caster: Node = runtime.get_entity_by_id(caster_entity_id)
-	runtime.apply_spell_damage_to_cell(caster, target_cell, METEOR_DAMAGE)
+	runtime.apply_spell_damage_to_surface(caster, target_surface, METEOR_DAMAGE)
 
 
 func _on_effect_finished(cast_id: String, caster_entity_id: String) -> void:
@@ -368,7 +368,7 @@ func _on_effect_finished(cast_id: String, caster_entity_id: String) -> void:
 		return
 
 	active_casts_by_entity_id.erase(caster_entity_id)
-	active_cast_target_cells_by_entity_id.erase(caster_entity_id)
+	active_cast_target_surfaces_by_entity_id.erase(caster_entity_id)
 	impacted_cast_ids.erase(cast_id)
 	var caster: Node = runtime.get_entity_by_id(caster_entity_id)
 	if caster != null:
@@ -382,7 +382,7 @@ func _force_finish_cast(cast_id: String, caster_entity_id: String) -> void:
 	if effect != null:
 		effect.queue_free()
 	active_casts_by_entity_id.erase(caster_entity_id)
-	active_cast_target_cells_by_entity_id.erase(caster_entity_id)
+	active_cast_target_surfaces_by_entity_id.erase(caster_entity_id)
 	impacted_cast_ids.erase(cast_id)
 	spell_usage_changed.emit()
 	cast_finished.emit(cast_id)

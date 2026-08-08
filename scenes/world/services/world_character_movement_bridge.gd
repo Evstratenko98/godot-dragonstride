@@ -70,7 +70,7 @@ func disconnect_signals() -> void:
 	move_request_tracker.clear()
 
 
-func request_move_path(player: PlayerCharacter, requested_path: Array[Vector2i]) -> bool:
+func request_move_path(player: PlayerCharacter, requested_path: Array[Vector3i]) -> bool:
 	if network == null or player == null or player != network.runtime.get_selected_local_character() or requested_path.is_empty():
 		return false
 	if network.runtime.has_pending_move_path(player) or move_request_tracker.is_pending():
@@ -95,6 +95,61 @@ func request_move_path(player: PlayerCharacter, requested_path: Array[Vector2i])
 		request_id
 	)
 	return true
+
+
+func request_entity_move_started(
+	entity: Node,
+	from_surface: Vector3i,
+	target_surface: Vector3i,
+	should_broadcast: bool = true
+) -> void:
+	if (
+		network == null
+		or not should_broadcast
+		or not GameSession.is_multiplayer()
+		or not GameSession.is_host()
+	):
+		return
+	var entity_id: String = network.runtime.get_entity_id(entity)
+	if entity_id.is_empty():
+		return
+	NetworkManager.character.broadcast_entity_move(
+		network.runtime.get_current_action_sequence_id(),
+		network.runtime.claim_current_action_subsequence_id(),
+		entity_id,
+		from_surface,
+		target_surface
+	)
+
+
+func on_entity_move_received(
+	parent_sequence_id: int,
+	subsequence_id: int,
+	entity_id: String,
+	from_surface: Vector3i,
+	target_surface: Vector3i
+) -> void:
+	if network.message_buffer.buffer_npc_action(parent_sequence_id, {
+		"kind": "move",
+		"subsequence_id": subsequence_id,
+		"entity_id": entity_id,
+		"from_surface": from_surface,
+		"target_surface": target_surface,
+	}):
+		return
+	apply_npc_move(entity_id, from_surface, target_surface)
+
+
+func apply_npc_move(entity_id: String, from_surface: Vector3i, target_surface: Vector3i) -> void:
+	var entity: Entity = network.runtime.get_entity_by_id(entity_id) as Entity
+	if entity == null or (entity is PlayerCharacter and (entity as PlayerCharacter).is_locally_owned):
+		return
+	if not network.runtime.has_traversal_edge(from_surface, target_surface):
+		return
+	if entity is NonPlayerEntity:
+		(entity as NonPlayerEntity).play_remote_move(from_surface, target_surface)
+		return
+	network.runtime.reserve_entity_surface(entity, from_surface, target_surface)
 
 
 func handle_action_finished(action: WorldActionRecord) -> void:
@@ -231,7 +286,7 @@ func _on_movement_input_state_received(actor_entity_id: String, is_held: bool) -
 func _on_character_move_path_requested(
 	requester_steam_id: int,
 	actor_entity_id: String,
-	requested_path: Array[Vector2i],
+	requested_path: Array[Vector3i],
 	match_id: String,
 	turn_revision: int,
 	request_id: int

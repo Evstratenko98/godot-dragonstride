@@ -10,24 +10,24 @@ func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void
 	level = new_level
 
 
-func get_available_attack_cells(attacker: Entity) -> Array[Vector2i]:
-	var available_cells: Array[Vector2i] = []
+func get_available_attack_surfaces(attacker: Entity) -> Array[Vector3i]:
+	var available_cells: Array[Vector3i] = []
 	if attacker == null or runtime == null or not attacker.can_act():
 		return available_cells
-	var anchor_cell: Vector2i = runtime.world_to_cell(attacker.global_position)
-	for target_cell: Vector2i in attacker.get_attackable_cells(anchor_cell):
+	var anchor_surface: Vector3i = attacker.current_surface
+	for target_surface: Vector3i in attacker.get_attackable_surfaces(anchor_surface):
 		if (
-			runtime.is_cell_inside(target_cell)
-			and attacker.can_attack_cell_from(anchor_cell, target_cell)
-			and runtime.can_entity_attack_in_turn(attacker, target_cell)
+			runtime.is_surface_inside(target_surface)
+			and attacker.can_attack_surface_from(anchor_surface, target_surface)
+			and runtime.can_entity_attack_in_turn(attacker, target_surface)
 		):
-			available_cells.append(target_cell)
+			available_cells.append(target_surface)
 	return available_cells
 
 
-func apply_attack_to_cell(
+func apply_attack_to_surface(
 	attacker: Node,
-	cell: Vector2i,
+	cell: Vector3i,
 	should_broadcast: bool = true,
 	should_broadcast_action: bool = true
 ) -> void:
@@ -40,7 +40,7 @@ func apply_attack_to_cell(
 	_apply_damage_to_cell(attacker, cell, damage_amount, should_broadcast, false)
 
 
-func broadcast_attack_action(attacker: Node, cell: Vector2i) -> void:
+func broadcast_attack_action(attacker: Node, cell: Vector3i) -> void:
 	if (
 		not GameSession.is_multiplayer()
 		or not GameSession.is_host()
@@ -61,9 +61,9 @@ func broadcast_attack_action(attacker: Node, cell: Vector2i) -> void:
 	)
 
 
-func apply_spell_damage_to_cell(
+func apply_spell_damage_to_surface(
 	caster: Node,
-	cell: Vector2i,
+	cell: Vector3i,
 	damage_amount: int,
 	should_broadcast: bool = true
 ) -> void:
@@ -75,18 +75,18 @@ func apply_spell_damage_to_cell(
 
 func _apply_damage_to_cell(
 	damage_source: Node,
-	cell: Vector2i,
+	cell: Vector3i,
 	damage_amount: int,
 	should_broadcast: bool,
 	can_damage_source: bool
 ) -> void:
 
-	var target_entity: Node = runtime.get_entity_at_cell(cell)
+	var target_entity: Node = runtime.get_entity_at_surface(cell)
 	if target_entity != null and (target_entity != damage_source or can_damage_source):
 		_apply_entity_damage(damage_source, target_entity, damage_amount, should_broadcast)
 		return
 
-	var target_object: GridObject = runtime.get_object_at_cell(cell) as GridObject
+	var target_object: GridObject = runtime.get_object_at_surface(cell) as GridObject
 	if target_object != null:
 		var was_damaged: bool = target_object.take_damage()
 		if not was_damaged:
@@ -213,17 +213,17 @@ func _broadcast_entity_damage_result(target_entity: Node, was_lethal: bool) -> v
 	)
 
 
-func print_non_entity_attack_result(attacker: Node, cell: Vector2i) -> void:
-	var target_entity: Node = runtime.get_entity_at_cell(cell)
+func print_non_entity_attack_result(attacker: Node, cell: Vector3i) -> void:
+	var target_entity: Node = runtime.get_entity_at_surface(cell)
 	if target_entity != null and target_entity != attacker:
 		return
 
-	var target_object: GridObject = runtime.get_object_at_cell(cell) as GridObject
+	var target_object: GridObject = runtime.get_object_at_surface(cell) as GridObject
 	if target_object != null:
 		runtime.print_console("%s deals damage to %s" % [get_entity_display_name(attacker), target_object.name])
 		return
 
-	runtime.print_console("%s hit %s" % [get_entity_display_name(attacker), runtime.get_cell_display_name(cell)])
+	runtime.print_console("%s hit %s" % [get_entity_display_name(attacker), runtime.get_surface_display_name(cell)])
 
 
 func _get_entity_display_name_by_id(entity_id: String) -> String:

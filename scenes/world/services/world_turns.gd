@@ -163,7 +163,7 @@ func can_entity_move(entity: Node) -> bool:
 	return state == STATE_PLAYER_TURN and _is_active_entity(entity) and budget.can_move(runtime.get_entity_id(entity))
 
 
-func can_entity_attack(entity: Node, _target_cell: Vector2i) -> bool:
+func can_entity_attack(entity: Node, _target_surface: Vector3i) -> bool:
 	if state == STATE_FREE:
 		return true
 
@@ -205,7 +205,7 @@ func can_entity_sync_state(entity: Node) -> bool:
 	return state == STATE_PLAYER_TURN and _is_active_entity(entity)
 
 
-func notify_entity_moved(entity: Node, _from_cell: Vector2i, _target_cell: Vector2i, movement_step_cost: int = 1) -> void:
+func notify_entity_moved(entity: Node, _from_surface: Vector3i, _target_surface: Vector3i, movement_step_cost: int = 1) -> void:
 	if not _is_authority() or state != STATE_PLAYER_TURN or not _is_active_entity(entity) or movement_step_cost <= 0:
 		return
 
@@ -221,7 +221,7 @@ func notify_entity_moved(entity: Node, _from_cell: Vector2i, _target_cell: Vecto
 	_finish_pending_turn_if_ready()
 
 
-func notify_entity_attacked(entity: Node, _target_cell: Vector2i) -> void:
+func notify_entity_attacked(entity: Node, _target_surface: Vector3i) -> void:
 	if not _is_authority() or state != STATE_PLAYER_TURN or not _is_active_entity(entity):
 		return
 

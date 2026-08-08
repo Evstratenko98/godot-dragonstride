@@ -1,8 +1,8 @@
 class_name NetworkProtocol
 extends RefCounted
 
-const PROTOCOL_VERSION := 7
-const SNAPSHOT_SCHEMA_VERSION := 1
+const PROTOCOL_VERSION := 8
+const SNAPSHOT_SCHEMA_VERSION := 2
 const MAX_ROSTER_SIZE := 4
 const MAX_SQUAD_SIZE := 4
 const MAX_PLAYER_CHARACTERS := MAX_ROSTER_SIZE * MAX_SQUAD_SIZE
@@ -18,7 +18,7 @@ const MAX_MESSAGES_PER_SEQUENCE := 32
 const MAX_BUFFERED_MESSAGES := 256
 const MAX_GAMEPLAY_VALUE := 1_000_000
 const MAX_ABSOLUTE_GRID_COORDINATE := 1_000_000
-const MAX_MOVE_PATH_CELLS := 512
+const MAX_MOVE_PATH_SURFACES := 512
 
 
 static func make_squad_member_entity_id(player_id: String, squad_slot: int) -> String:
@@ -52,6 +52,7 @@ const SAFE_REASON_CODES: PackedStringArray = [
 	"state_sync_failed",
 	"state_sync_invalid",
 	"state_sync_timeout",
+	"topology_mismatch",
 	"spell_unavailable",
 	"unknown_type",
 	"world_turn",
@@ -83,10 +84,12 @@ static func is_valid_bounded_text(value: String) -> bool:
 	return value.length() <= MAX_IDENTIFIER_LENGTH
 
 
-static func is_valid_cell_value(cell: Vector2i) -> bool:
+static func is_valid_surface_value(surface: Vector3i) -> bool:
 	return (
-		absi(cell.x) <= MAX_ABSOLUTE_GRID_COORDINATE
-		and absi(cell.y) <= MAX_ABSOLUTE_GRID_COORDINATE
+		absi(surface.x) <= MAX_ABSOLUTE_GRID_COORDINATE
+		and absi(surface.y) <= MAX_ABSOLUTE_GRID_COORDINATE
+		and surface.z >= WorldGridTopology.MIN_ELEVATION
+		and surface.z <= WorldGridTopology.MAX_ELEVATION
 	)
 
 
@@ -94,10 +97,10 @@ static func is_valid_move_path(path_value: Variant) -> bool:
 	if not (path_value is Array):
 		return false
 	var path: Array = path_value as Array
-	if path.is_empty() or path.size() > MAX_MOVE_PATH_CELLS:
+	if path.is_empty() or path.size() > MAX_MOVE_PATH_SURFACES:
 		return false
-	for cell_value: Variant in path:
-		if not (cell_value is Vector2i) or not is_valid_cell_value(cell_value as Vector2i):
+	for surface_value: Variant in path:
+		if not (surface_value is Vector3i) or not is_valid_surface_value(surface_value as Vector3i):
 			return false
 	return true
 

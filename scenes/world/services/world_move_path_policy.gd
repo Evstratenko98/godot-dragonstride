@@ -1,9 +1,9 @@
 class_name WorldMovePathPolicy
 extends RefCounted
 
-const REQUESTED_PATH_KEY := "requested_path"
-const REQUESTED_TARGET_CELL_KEY := "requested_target_cell"
-const AUTHORITATIVE_PATH_KEY := "path"
+const REQUESTED_PATH_KEY: String = "requested_path"
+const REQUESTED_TARGET_SURFACE_KEY: String = "requested_target_surface"
+const AUTHORITATIVE_PATH_KEY: String = "path"
 
 
 static func prepare_authoritative_path(
@@ -16,51 +16,53 @@ static func prepare_authoritative_path(
 		return WorldActionStream.REJECTION_INVALID_ACTION
 	if not runtime.can_entity_move_in_turn(player):
 		return WorldActionStream.REJECTION_INVALID_ACTION
-
-	var start_cell: Vector2i = runtime.world_to_cell(player.global_position)
-	var target_cell_value: Variant = action.payload.get(REQUESTED_TARGET_CELL_KEY)
+	var target_value: Variant = action.payload.get(REQUESTED_TARGET_SURFACE_KEY)
 	if action.payload.has(REQUESTED_PATH_KEY):
-		var requested_path: Array[Vector2i] = read_cells(action.payload, REQUESTED_PATH_KEY)
+		var requested_path: Array[Vector3i] = read_surfaces(action.payload, REQUESTED_PATH_KEY)
 		if requested_path.is_empty():
 			return WorldActionStream.REJECTION_INVALID_ACTION
-		target_cell_value = requested_path[requested_path.size() - 1]
+		target_value = requested_path[requested_path.size() - 1]
 		action.payload.erase(REQUESTED_PATH_KEY)
-	if not (target_cell_value is Vector2i):
+	if not (target_value is Vector3i):
 		return WorldActionStream.REJECTION_INVALID_ACTION
-	var target_cell: Vector2i = target_cell_value as Vector2i
-	action.payload[REQUESTED_TARGET_CELL_KEY] = target_cell
-	var shortest_path: Array[Vector2i] = WorldGridPathfinder.find_path_to_cell(
+	var target_surface: Vector3i = target_value as Vector3i
+	if not runtime.is_surface_inside(target_surface):
+		return WorldActionStream.REJECTION_INVALID_ACTION
+	action.payload[REQUESTED_TARGET_SURFACE_KEY] = target_surface
+	var shortest_path: Array[Vector3i] = WorldGridPathfinder.find_path_to_surface(
 		runtime,
 		player,
-		start_cell,
-		target_cell,
+		player.current_surface,
+		target_surface,
 		true
 	)
 	if shortest_path.is_empty():
 		return WorldActionStream.REJECTION_INVALID_ACTION
-
 	var executable_step_count: int = shortest_path.size()
 	if turns != null and turns.is_turn_mode_enabled():
 		if executable_step_count > turns.get_steps_left(player.entity_id):
 			return WorldActionStream.REJECTION_INVALID_ACTION
 	if executable_step_count <= 0:
 		return WorldActionStream.REJECTION_INVALID_ACTION
-
-	var authoritative_path: Array[Vector2i] = []
+	var authoritative_path: Array[Vector3i] = []
 	for path_index: int in range(executable_step_count):
 		authoritative_path.append(shortest_path[path_index])
 	action.payload[AUTHORITATIVE_PATH_KEY] = authoritative_path
 	return ""
 
 
-static func read_cells(payload: Dictionary, path_key: String) -> Array[Vector2i]:
-	var path: Array[Vector2i] = []
+static func read_surfaces(payload: Dictionary, path_key: String) -> Array[Vector3i]:
+	var path: Array[Vector3i] = []
 	var path_value: Variant = payload.get(path_key, [])
 	if not (path_value is Array):
 		return path
-	for cell_value: Variant in (path_value as Array):
-		if not (cell_value is Vector2i):
+	for surface_value: Variant in path_value as Array:
+		if not (surface_value is Vector3i):
 			path.clear()
 			return path
-		path.append(cell_value as Vector2i)
+		var surface: Vector3i = surface_value as Vector3i
+		if surface.z < WorldGridTopology.MIN_ELEVATION or surface.z > WorldGridTopology.MAX_ELEVATION:
+			path.clear()
+			return path
+		path.append(surface)
 	return path

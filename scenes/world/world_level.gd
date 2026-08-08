@@ -4,6 +4,7 @@ extends Node2D
 @export var definition: LevelDefinition = null
 @export var world_entities_root_path: NodePath = ^"WorldEntities"
 @export var spawned_objects_root_path: NodePath = ^"SpawnedObjects"
+@export var terrain_topology_root_path: NodePath = ^"TerrainTopology"
 
 var runtime: WorldRuntime = null
 
@@ -41,11 +42,15 @@ func get_character_walkable_layer_names() -> PackedStringArray:
 	return definition.character_walkable_layer_names
 
 
-func get_spawn_cells() -> Array[Vector2i]:
+func get_spawn_surfaces() -> Array[Vector3i]:
 	if definition == null:
 		return []
 
-	return definition.spawn_cells.duplicate()
+	return definition.spawn_surfaces.duplicate()
+
+
+func get_terrain_topology_root() -> Node:
+	return get_node_or_null(terrain_topology_root_path)
 
 
 func get_world_entities_root() -> Node2D:

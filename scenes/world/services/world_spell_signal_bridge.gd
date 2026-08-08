@@ -74,12 +74,12 @@ func clear() -> void:
 	pending_local_request_ids.clear()
 
 
-func _on_spell_cast_requested(actor_entity_id: String, spell_slot_index: int, target_cell: Vector2i, match_id: String, turn_revision: int, request_id: int, requester_peer_id: int) -> void:
+func _on_spell_cast_requested(actor_entity_id: String, spell_slot_index: int, target_surface: Vector3i, match_id: String, turn_revision: int, request_id: int, requester_peer_id: int) -> void:
 	if not GameSession.is_host():
 		return
 	var player: PlayerCharacter = spells._get_requesting_player(requester_peer_id, actor_entity_id)
 	if player != null:
-		spells.runtime.enqueue_player_action(WorldActionRecord.ActionType.SPELL_CAST, player, {"spell_slot_index": spell_slot_index, "target_cell": target_cell, "target_kind": "cell"}, request_id, requester_peer_id, turn_revision, match_id)
+		spells.runtime.enqueue_player_action(WorldActionRecord.ActionType.SPELL_CAST, player, {"spell_slot_index": spell_slot_index, "target_surface": target_surface, "target_kind": "surface"}, request_id, requester_peer_id, turn_revision, match_id)
 
 
 func _on_player_turn_started(_player_id: String) -> void:

@@ -20,13 +20,13 @@ func apply(
 	for record: Dictionary in dynamic_spawn_records:
 		var type_key: String = spawner.normalize_type_key(str(record.get("type_key", "")))
 		var spawn_id: String = str(record.get("spawn_id", ""))
-		var cell_value: Variant = record.get("cell")
+		var surface_value: Variant = record.get("surface")
 		if (
 			not WorldSpawnCatalog.DEFINITIONS.has(type_key)
 			or not NetworkProtocol.is_valid_identifier(spawn_id)
 			or seen_spawn_ids.has(spawn_id)
-			or not (cell_value is Vector2i)
-			or not spawner.runtime.is_cell_inside(cell_value as Vector2i)
+			or not (surface_value is Vector3i)
+			or not spawner.runtime.is_surface_inside(surface_value as Vector3i)
 		):
 			return false
 		seen_spawn_ids[spawn_id] = true
@@ -51,7 +51,7 @@ func apply(
 		})
 
 	var staged_records: Array[Dictionary] = []
-	var staged_cells: Dictionary[Vector2i, bool] = {}
+	var staged_surfaces: Dictionary[Vector3i, bool] = {}
 	for record: Dictionary in dynamic_spawn_records:
 		var spawn_id: String = str(record.get("spawn_id", ""))
 		if spawner.has_spawn_id(spawn_id):
@@ -64,14 +64,14 @@ func apply(
 			return false
 		var instance: Node = scene.instantiate()
 		spawner.assign_spawn_id(instance, str(definition.get("kind", "")), spawn_id)
-		var cell: Vector2i = record.get("cell", Vector2i.ZERO)
-		for occupied_cell: Vector2i in _get_occupied_cells(instance, cell):
-			if staged_cells.has(occupied_cell):
+		var surface: Vector3i = record.get("surface", Vector3i.ZERO)
+		for occupied_surface: Vector3i in _get_occupied_surfaces(instance, surface):
+			if staged_surfaces.has(occupied_surface):
 				instance.free()
 				_free_staged(staged_records)
 				return false
-			staged_cells[occupied_cell] = true
-		if not spawner.runtime.get_placement_error(instance, cell).is_empty():
+			staged_surfaces[occupied_surface] = true
+		if not spawner.runtime.get_placement_error(instance, surface).is_empty():
 			instance.free()
 			_free_staged(staged_records)
 			return false
@@ -80,7 +80,7 @@ func apply(
 			"definition": definition,
 			"type_key": type_key,
 			"spawn_id": spawn_id,
-			"cell": cell,
+			"surface": surface,
 		})
 
 	spawner.apply_world_removals(effective_removals)
@@ -107,12 +107,12 @@ func commit() -> void:
 	committed_spawn_ids.clear()
 
 
-func _get_occupied_cells(instance: Node, anchor_cell: Vector2i) -> Array[Vector2i]:
+func _get_occupied_surfaces(instance: Node, anchor_surface: Vector3i) -> Array[Vector3i]:
 	if instance is Entity:
-		return (instance as Entity).get_occupied_cells(anchor_cell)
+		return (instance as Entity).get_occupied_surfaces(anchor_surface)
 	if instance is GridObject:
-		return (instance as GridObject).get_occupied_cells(anchor_cell)
-	return [anchor_cell]
+		return (instance as GridObject).get_occupied_surfaces(anchor_surface)
+	return [anchor_surface]
 
 
 func _free_staged(records: Array[Dictionary]) -> void:

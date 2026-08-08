@@ -117,14 +117,12 @@ func get_rejection_reason(action: WorldActionRecord) -> String:
 		WorldActionRecord.ActionType.MOVE_PATH:
 			return WorldMovePathPolicy.prepare_authoritative_path(runtime, turns, player, action)
 		WorldActionRecord.ActionType.ATTACK:
-			var attack_cell: Vector2i = action.payload.get("target_cell", Vector2i.ZERO)
-			player.current_cell = runtime.world_to_cell(player.global_position)
-			if not player.can_attack_cell(attack_cell) or not runtime.can_entity_attack_in_turn(player, attack_cell):
+			var attack_cell: Vector3i = action.payload.get("target_surface", Vector3i.ZERO)
+			if not player.can_attack_surface(attack_cell) or not runtime.can_entity_attack_in_turn(player, attack_cell):
 				return WorldActionStream.REJECTION_INVALID_ACTION
 		WorldActionRecord.ActionType.INTERACTION:
-			var interaction_cell: Vector2i = action.payload.get("target_cell", Vector2i.ZERO)
-			player.current_cell = runtime.world_to_cell(player.global_position)
-			if not player.can_act() or not player.can_attack_cell(interaction_cell) or not runtime.can_entity_interact_in_turn(player):
+			var interaction_cell: Vector3i = action.payload.get("target_surface", Vector3i.ZERO)
+			if not player.can_act() or not player.can_attack_surface(interaction_cell) or not runtime.can_entity_interact_in_turn(player):
 				return WorldActionStream.REJECTION_INVALID_ACTION
 			if loot != null:
 				return loot.get_action_rejection_reason(action)
@@ -157,7 +155,7 @@ func execute_authoritative(action: WorldActionRecord) -> bool:
 	var player: PlayerCharacter = runtime.get_entity_by_id(action.actor_entity_id) as PlayerCharacter
 	match action.action_type:
 		WorldActionRecord.ActionType.MOVE_PATH:
-			var authoritative_path: Array[Vector2i] = WorldMovePathPolicy.read_cells(
+			var authoritative_path: Array[Vector3i] = WorldMovePathPolicy.read_surfaces(
 				action.payload,
 				WorldMovePathPolicy.AUTHORITATIVE_PATH_KEY
 			)
@@ -168,12 +166,12 @@ func execute_authoritative(action: WorldActionRecord) -> bool:
 		WorldActionRecord.ActionType.ATTACK:
 			if player == null:
 				return false
-			var attack_cell: Vector2i = action.payload.get("target_cell", Vector2i.ZERO)
+			var attack_cell: Vector3i = action.payload.get("target_surface", Vector3i.ZERO)
 			player.play_remote_attack(attack_cell, false)
 			if not player.is_attacking:
 				return false
 			runtime.notify_entity_attacked_in_turn(player, attack_cell)
-			runtime.apply_attack_to_cell(player, attack_cell, true, false)
+			runtime.apply_attack_to_surface(player, attack_cell, true, false)
 			var expected_attack_duration: float = player.get_expected_attack_duration(attack_cell)
 			var attack_deadline_msec: int = Time.get_ticks_msec() + int((expected_attack_duration + 2.0) * 1000.0)
 			while is_instance_valid(player) and player.is_attacking and Time.get_ticks_msec() < attack_deadline_msec:
@@ -191,7 +189,7 @@ func execute_authoritative(action: WorldActionRecord) -> bool:
 				if was_opened:
 					runtime.notify_entity_interacted_in_turn(player)
 				return was_opened
-			return runtime.try_character_interaction(player, action.payload.get("target_cell", Vector2i.ZERO))
+			return runtime.try_character_interaction(player, action.payload.get("target_surface", Vector3i.ZERO))
 		WorldActionRecord.ActionType.SPELL_CAST:
 			if spells == null:
 				return false
@@ -270,13 +268,13 @@ func play_remote(action: WorldActionRecord) -> void:
 		return
 	match action.action_type:
 		WorldActionRecord.ActionType.MOVE_PATH:
-			var authoritative_path: Array[Vector2i] = WorldMovePathPolicy.read_cells(
+			var authoritative_path: Array[Vector3i] = WorldMovePathPolicy.read_surfaces(
 				action.payload,
 				WorldMovePathPolicy.AUTHORITATIVE_PATH_KEY
 			)
 			await player.play_remote_move_path(authoritative_path)
 		WorldActionRecord.ActionType.ATTACK:
-			var attack_cell: Vector2i = action.payload.get("target_cell", player.current_cell)
+			var attack_cell: Vector3i = action.payload.get("target_surface", player.current_surface)
 			player.play_remote_attack(attack_cell, false)
 			var expected_attack_duration: float = player.get_expected_attack_duration(attack_cell)
 			var attack_deadline_msec: int = Time.get_ticks_msec() + int((expected_attack_duration + 2.0) * 1000.0)

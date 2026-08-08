@@ -1,12 +1,12 @@
 class_name NetworkCombatChannel
 extends NetworkChannel
 
-signal attack_requested(actor_entity_id: String, target_cell: Vector2i, match_id: String, turn_revision: int, request_id: int, requester_peer_id: int)
+signal attack_requested(actor_entity_id: String, target_surface: Vector3i, match_id: String, turn_revision: int, request_id: int, requester_peer_id: int)
 signal entity_attack_received(
 	parent_sequence_id: int,
 	subsequence_id: int,
 	entity_id: String,
-	target_cell: Vector2i
+	target_surface: Vector3i
 )
 signal entity_attack_result_received(
 	sequence_id: int,
@@ -21,13 +21,13 @@ signal entity_vitality_received(sequence_id: int, entity_id: String, health: int
 signal combat_action_payload_received(match_id: String, sequence_id: int, payload: Dictionary)
 
 
-func request_attack(actor_entity_id: String, target_cell: Vector2i, match_id: String, turn_revision: int, request_id: int) -> void:
+func request_attack(actor_entity_id: String, target_surface: Vector3i, match_id: String, turn_revision: int, request_id: int) -> void:
 	if not _can_send():
 		return
 	if connection.is_host:
-		attack_requested.emit(actor_entity_id, target_cell, match_id, turn_revision, request_id, 0)
+		attack_requested.emit(actor_entity_id, target_surface, match_id, turn_revision, request_id, 0)
 		return
-	rpc_id(1, "_submit_attack", actor_entity_id, target_cell, match_id, turn_revision, request_id)
+	rpc_id(1, "_submit_attack", actor_entity_id, target_surface, match_id, turn_revision, request_id)
 
 
 func broadcast_action_payload(match_id: String, sequence_id: int, payload: Dictionary) -> void:
@@ -39,10 +39,10 @@ func broadcast_entity_attack(
 	parent_sequence_id: int,
 	subsequence_id: int,
 	entity_id: String,
-	target_cell: Vector2i
+	target_surface: Vector3i
 ) -> void:
-	if _can_host_send() and parent_sequence_id > 0 and subsequence_id >= 0 and NetworkProtocol.is_valid_identifier(entity_id) and NetworkProtocol.is_valid_cell_value(target_cell):
-		rpc("_receive_entity_attack", GameSession.get_match_id(), parent_sequence_id, subsequence_id, entity_id, target_cell)
+	if _can_host_send() and parent_sequence_id > 0 and subsequence_id >= 0 and NetworkProtocol.is_valid_identifier(entity_id) and NetworkProtocol.is_valid_surface_value(target_surface):
+		rpc("_receive_entity_attack", GameSession.get_match_id(), parent_sequence_id, subsequence_id, entity_id, target_surface)
 
 
 func broadcast_entity_attack_result(
@@ -100,10 +100,10 @@ func send_entity_vitality_to_peer(
 
 
 @rpc("any_peer", "call_remote", "reliable", 1)
-func _submit_attack(actor_entity_id: String, target_cell: Vector2i, match_id: String, turn_revision: int, request_id: int) -> void:
+func _submit_attack(actor_entity_id: String, target_surface: Vector3i, match_id: String, turn_revision: int, request_id: int) -> void:
 	var requester_peer_id: int = _get_registered_sender_peer_id()
-	if requester_peer_id != 0 and NetworkProtocol.is_valid_identifier(actor_entity_id) and NetworkProtocol.is_valid_cell_value(target_cell) and turn_revision >= 0 and _is_valid_intent(match_id, request_id, {"actor_entity_id": actor_entity_id, "target_cell": target_cell, "turn_revision": turn_revision}):
-		attack_requested.emit(actor_entity_id, target_cell, match_id, turn_revision, request_id, requester_peer_id)
+	if requester_peer_id != 0 and NetworkProtocol.is_valid_identifier(actor_entity_id) and NetworkProtocol.is_valid_surface_value(target_surface) and turn_revision >= 0 and _is_valid_intent(match_id, request_id, {"actor_entity_id": actor_entity_id, "target_surface": target_surface, "turn_revision": turn_revision}):
+		attack_requested.emit(actor_entity_id, target_surface, match_id, turn_revision, request_id, requester_peer_id)
 
 
 @rpc("authority", "call_remote", "reliable", 1)
@@ -118,10 +118,10 @@ func _receive_entity_attack(
 	parent_sequence_id: int,
 	subsequence_id: int,
 	entity_id: String,
-	target_cell: Vector2i
+	target_surface: Vector3i
 ) -> void:
-	if _is_valid_match_message(match_id) and parent_sequence_id > 0 and subsequence_id >= 0 and NetworkProtocol.is_valid_identifier(entity_id) and NetworkProtocol.is_valid_cell_value(target_cell):
-		entity_attack_received.emit(parent_sequence_id, subsequence_id, entity_id, target_cell)
+	if _is_valid_match_message(match_id) and parent_sequence_id > 0 and subsequence_id >= 0 and NetworkProtocol.is_valid_identifier(entity_id) and NetworkProtocol.is_valid_surface_value(target_surface):
+		entity_attack_received.emit(parent_sequence_id, subsequence_id, entity_id, target_surface)
 
 
 @rpc("authority", "call_remote", "reliable", 1)

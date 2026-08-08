@@ -28,6 +28,9 @@ func configure_context(
 func start_match_runtime() -> String:
 	if not _has_required_services():
 		return "runtime_services_unavailable"
+	var topology_error: String = runtime.grid.get_topology_error()
+	if not topology_error.is_empty():
+		return "invalid_topology:%s" % topology_error
 
 	registry.collect_blockers()
 	network.apply_cached_object_states()

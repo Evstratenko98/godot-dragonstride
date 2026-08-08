@@ -15,17 +15,17 @@ func configure(owner: Warrior) -> void:
 	warrior = owner
 
 
-func enqueue_move(from_cell: Vector2i, target_cell: Vector2i) -> void:
+func enqueue_move(from_surface: Vector3i, target_surface: Vector3i) -> void:
 	if not _can_enqueue():
 		return
-	action_queue.append({"type": "move", "from_cell": from_cell, "target_cell": target_cell})
+	action_queue.append({"type": "move", "from_surface": from_surface, "target_surface": target_surface})
 	_process_queue()
 
 
-func enqueue_attack(target_cell: Vector2i, should_apply: bool) -> void:
+func enqueue_attack(target_surface: Vector3i, should_apply: bool) -> void:
 	if not _can_enqueue():
 		return
-	action_queue.append({"type": "attack", "target_cell": target_cell, "should_apply": should_apply})
+	action_queue.append({"type": "attack", "target_surface": target_surface, "should_apply": should_apply})
 	_process_queue()
 
 
@@ -87,13 +87,13 @@ func _play_move(action: Dictionary) -> void:
 		warrior.runtime = warrior._find_runtime()
 	if warrior.runtime == null:
 		return
-	var from_cell: Vector2i = action.get("from_cell", warrior.current_cell)
-	var target_cell: Vector2i = action.get("target_cell", warrior.current_cell)
-	warrior.current_cell = from_cell
-	warrior.global_position = warrior.runtime.cell_to_world(from_cell)
-	if not warrior.runtime.reserve_entity_cell(warrior, from_cell, target_cell):
+	var from_surface: Vector3i = action.get("from_surface", warrior.current_surface)
+	var target_surface: Vector3i = action.get("target_surface", warrior.current_surface)
+	warrior.current_surface = from_surface
+	warrior.global_position = warrior.runtime.surface_to_world(from_surface)
+	if not warrior.runtime.reserve_entity_surface(warrior, from_surface, target_surface):
 		return
-	warrior._move_to_cell(target_cell, false)
+	warrior._move_to_surface(target_surface, false)
 	await warrior._wait_until_ready_for_next_action()
 
 
@@ -102,7 +102,6 @@ func _play_attack(action: Dictionary) -> void:
 		warrior.runtime = warrior._find_runtime()
 	if warrior.runtime == null:
 		return
-	warrior.current_cell = warrior.runtime.world_to_cell(warrior.global_position)
-	var target_cell: Vector2i = action.get("target_cell", warrior.current_cell)
-	warrior.request_attack_cell(target_cell, bool(action.get("should_apply", false)), false)
+	var target_surface: Vector3i = action.get("target_surface", warrior.current_surface)
+	warrior.request_attack_surface(target_surface, bool(action.get("should_apply", false)), false)
 	await warrior._wait_until_ready_for_next_action()

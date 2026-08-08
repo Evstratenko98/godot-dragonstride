@@ -19,15 +19,15 @@ static func get_rejection_reason(action: WorldActionRecord) -> String:
 			if not NetworkProtocol.is_valid_move_path(action.payload.get("requested_path")):
 				return WorldActionStream.REJECTION_INVALID_ACTION
 		WorldActionRecord.ActionType.ATTACK, WorldActionRecord.ActionType.INTERACTION:
-			if not (action.payload.get("target_cell") is Vector2i):
+			if not (action.payload.get("target_surface") is Vector3i):
 				return WorldActionStream.REJECTION_INVALID_ACTION
 		WorldActionRecord.ActionType.SPELL_CAST:
-			var target_kind: String = str(action.payload.get("target_kind", "cell"))
-			if target_kind == "cell" and not (action.payload.get("target_cell") is Vector2i):
+			var target_kind: String = str(action.payload.get("target_kind", "surface"))
+			if target_kind == "surface" and not (action.payload.get("target_surface") is Vector3i):
 				return WorldActionStream.REJECTION_INVALID_ACTION
 			if target_kind == "entity" and str(action.payload.get("target_entity_id", "")).is_empty():
 				return WorldActionStream.REJECTION_INVALID_ACTION
-			if target_kind != "cell" and target_kind != "entity":
+			if target_kind != "surface" and target_kind != "entity":
 				return WorldActionStream.REJECTION_INVALID_ACTION
 			if int(action.payload.get("spell_slot_index", -1)) < 0:
 				return WorldActionStream.REJECTION_INVALID_ACTION

@@ -24,11 +24,11 @@ func start(
 	start_non_player_entity(start_position, new_entity_id, new_entity_name, EntityType.NEUTRAL)
 
 
-func spawn_death_drop(death_cell: Vector2i) -> bool:
+func spawn_death_drop(death_surface: Vector3i) -> bool:
 	if runtime == null:
 		return false
 
-	return runtime.spawn_world_object(DEATH_DROP_TYPE, death_cell)
+	return runtime.spawn_world_object(DEATH_DROP_TYPE, death_surface)
 
 
 func behavior() -> void:

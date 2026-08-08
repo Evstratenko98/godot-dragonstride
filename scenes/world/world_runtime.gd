@@ -35,14 +35,14 @@ var item_usage: WorldItemUsage = null
 var spells: WorldSpells = null
 var loot: WorldLoot = null
 var action_stream: WorldActionStream = null
-var action_router: WorldActionRouter = WorldActionRouter.new()
-var state_snapshot: WorldStateSnapshot = WorldStateSnapshot.new()
-var match_startup: WorldMatchStartup = WorldMatchStartup.new()
+var action_coordinator: WorldActionRuntimeCoordinator = WorldActionRuntimeCoordinator.new()
 var composition: WorldRuntimeComposition = WorldRuntimeComposition.new()
 var event_coordinator: WorldRuntimeEventCoordinator = WorldRuntimeEventCoordinator.new()
+var selected_input_surface: Vector3i = WorldGridTopology.INVALID_SURFACE
 
 
 func configure_for_level(new_level: WorldLevel) -> void:
+	selected_input_surface = WorldGridTopology.INVALID_SURFACE
 	event_coordinator.configure(self)
 	level = new_level
 	if level != null:
@@ -76,7 +76,7 @@ func is_configured_for(target_level: WorldLevel) -> bool:
 
 func start_match_runtime() -> String:
 	_configure_services()
-	return await match_startup.start_match_runtime()
+	return await action_coordinator.start_match_runtime()
 
 
 func connect_signals() -> void:
@@ -105,47 +105,47 @@ func notify_local_action_rejected(reason_code: String) -> void:
 
 func handle_entity_attack(
 	attacker: Node,
-	target_cell: Vector2i,
+	target_surface: Vector3i,
 	should_broadcast: bool = true,
 	should_broadcast_action: bool = true
 ) -> void:
-	apply_attack_to_cell(attacker, target_cell, should_broadcast, should_broadcast_action)
+	apply_attack_to_surface(attacker, target_surface, should_broadcast, should_broadcast_action)
 
 
-func broadcast_entity_attack_action(attacker: Node, target_cell: Vector2i) -> void:
-	combat.broadcast_attack_action(attacker, target_cell)
+func broadcast_entity_attack_action(attacker: Node, target_surface: Vector3i) -> void:
+	combat.broadcast_attack_action(attacker, target_surface)
 
 
-func handle_entity_move_started(entity: Node, from_cell: Vector2i, target_cell: Vector2i, should_broadcast: bool = true) -> void:
-	network.request_entity_move_started(entity, from_cell, target_cell, should_broadcast)
+func handle_entity_move_started(entity: Node, from_surface: Vector3i, target_surface: Vector3i, should_broadcast: bool = true) -> void:
+	network.request_entity_move_started(entity, from_surface, target_surface, should_broadcast)
 
 
-func handle_entity_move_completed(entity: Node, from_cell: Vector2i, target_cell: Vector2i, movement_step_cost: int = 1) -> void:
-	complete_entity_move(entity, from_cell, target_cell)
-	notify_entity_moved_in_turn(entity, from_cell, target_cell, movement_step_cost)
+func handle_entity_move_completed(entity: Node, from_surface: Vector3i, target_surface: Vector3i, movement_step_cost: int = 1) -> void:
+	complete_entity_move(entity, from_surface, target_surface)
+	notify_entity_moved_in_turn(entity, from_surface, target_surface, movement_step_cost)
 
 
-func handle_character_attack(attacker: Node, target_cell: Vector2i) -> void:
-	handle_entity_attack(attacker, target_cell, true)
+func handle_character_attack(attacker: Node, target_surface: Vector3i) -> void:
+	handle_entity_attack(attacker, target_surface, true)
 
 
-func request_character_attack(attacker: PlayerCharacter, target_cell: Vector2i) -> bool:
-	return network.request_character_attack(attacker, target_cell)
+func request_character_attack(attacker: PlayerCharacter, target_surface: Vector3i) -> bool:
+	return network.request_character_attack(attacker, target_surface)
 
 
-func request_character_move_path(player: PlayerCharacter, requested_path: Array[Vector2i]) -> bool:
+func request_character_move_path(player: PlayerCharacter, requested_path: Array[Vector3i]) -> bool:
 	return network.request_character_move_path(player, requested_path)
 
 
-func request_character_interaction(interactor: PlayerCharacter, target_cell: Vector2i) -> void:
-	network.request_character_interaction(interactor, target_cell)
+func request_character_interaction(interactor: PlayerCharacter, target_surface: Vector3i) -> void:
+	network.request_character_interaction(interactor, target_surface)
 
 
-func try_character_interaction(interactor: PlayerCharacter, target_cell: Vector2i) -> bool:
+func try_character_interaction(interactor: PlayerCharacter, target_surface: Vector3i) -> bool:
 	if interaction == null:
 		return false
 
-	return interaction.try_interact(interactor, target_cell)
+	return interaction.try_interact(interactor, target_surface)
 
 
 func request_inventory_add(item_id: String, amount: int) -> void:
@@ -199,8 +199,8 @@ func get_selected_spell_slot_index(player: PlayerCharacter) -> int:
 	return spells.get_selected_spell_slot_index(player)
 
 
-func request_selected_spell_cast(player: PlayerCharacter, target_cell: Vector2i) -> bool:
-	return spells != null and spells.request_selected_spell_cast(player, target_cell)
+func request_selected_spell_cast(player: PlayerCharacter, target_surface: Vector3i) -> bool:
+	return spells != null and spells.request_selected_spell_cast(player, target_surface)
 
 
 func is_entity_casting(entity: Node) -> bool:
@@ -218,9 +218,9 @@ func get_remaining_spell_slot_uses(player: PlayerCharacter, spell_slot_index: in
 	return spells.get_remaining_spell_slot_uses(player, spell_slot_index)
 
 
-func apply_spell_damage_to_cell(caster: Node, target_cell: Vector2i, damage_amount: int) -> void:
+func apply_spell_damage_to_surface(caster: Node, target_surface: Vector3i, damage_amount: int) -> void:
 	if combat != null:
-		combat.apply_spell_damage_to_cell(caster, target_cell, damage_amount)
+		combat.apply_spell_damage_to_surface(caster, target_surface, damage_amount)
 
 
 func register_entity(entity: Node) -> int:
@@ -236,8 +236,8 @@ func unregister_entity(entity: Node) -> void:
 	registry.unregister_entity(entity)
 
 
-func register_object(target_object: Node, anchor_cell: Vector2i) -> int:
-	return registry.register_object(target_object, anchor_cell)
+func register_object(target_object: Node, anchor_surface: Vector3i) -> int:
+	return registry.register_object(target_object, anchor_surface)
 
 
 func unregister_object(target_object: Node) -> void:
@@ -252,27 +252,27 @@ func remove_defeated_non_player(target_entity: NonPlayerEntity) -> bool:
 	return spawner.remove_defeated_non_player(target_entity)
 
 
-func spawn_world_object(type_key: String, cell: Vector2i) -> bool:
-	return spawner.spawn_world_object(type_key, cell)
+func spawn_world_object(type_key: String, surface: Vector3i) -> bool:
+	return spawner.spawn_world_object(type_key, surface)
 
 
-func get_placement_error(spawn_node: Node, anchor_cell: Vector2i) -> String:
-	return registry.get_placement_error(spawn_node, anchor_cell)
+func get_placement_error(spawn_node: Node, anchor_surface: Vector3i) -> String:
+	return registry.get_placement_error(spawn_node, anchor_surface)
 
 
-func reserve_entity_cell(entity: Node, from_cell: Vector2i, target_cell: Vector2i) -> bool:
-	return registry.reserve_entity_cell(entity, from_cell, target_cell)
+func reserve_entity_surface(entity: Node, from_surface: Vector3i, target_surface: Vector3i) -> bool:
+	return registry.reserve_entity_surface(entity, from_surface, target_surface)
 
 
-func complete_entity_move(entity: Node, from_cell: Vector2i, target_cell: Vector2i) -> int:
-	var result: int = registry.complete_entity_move(entity, from_cell, target_cell)
+func complete_entity_move(entity: Node, from_surface: Vector3i, target_surface: Vector3i) -> int:
+	var result: int = registry.complete_entity_move(entity, from_surface, target_surface)
 	if result == WorldRegistry.RegistrationError.NONE and awareness != null:
 		awareness.notify_character_changed(entity)
 	return result
 
 
-func respawn_entity(entity: Node, cell: Vector2i) -> int:
-	return registry.respawn_entity(entity, cell)
+func respawn_entity(entity: Node, surface: Vector3i) -> int:
+	return registry.respawn_entity(entity, surface)
 
 
 func request_player_respawn(player: PlayerCharacter) -> bool:
@@ -284,14 +284,14 @@ func notify_character_defeated(character: PlayerCharacter) -> void:
 		awareness.notify_character_defeated(character)
 
 
-func sync_entity_cell(entity: Node, cell: Vector2i) -> int:
-	var previous_cell: Vector2i = Vector2i.ZERO
-	var had_previous_cell: bool = entity != null and entity.get("current_cell") != null
-	if had_previous_cell:
-		previous_cell = entity.get("current_cell")
+func sync_entity_surface(entity: Node, surface: Vector3i) -> int:
+	var previous_surface: Vector3i = Vector3i.ZERO
+	var had_previous_surface: bool = entity != null and entity.get("current_surface") != null
+	if had_previous_surface:
+		previous_surface = entity.get("current_surface")
 
-	var result: int = registry.sync_entity_cell(entity, cell)
-	if result == WorldRegistry.RegistrationError.NONE and had_previous_cell and previous_cell != cell and awareness != null:
+	var result: int = registry.sync_entity_surface(entity, surface)
+	if result == WorldRegistry.RegistrationError.NONE and had_previous_surface and previous_surface != surface and awareness != null:
 		awareness.notify_character_changed(entity)
 	return result
 
@@ -304,20 +304,20 @@ func get_entity_by_id(entity_id: String) -> Node:
 	return registry.get_entity_by_id(entity_id)
 
 
-func get_entity_at_cell(cell: Vector2i) -> Node:
-	return registry.get_entity_at_cell(cell)
+func get_entity_at_surface(cell: Vector3i) -> Node:
+	return registry.get_entity_at_surface(cell)
 
 
-func is_entity_registered_at_cell(entity: Node, cell: Vector2i) -> bool:
-	return registry.is_entity_registered_at_cell(entity, cell)
+func is_entity_registered_at_surface(entity: Node, surface: Vector3i) -> bool:
+	return registry.is_entity_registered_at_surface(entity, surface)
 
 
-func has_entity_cell_reservation(entity: Node, cell: Vector2i) -> bool:
-	return registry.has_entity_cell_reservation(entity, cell)
+func has_entity_surface_reservation(entity: Node, surface: Vector3i) -> bool:
+	return registry.has_entity_surface_reservation(entity, surface)
 
 
-func get_object_at_cell(cell: Vector2i) -> Node:
-	return registry.get_object_at_cell(cell)
+func get_object_at_surface(cell: Vector3i) -> Node:
+	return registry.get_object_at_surface(cell)
 
 
 func get_object_by_id(object_id: String) -> Node:
@@ -332,41 +332,41 @@ func get_registered_entities() -> Array:
 	return registry.get_registered_entities()
 
 
-func can_enter_cell(cell: Vector2i, moving_entity: Node = null) -> bool:
-	return registry.can_enter_cell(cell, moving_entity)
+func can_enter_surface(cell: Vector3i, moving_entity: Node = null) -> bool:
+	return registry.can_enter_surface(cell, moving_entity)
 
 
-func can_character_enter_cell(cell: Vector2i, ignored_entity: Entity = null) -> bool:
-	return registry.can_character_enter_cell(cell, ignored_entity)
+func can_character_enter_surface(cell: Vector3i, ignored_entity: Entity = null) -> bool:
+	return registry.can_character_enter_surface(cell, ignored_entity)
 
 
-func get_reachable_cells_for_entity(entity: Entity, max_steps: int) -> Array[Vector2i]:
-	return WorldGridPathfinder.get_reachable_cells_for_entity(self, entity, max_steps)
+func get_reachable_surfaces_for_entity(entity: Entity, max_steps: int) -> Array[Vector3i]:
+	return WorldGridPathfinder.get_reachable_surfaces_for_entity(self, entity, max_steps)
 
 
-func get_available_attack_cells(entity: Entity) -> Array[Vector2i]:
-	return [] if combat == null else combat.get_available_attack_cells(entity)
+func get_available_attack_surfaces(entity: Entity) -> Array[Vector3i]:
+	return [] if combat == null else combat.get_available_attack_surfaces(entity)
 
 
-func get_available_interaction_cells(character: PlayerCharacter) -> Array[Vector2i]:
-	return [] if interaction == null else interaction.get_available_interaction_cells(character)
+func get_available_interaction_surfaces(character: PlayerCharacter) -> Array[Vector3i]:
+	return [] if interaction == null else interaction.get_available_interaction_surfaces(character)
 
 
-func is_cell_interactable(cell: Vector2i) -> bool:
-	return registry.is_cell_interactable(cell)
+func is_surface_interactable(cell: Vector3i) -> bool:
+	return registry.is_surface_interactable(cell)
 
 
-func get_cell_display_name(cell: Vector2i) -> String:
-	return registry.get_cell_display_name(cell)
+func get_surface_display_name(cell: Vector3i) -> String:
+	return registry.get_surface_display_name(cell)
 
 
-func apply_attack_to_cell(
+func apply_attack_to_surface(
 	attacker: Node,
-	cell: Vector2i,
+	surface: Vector3i,
 	should_broadcast: bool = true,
 	should_broadcast_action: bool = true
 ) -> void:
-	combat.apply_attack_to_cell(attacker, cell, should_broadcast, should_broadcast_action)
+	combat.apply_attack_to_surface(attacker, surface, should_broadcast, should_broadcast_action)
 
 
 func can_entity_move_in_turn(entity: Node) -> bool:
@@ -376,11 +376,11 @@ func can_entity_move_in_turn(entity: Node) -> bool:
 	return turn_manager.can_entity_move(entity)
 
 
-func can_entity_attack_in_turn(entity: Node, target_cell: Vector2i) -> bool:
+func can_entity_attack_in_turn(entity: Node, target_surface: Vector3i) -> bool:
 	if turn_manager == null:
 		return true
 
-	return turn_manager.can_entity_attack(entity, target_cell)
+	return turn_manager.can_entity_attack(entity, target_surface)
 
 
 func can_entity_interact_in_turn(entity: Node) -> bool:
@@ -411,14 +411,14 @@ func can_entity_sync_state_in_turn(entity: Node) -> bool:
 	return turn_manager.can_entity_sync_state(entity)
 
 
-func notify_entity_moved_in_turn(entity: Node, from_cell: Vector2i, target_cell: Vector2i, movement_step_cost: int = 1) -> void:
+func notify_entity_moved_in_turn(entity: Node, from_surface: Vector3i, target_surface: Vector3i, movement_step_cost: int = 1) -> void:
 	if turn_manager != null:
-		turn_manager.notify_entity_moved(entity, from_cell, target_cell, movement_step_cost)
+		turn_manager.notify_entity_moved(entity, from_surface, target_surface, movement_step_cost)
 
 
-func notify_entity_attacked_in_turn(entity: Node, target_cell: Vector2i) -> void:
+func notify_entity_attacked_in_turn(entity: Node, target_surface: Vector3i) -> void:
 	if turn_manager != null:
-		turn_manager.notify_entity_attacked(entity, target_cell)
+		turn_manager.notify_entity_attacked(entity, target_surface)
 
 
 func notify_entity_interacted_in_turn(entity: Node) -> void:
@@ -527,11 +527,11 @@ func request_action_stream_snapshot(peer_id: int) -> void:
 
 
 func create_action_stream_snapshot(next_stream_sequence_id: int) -> Dictionary:
-	return state_snapshot.create_action_stream_snapshot(next_stream_sequence_id)
+	return action_coordinator.create_snapshot(next_stream_sequence_id)
 
 
 func apply_action_stream_snapshot(snapshot: Dictionary) -> bool:
-	return state_snapshot.apply_action_stream_snapshot(snapshot)
+	return action_coordinator.apply_snapshot(snapshot)
 
 
 func receive_action_profile_payload(sequence_id: int, payload: Dictionary) -> void:
@@ -540,39 +540,39 @@ func receive_action_profile_payload(sequence_id: int, payload: Dictionary) -> vo
 
 
 func broadcast_action_profile_payload(action: WorldActionRecord) -> void:
-	action_router.broadcast_action_profile_payload(action)
+	action_coordinator.broadcast_profile(action)
 
 
 func get_action_schema_rejection_reason(action: WorldActionRecord) -> String:
-	return action_router.get_schema_rejection_reason(action)
+	return action_coordinator.schema_rejection(action)
 
 
 func get_action_acceptance_rejection_reason(action: WorldActionRecord) -> String:
-	return action_router.get_acceptance_rejection_reason(action)
+	return action_coordinator.acceptance_rejection(action)
 
 
 func reserve_action_on_accept(action: WorldActionRecord) -> String:
-	return action_router.reserve_on_accept(action)
+	return action_coordinator.reserve(action)
 
 
 func release_action_reservation(action: WorldActionRecord) -> void:
-	action_router.release_reservation(action)
+	action_coordinator.release(action)
 
 
 func get_action_rejection_reason(action: WorldActionRecord) -> String:
-	return action_router.get_rejection_reason(action)
+	return action_coordinator.rejection(action)
 
 
 func execute_authoritative_action(action: WorldActionRecord) -> bool:
-	return await action_router.execute_authoritative(action)
+	return await action_coordinator.execute(action)
 
 
 func play_remote_action(action: WorldActionRecord) -> void:
-	await action_router.play_remote(action)
+	await action_coordinator.play_remote(action)
 
 
 func finalize_authoritative_action(action: WorldActionRecord) -> void:
-	action_router.finalize_authoritative(action)
+	action_coordinator.finalize(action)
 
 
 func is_turn_mode_enabled() -> bool:
@@ -606,8 +606,8 @@ func print_entity_attack_result(
 	)
 
 
-func print_non_entity_attack_result(attacker: Node, target_cell: Vector2i) -> void:
-	combat.print_non_entity_attack_result(attacker, target_cell)
+func print_non_entity_attack_result(attacker: Node, target_surface: Vector3i) -> void:
+	combat.print_non_entity_attack_result(attacker, target_surface)
 
 
 func get_squad_members(player_id: String) -> Array[PlayerCharacter]:
@@ -669,20 +669,82 @@ func broadcast_all_object_states() -> void:
 	network.broadcast_all_object_states()
 
 
-func is_cell_walkable(cell: Vector2i) -> bool:
-	return grid.is_cell_walkable(cell)
+func has_surface(surface: Vector3i) -> bool:
+	return grid != null and grid.has_surface(surface)
 
 
-func is_cell_walkable_for_entity(cell: Vector2i, entity: Entity) -> bool:
-	return grid.is_cell_walkable_for_entity(cell, entity)
+func is_surface_walkable(surface: Vector3i) -> bool:
+	return grid.is_surface_walkable(surface)
 
 
-func is_cell_walkable_for_character(cell: Vector2i) -> bool:
-	return grid.is_cell_walkable_for_character(cell)
+func is_surface_walkable_for_entity(surface: Vector3i, entity: Entity) -> bool:
+	return grid.is_surface_walkable_for_entity(surface, entity)
 
 
-func is_cell_inside(cell: Vector2i) -> bool:
-	return grid.is_cell_inside(cell)
+func is_surface_walkable_for_character(surface: Vector3i) -> bool:
+	return grid.is_surface_walkable_for_character(surface)
+
+
+func is_surface_inside(surface: Vector3i) -> bool:
+	return grid.is_surface_inside(surface)
+
+
+func get_surface_neighbors(surface: Vector3i) -> Array[Vector3i]:
+	return grid.get_surface_neighbors(surface)
+
+
+func get_surface_in_direction(surface: Vector3i, direction: Vector2i) -> Vector3i:
+	return grid.get_surface_in_direction(surface, direction)
+
+
+func has_traversal_edge(from_surface: Vector3i, to_surface: Vector3i) -> bool:
+	return grid.has_traversal_edge(from_surface, to_surface)
+
+
+func is_ramp_edge(from_surface: Vector3i, to_surface: Vector3i) -> bool:
+	return grid.is_ramp_edge(from_surface, to_surface)
+
+
+func get_traversal_kind(from_surface: Vector3i, to_surface: Vector3i) -> int:
+	return grid.get_traversal_kind(from_surface, to_surface)
+
+
+func get_traversal_input_direction(from_surface: Vector3i, to_surface: Vector3i) -> Vector2i:
+	return grid.get_traversal_input_direction(from_surface, to_surface)
+
+
+func get_surfaces_at(cell: Vector2i) -> Array[Vector3i]:
+	return grid.get_surfaces_at(cell)
+
+
+func resolve_surface_at_world(world_position: Vector2, preferred_elevation: int) -> Vector3i:
+	var projected: Vector3i = grid.world_to_surface(world_position, preferred_elevation)
+	var available: Array[Vector3i] = grid.get_surfaces_at(Vector2i(projected.x, projected.y))
+	if available.has(projected):
+		return projected
+	if available.is_empty():
+		return projected
+	return available[available.size() - 1]
+
+
+func set_selected_input_surface(surface: Vector3i) -> void:
+	selected_input_surface = surface if has_surface(surface) else WorldGridTopology.INVALID_SURFACE
+
+
+func resolve_selected_surface_at_world(world_position: Vector2, preferred_elevation: int) -> Vector3i:
+	var projected: Vector3i = grid.world_to_surface(world_position, preferred_elevation)
+	if (
+		selected_input_surface != WorldGridTopology.INVALID_SURFACE
+		and selected_input_surface.x == projected.x
+		and selected_input_surface.y == projected.y
+		and has_surface(selected_input_surface)
+	):
+		return selected_input_surface
+	return resolve_surface_at_world(world_position, preferred_elevation)
+
+
+func get_topology_hash() -> String:
+	return grid.get_topology_hash()
 
 
 func get_grid_size() -> Vector2i:
@@ -697,20 +759,20 @@ func get_grid_world_bounds() -> Rect2:
 	return _get_grid_service().get_world_bounds()
 
 
-func world_to_cell(world_position: Vector2) -> Vector2i:
-	return _get_grid_service().world_to_cell(world_position)
+func world_to_surface(world_position: Vector2, elevation: int = 0) -> Vector3i:
+	return _get_grid_service().world_to_surface(world_position, elevation)
 
 
-func cell_to_world(cell: Vector2i) -> Vector2:
-	return _get_grid_service().cell_to_world(cell)
+func surface_to_world(surface: Vector3i) -> Vector2:
+	return _get_grid_service().surface_to_world(surface)
 
 
-func get_cell_center(world_position: Vector2) -> Vector2:
-	return _get_grid_service().get_cell_center(world_position)
+func get_surface_center(world_position: Vector2, elevation: int = 0) -> Vector2:
+	return _get_grid_service().get_surface_center(world_position, elevation)
 
 
-func get_adjacent_cell_center(world_position: Vector2, direction: Vector2i) -> Vector2:
-	return _get_grid_service().get_adjacent_cell_center(world_position, direction)
+func get_adjacent_surface_center(world_position: Vector2, direction: Vector2i, elevation: int = 0) -> Vector2:
+	return _get_grid_service().get_adjacent_surface_center(world_position, direction, elevation)
 
 
 func print_console(text: String) -> void:

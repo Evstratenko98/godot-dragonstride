@@ -11,7 +11,7 @@ extends Node2D
 var runtime: WorldRuntime = null
 var cell_hover: CellHover = null
 var bound_player: PlayerCharacter = null
-var preview_path: Array[Vector2i] = []
+var preview_path: Array[Vector3i] = []
 var is_path_available_this_turn: bool = false
 
 
@@ -37,8 +37,8 @@ func _draw() -> void:
 	var half_cell: Vector2 = cell_dimensions * 0.5
 	var path_outline_color: Color = available_outline_color if is_path_available_this_turn else distant_outline_color
 	var path_fill_color: Color = available_fill_color if is_path_available_this_turn else distant_fill_color
-	for cell: Vector2i in preview_path:
-		var local_center: Vector2 = to_local(runtime.cell_to_world(cell))
+	for surface: Vector3i in preview_path:
+		var local_center: Vector2 = to_local(runtime.surface_to_world(surface))
 		var cell_rect: Rect2 = Rect2(local_center - half_cell, cell_dimensions)
 		draw_rect(cell_rect, path_fill_color, true)
 		draw_rect(cell_rect, path_outline_color, false, outline_width, false)
@@ -57,8 +57,8 @@ func configure_context(new_runtime: WorldRuntime, new_cell_hover: CellHover) -> 
 			runtime.turn_manager.turn_state_changed.connect(_on_preview_context_changed)
 		if runtime.spells != null and not runtime.spells.targeting_changed.is_connected(_on_spell_targeting_changed):
 			runtime.spells.targeting_changed.connect(_on_spell_targeting_changed)
-	if cell_hover != null and not cell_hover.hovered_cell_changed.is_connected(_on_hovered_cell_changed):
-		cell_hover.hovered_cell_changed.connect(_on_hovered_cell_changed)
+	if cell_hover != null and not cell_hover.hovered_surface_changed.is_connected(_on_hovered_surface_changed):
+		cell_hover.hovered_surface_changed.connect(_on_hovered_surface_changed)
 	_bind_player(null if runtime == null else runtime.get_selected_local_character())
 	_refresh_preview()
 
@@ -76,18 +76,18 @@ func _refresh_preview() -> void:
 		or not bound_player.can_process_local_input()
 		or not runtime.can_entity_move_in_turn(bound_player)
 		or runtime.has_selected_spell(bound_player)
-		or not cell_hover.has_hovered_world_cell()
+		or not cell_hover.has_hovered_world_surface()
 	):
 		queue_redraw()
 		return
 
-	var start_cell: Vector2i = runtime.world_to_cell(bound_player.global_position)
-	var target_cell: Vector2i = cell_hover.get_hovered_cell()
-	preview_path = WorldGridPathfinder.find_path_to_cell(
+	var start_surface: Vector3i = bound_player.current_surface
+	var target_surface: Vector3i = cell_hover.get_hovered_surface()
+	preview_path = WorldGridPathfinder.find_path_to_surface(
 		runtime,
 		bound_player,
-		start_cell,
-		target_cell,
+		start_surface,
+		target_surface,
 		true
 	)
 	if preview_path.is_empty():
@@ -99,14 +99,15 @@ func _refresh_preview() -> void:
 		is_path_available_this_turn = (
 			preview_path.size() <= runtime.turn_manager.get_steps_left(bound_player.entity_id)
 		)
-	_update_step_label(target_cell)
+	_update_step_label(target_surface)
+	z_index = target_surface.z * 20 + 12
 	queue_redraw()
 
 
-func _update_step_label(target_cell: Vector2i) -> void:
+func _update_step_label(target_surface: Vector3i) -> void:
 	var cell_size: int = runtime.get_cell_size()
 	var label_size: Vector2 = Vector2(cell_size, cell_size)
-	var local_center: Vector2 = to_local(runtime.cell_to_world(target_cell))
+	var local_center: Vector2 = to_local(runtime.surface_to_world(target_surface))
 	step_label.position = local_center - label_size * 0.5
 	step_label.size = label_size
 	step_label.text = str(preview_path.size())
@@ -150,12 +151,12 @@ func _disconnect_runtime_signals() -> void:
 
 
 func _disconnect_hover_signal() -> void:
-	if cell_hover != null and cell_hover.hovered_cell_changed.is_connected(_on_hovered_cell_changed):
-		cell_hover.hovered_cell_changed.disconnect(_on_hovered_cell_changed)
+	if cell_hover != null and cell_hover.hovered_surface_changed.is_connected(_on_hovered_surface_changed):
+		cell_hover.hovered_surface_changed.disconnect(_on_hovered_surface_changed)
 	cell_hover = null
 
 
-func _on_hovered_cell_changed(_cell: Vector2i, _is_inside_world: bool) -> void:
+func _on_hovered_surface_changed(_surface: Vector3i, _is_inside_world: bool) -> void:
 	_refresh_preview()
 
 
@@ -171,11 +172,11 @@ func _on_spell_targeting_changed(_is_targeting: bool, _spell_slot_index: int) ->
 	_refresh_preview()
 
 
-func _on_player_movement_started(_from_cell: Vector2i, _target_cell: Vector2i) -> void:
+func _on_player_movement_started(_from_surface: Vector3i, _target_surface: Vector3i) -> void:
 	preview_path.clear()
 	step_label.visible = false
 	queue_redraw()
 
 
-func _on_player_movement_finished(_from_cell: Vector2i, _target_cell: Vector2i) -> void:
+func _on_player_movement_finished(_from_surface: Vector3i, _target_surface: Vector3i) -> void:
 	_refresh_preview()

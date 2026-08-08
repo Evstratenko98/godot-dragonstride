@@ -9,7 +9,7 @@ const OUTLINE_WIDTH := 3.0
 
 var runtime: WorldRuntime = null
 var displayed_mode: int = -1
-var displayed_cells: Array[Vector2i] = []
+var displayed_surfaces: Array[Vector3i] = []
 
 
 func _process(_delta: float) -> void:
@@ -17,7 +17,7 @@ func _process(_delta: float) -> void:
 
 
 func _draw() -> void:
-	if runtime == null or displayed_cells.is_empty():
+	if runtime == null or displayed_surfaces.is_empty():
 		return
 	var outline_color: Color = ATTACK_OUTLINE_COLOR
 	var fill_color: Color = ATTACK_FILL_COLOR
@@ -27,8 +27,8 @@ func _draw() -> void:
 	var cell_size: int = runtime.get_cell_size()
 	var cell_dimensions: Vector2 = Vector2(cell_size, cell_size)
 	var half_cell: Vector2 = cell_dimensions * 0.5
-	for cell: Vector2i in displayed_cells:
-		var local_center: Vector2 = to_local(runtime.cell_to_world(cell))
+	for surface: Vector3i in displayed_surfaces:
+		var local_center: Vector2 = to_local(runtime.surface_to_world(surface))
 		var cell_rect: Rect2 = Rect2(local_center - half_cell, cell_dimensions)
 		draw_rect(cell_rect, fill_color, true)
 		draw_rect(cell_rect, outline_color, false, OUTLINE_WIDTH, false)
@@ -41,18 +41,20 @@ func configure_context(new_runtime: WorldRuntime) -> void:
 
 func _refresh_displayed_cells(should_force_redraw: bool = false) -> void:
 	var next_mode: int = -1
-	var next_cells: Array[Vector2i] = []
+	var next_surfaces: Array[Vector3i] = []
 	var selected_character: PlayerCharacter = null if runtime == null else runtime.get_selected_local_character()
 	if _can_show_for(selected_character):
 		next_mode = selected_character.action_mode
 		if next_mode == PlayerCharacter.ActionMode.ATTACK:
-			next_cells = runtime.get_available_attack_cells(selected_character)
+			next_surfaces = runtime.get_available_attack_surfaces(selected_character)
 		elif next_mode == PlayerCharacter.ActionMode.INTERACT:
-			next_cells = runtime.get_available_interaction_cells(selected_character)
-	if not should_force_redraw and next_mode == displayed_mode and next_cells == displayed_cells:
+			next_surfaces = runtime.get_available_interaction_surfaces(selected_character)
+	if not should_force_redraw and next_mode == displayed_mode and next_surfaces == displayed_surfaces:
 		return
 	displayed_mode = next_mode
-	displayed_cells = next_cells
+	displayed_surfaces = next_surfaces
+	if selected_character != null:
+		z_index = selected_character.current_surface.z * 20 + 12
 	queue_redraw()
 
 

@@ -43,7 +43,7 @@ func _on_session_cleared() -> void:
 	snapshot_transaction.commit()
 
 
-func console_create(type_key: String, x_text: String, y_text: String) -> void:
+func console_create(type_key: String, x_text: String, y_text: String, height_text: String) -> void:
 	if not _can_use_debug_commands():
 		_print_spawn_error("Debug mutations are unavailable for this level.")
 		return
@@ -52,16 +52,19 @@ func console_create(type_key: String, x_text: String, y_text: String) -> void:
 		_print_spawn_error("Unknown create type: %s." % type_key)
 		return
 
-	if not x_text.is_valid_int() or not y_text.is_valid_int():
-		_print_spawn_error("Usage: %s <type> <x> <y>. Coordinates must be integers." % WorldSpawnerDebugCommands.CREATE_COMMAND)
+	if not x_text.is_valid_int() or not y_text.is_valid_int() or not height_text.is_valid_int():
+		_print_spawn_error("Usage: %s <type> <x> <y> <height>. Coordinates must be integers." % WorldSpawnerDebugCommands.CREATE_COMMAND)
 		return
 
-	var cell: Vector2i = Vector2i(x_text.to_int(), y_text.to_int())
+	var surface: Vector3i = Vector3i(x_text.to_int(), y_text.to_int(), height_text.to_int())
+	if not NetworkProtocol.is_valid_surface_value(surface) or not runtime.has_surface(surface):
+		_print_spawn_error("The requested surface does not exist.")
+		return
 	if GameSession.is_multiplayer() and not GameSession.is_host():
-		NetworkManager.world.request_world_spawn(normalized_type, cell)
+		NetworkManager.world.request_world_spawn(normalized_type, surface)
 		return
 
-	_try_create_authoritative(normalized_type, cell, true, 0)
+	_try_create_authoritative(normalized_type, surface, true, 0)
 
 
 func console_create_full(type_key: String) -> void:
@@ -142,7 +145,7 @@ func remove_defeated_non_player(target_entity: NonPlayerEntity) -> bool:
 	return true
 
 
-func spawn_world_object(type_key: String, cell: Vector2i) -> bool:
+func spawn_world_object(type_key: String, surface: Vector3i) -> bool:
 	var normalized_type: String = _normalize_type_key(type_key)
 	if not CATALOG.has(normalized_type):
 		return false
@@ -152,10 +155,10 @@ func spawn_world_object(type_key: String, cell: Vector2i) -> bool:
 	if GameSession.is_multiplayer() and not GameSession.is_host():
 		return false
 
-	return _try_create_authoritative(normalized_type, cell, true, 0)
+	return _try_create_authoritative(normalized_type, surface, true, 0)
 
 
-func _try_create_authoritative(type_key: String, cell: Vector2i, should_broadcast: bool, requester_peer_id: int) -> bool:
+func _try_create_authoritative(type_key: String, surface: Vector3i, should_broadcast: bool, requester_peer_id: int) -> bool:
 	if not CATALOG.has(type_key):
 		_report_spawn_error("Unknown create type: %s." % type_key, requester_peer_id, "unknown_type")
 		return false
@@ -164,15 +167,15 @@ func _try_create_authoritative(type_key: String, cell: Vector2i, should_broadcas
 	var record: Dictionary = {
 		"type_key": type_key,
 		"spawn_id": spawn_id,
-		"cell": cell,
+		"surface": surface,
 	}
 
 	var error: String = _spawn_from_record(record, true)
 	if not error.is_empty():
 		_report_spawn_error("Cannot create %s at %d %d: %s" % [
 			type_key,
-			cell.x,
-			cell.y,
+			surface.x,
+			surface.y,
 			error,
 		], requester_peer_id, "invalid_placement")
 		return false
@@ -184,12 +187,12 @@ func _try_create_authoritative(type_key: String, cell: Vector2i, should_broadcas
 	return true
 
 
-func _try_fill_cell(type_key: String, cell: Vector2i) -> Dictionary:
+func _try_fill_surface(type_key: String, surface: Vector3i) -> Dictionary:
 	var spawn_id: String = _make_spawn_id(type_key)
 	var record: Dictionary = {
 		"type_key": type_key,
 		"spawn_id": spawn_id,
-		"cell": cell,
+		"surface": surface,
 	}
 	var error: String = _spawn_from_record(record, true)
 	if not error.is_empty():
@@ -247,7 +250,7 @@ func _spawn_from_record(record: Dictionary, should_validate: bool) -> String:
 	if _has_spawn_id(spawn_id):
 		return ""
 
-	var cell: Vector2i = record.get("cell", Vector2i.ZERO)
+	var surface: Vector3i = record.get("surface", Vector3i.ZERO)
 	var definition: Dictionary = CATALOG[type_key]
 	var scene: PackedScene = definition.get("scene") as PackedScene
 	if scene == null:
@@ -257,18 +260,18 @@ func _spawn_from_record(record: Dictionary, should_validate: bool) -> String:
 	_assign_spawn_id(instance, str(definition.get("kind", "")), spawn_id)
 
 	if should_validate:
-		var placement_error: String = runtime.get_placement_error(instance, cell)
+		var placement_error: String = runtime.get_placement_error(instance, surface)
 		if not placement_error.is_empty():
 			instance.free()
 			return placement_error
 
-	return _spawn_instance(instance, definition, type_key, spawn_id, cell)
+	return _spawn_instance(instance, definition, type_key, spawn_id, surface)
 
 
-func _spawn_instance(instance: Node, definition: Dictionary, type_key: String, spawn_id: String, cell: Vector2i) -> String:
+func _spawn_instance(instance: Node, definition: Dictionary, type_key: String, spawn_id: String, surface: Vector3i) -> String:
 	var kind: String = str(definition.get("kind", ""))
 	var display_name: String = str(definition.get("display_name", type_key.capitalize()))
-	var world_position: Vector2 = runtime.cell_to_world(cell)
+	var world_position: Vector2 = runtime.surface_to_world(surface)
 
 	if kind == SPAWN_KIND_ENTITY:
 		var entities_root: Node2D = _get_world_entities_root()
@@ -280,6 +283,12 @@ func _spawn_instance(instance: Node, definition: Dictionary, type_key: String, s
 			(instance as Entity).start_entity(world_position, spawn_id, display_name)
 		elif instance is Node2D:
 			instance.global_position = world_position
+		var spawned_entity: Entity = instance as Entity
+		if spawned_entity != null:
+			spawned_entity.current_surface = surface
+			spawned_entity.spawn_surface = surface
+			spawned_entity.global_position = world_position
+			spawned_entity.z_index = surface.z * 20 + 10
 		var entity_registration_result: int = runtime.register_entity(instance)
 		if entity_registration_result != WorldRegistry.RegistrationError.NONE:
 			instance.queue_free()
@@ -295,7 +304,7 @@ func _spawn_instance(instance: Node, definition: Dictionary, type_key: String, s
 		if instance is Node2D:
 			instance.global_position = world_position
 		objects_root.add_child(instance)
-		var object_registration_result: int = runtime.register_object(instance, cell)
+		var object_registration_result: int = runtime.register_object(instance, surface)
 		if object_registration_result != WorldRegistry.RegistrationError.NONE:
 			instance.queue_free()
 			return "Object registration failed with code %d." % object_registration_result
@@ -386,7 +395,7 @@ func spawn_staged_instance(record: Dictionary) -> String:
 		record.get("definition", {}) as Dictionary,
 		str(record.get("type_key", "")),
 		str(record.get("spawn_id", "")),
-		record.get("cell", Vector2i.ZERO)
+		record.get("surface", Vector3i.ZERO)
 	)
 
 
@@ -477,11 +486,11 @@ func _can_use_debug_commands() -> bool:
 
 
 func _print_created(record: Dictionary) -> void:
-	var cell: Vector2i = record.get("cell", Vector2i.ZERO)
+	var surface: Vector3i = record.get("surface", Vector3i.ZERO)
 	ConsoleOutput.print_console("Created %s at %d %d." % [
 		str(record.get("type_key", "")),
-		cell.x,
-		cell.y,
+		surface.x,
+		surface.y,
 	], runtime)
 
 

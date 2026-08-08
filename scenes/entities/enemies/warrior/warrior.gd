@@ -42,11 +42,11 @@ func start(
 	start_non_player_entity(start_position, new_entity_id, new_entity_name, EntityType.ENEMY)
 
 
-func spawn_death_drop(death_cell: Vector2i) -> bool:
+func spawn_death_drop(death_surface: Vector3i) -> bool:
 	if runtime == null:
 		return false
 
-	return runtime.spawn_world_object(DEATH_DROP_TYPE, death_cell)
+	return runtime.spawn_world_object(DEATH_DROP_TYPE, death_surface)
 
 
 func get_max_movement_steps_per_turn() -> int:
@@ -63,7 +63,7 @@ func behavior() -> void:
 		_finish_behavior()
 		return
 
-	_sync_current_cell()
+	_sync_current_surface()
 	attacks_used_this_turn = 0
 	is_running_behavior_turn = true
 
@@ -90,13 +90,13 @@ func behavior() -> void:
 		_finish_behavior()
 		return
 
-	var attack_cells: Array[Vector2i] = _get_attack_goal_cells(target)
-	if not _has_terrain_path_to_any(attack_cells):
+	var attack_surfaces: Array[Vector3i] = _get_attack_goal_surfaces(target)
+	if not _has_terrain_path_to_any(attack_surfaces):
 		_set_ai_state(STATE_PASSIVE, "", REASON_TARGET_UNREACHABLE)
 		_end_behavior_turn()
 		return
 
-	var path: Array[Vector2i] = _find_path_to_any(attack_cells, true)
+	var path: Array[Vector3i] = _find_path_to_any(attack_surfaces, true)
 	if path.is_empty():
 		_end_behavior_turn()
 		return
@@ -119,8 +119,8 @@ func behavior() -> void:
 			_finish_behavior()
 			return
 
-		var next_cell: Vector2i = path[i]
-		var direction: Vector2i = next_cell - current_cell
+		var next_surface: Vector3i = path[i]
+		var direction: Vector2i = runtime.get_traversal_input_direction(current_surface, next_surface)
 		if not request_move(direction):
 			_end_behavior_turn()
 			return
@@ -130,7 +130,7 @@ func behavior() -> void:
 			return
 		if not is_running_behavior_turn:
 			return
-		_sync_current_cell()
+		_sync_current_surface()
 
 		target = _get_current_target()
 		if not _is_valid_hunt_target(target):
@@ -170,10 +170,10 @@ func consider_character_triggers(characters: Array[Node]) -> void:
 
 
 func _is_preferred_target(candidate: Node, current: Node) -> bool:
-	var candidate_cell: Vector2i = candidate.get("current_cell")
-	var current_target_cell: Vector2i = current.get("current_cell")
-	var candidate_distance: int = absi(candidate_cell.x - current_cell.x) + absi(candidate_cell.y - current_cell.y)
-	var current_distance: int = absi(current_target_cell.x - current_cell.x) + absi(current_target_cell.y - current_cell.y)
+	var candidate_cell: Vector3i = candidate.get("current_surface")
+	var current_target_surface: Vector3i = current.get("current_surface")
+	var candidate_distance: int = absi(candidate_cell.x - current_surface.x) + absi(candidate_cell.y - current_surface.y)
+	var current_distance: int = absi(current_target_surface.x - current_surface.x) + absi(current_target_surface.y - current_surface.y)
 	if candidate_distance != current_distance:
 		return candidate_distance < current_distance
 	return _get_entity_id(candidate) < _get_entity_id(current)
@@ -208,19 +208,19 @@ func apply_remote_ai_state(new_state: String, new_target_entity_id: String, reas
 	_set_ai_state(new_state, new_target_entity_id, reason, false)
 
 
-func play_remote_move(from_cell: Vector2i, target_cell: Vector2i) -> void:
-	remote_presentation.enqueue_move(from_cell, target_cell)
+func play_remote_move(from_surface: Vector3i, target_surface: Vector3i) -> void:
+	remote_presentation.enqueue_move(from_surface, target_surface)
 
 
-func play_remote_attack(target_cell: Vector2i, should_apply: bool = true) -> void:
-	remote_presentation.enqueue_attack(target_cell, should_apply)
+func play_remote_attack(target_surface: Vector3i, should_apply: bool = true) -> void:
+	remote_presentation.enqueue_attack(target_surface, should_apply)
 
 
 func play_incoming_attack_guard(duration: float) -> void:
 	remote_presentation.play_guard(duration)
 
 
-func _attack_cell(target_cell: Vector2i, direction: Vector2i, should_apply: bool, should_broadcast: bool) -> void:
+func _attack_surface(target_surface: Vector3i, direction: Vector2i, should_apply: bool, should_broadcast: bool) -> void:
 	var attack_facing_left: bool = _get_facing_left()
 	var update_horizontal_facing: bool = direction.x != 0
 	if direction == Vector2i.RIGHT:
@@ -228,20 +228,20 @@ func _attack_cell(target_cell: Vector2i, direction: Vector2i, should_apply: bool
 	elif direction == Vector2i.LEFT:
 		attack_facing_left = true
 
-	_attack(attack_facing_left, update_horizontal_facing, target_cell, should_apply, should_broadcast)
+	_attack(attack_facing_left, update_horizontal_facing, target_surface, should_apply, should_broadcast)
 
 
 func _attack(
 	attack_facing_left: bool,
 	update_horizontal_facing: bool,
-	target_cell: Vector2i,
+	target_surface: Vector3i,
 	should_apply: bool,
 	should_broadcast: bool
 ) -> void:
 	is_attacking = true
 	var attack_generation: int = get_action_generation()
 	remote_presentation.cancel_guard()
-	attack_target_cell = target_cell
+	attack_target_surface = target_surface
 	var was_action_broadcast: bool = (
 		should_apply
 		and should_broadcast
@@ -249,8 +249,8 @@ func _attack(
 		and _is_ai_authority()
 	)
 	if was_action_broadcast and runtime != null:
-		runtime.broadcast_entity_attack_action(self, target_cell)
-	_play_target_incoming_attack_guard(target_cell, _get_attack_duration())
+		runtime.broadcast_entity_attack_action(self, target_surface)
+	_play_target_incoming_attack_guard(target_surface, _get_attack_duration())
 
 	var warrior_view: WarriorView = view as WarriorView
 	if warrior_view != null:
@@ -287,8 +287,8 @@ func _perform_behavior_attack(target: Node) -> bool:
 	attacks_used_this_turn += 1
 	pending_behavior_attack_target_id = _get_entity_id(target)
 
-	var target_cell: Vector2i = target.get("current_cell")
-	var direction: Vector2i = _get_attack_direction_to_cell(target_cell)
+	var target_surface: Vector3i = target.get("current_surface")
+	var direction: Vector2i = _get_attack_direction_to_surface(target_surface)
 	var attack_facing_left: bool = _get_facing_left()
 	var update_horizontal_facing: bool = direction.x != 0
 	if direction == Vector2i.RIGHT:
@@ -296,7 +296,7 @@ func _perform_behavior_attack(target: Node) -> bool:
 	elif direction == Vector2i.LEFT:
 		attack_facing_left = true
 
-	await _attack(attack_facing_left, update_horizontal_facing, target_cell, true, true)
+	await _attack(attack_facing_left, update_horizontal_facing, target_surface, true, true)
 	return true
 
 
@@ -306,9 +306,9 @@ func cancel_behavior() -> void:
 	super.cancel_behavior()
 
 
-func _on_move_started(target_cell: Vector2i) -> void:
+func _on_move_started(target_surface: Vector3i) -> void:
 	remote_presentation.cancel_guard()
-	super._on_move_started(target_cell)
+	super._on_move_started(target_surface)
 
 
 func _on_move_stopped() -> void:
@@ -340,10 +340,10 @@ func _can_trigger_on_character(character: Node) -> bool:
 	if not _is_valid_hunt_target(character):
 		return false
 
-	_sync_current_cell()
-	var character_cell: Vector2i = character.get("current_cell")
-	var delta: Vector2i = character_cell - current_cell
-	return maxi(absi(delta.x), absi(delta.y)) == 1
+	_sync_current_surface()
+	var character_cell: Vector3i = character.get("current_surface")
+	var delta: Vector3i = character_cell - current_surface
+	return delta.z == 0 and maxi(absi(delta.x), absi(delta.y)) == 1
 
 
 func _is_valid_hunt_target(target: Node) -> bool:
@@ -372,27 +372,27 @@ func _can_attack_target(target: Node) -> bool:
 	if not _is_valid_hunt_target(target):
 		return false
 
-	return can_attack_cell(target.get("current_cell"))
+	return can_attack_surface(target.get("current_surface"))
 
 
-func _get_attack_goal_cells(target: Node) -> Array[Vector2i]:
-	var cells: Array[Vector2i] = []
-	if target == null or target.get("current_cell") == null:
+func _get_attack_goal_surfaces(target: Node) -> Array[Vector3i]:
+	var cells: Array[Vector3i] = []
+	if target == null or target.get("current_surface") == null:
 		return cells
-	var target_cell: Vector2i = target.get("current_cell")
-	return WorldGridPathfinder.get_adjacent_walkable_cells(runtime, target_cell)
+	var target_surface: Vector3i = target.get("current_surface")
+	return WorldGridPathfinder.get_adjacent_walkable_surfaces(runtime, target_surface)
 
 
-func _has_terrain_path_to_any(goal_cells: Array[Vector2i]) -> bool:
-	return not _find_path_to_any(goal_cells, false).is_empty() or goal_cells.has(current_cell)
+func _has_terrain_path_to_any(goal_surfaces: Array[Vector3i]) -> bool:
+	return not _find_path_to_any(goal_surfaces, false).is_empty() or goal_surfaces.has(current_surface)
 
 
-func _find_path_to_any(goal_cells: Array[Vector2i], respect_current_occupancy: bool) -> Array[Vector2i]:
+func _find_path_to_any(goal_surfaces: Array[Vector3i], respect_current_occupancy: bool) -> Array[Vector3i]:
 	return WorldGridPathfinder.find_path_to_any(
 		runtime,
 		self,
-		current_cell,
-		goal_cells,
+		current_surface,
+		goal_surfaces,
 		respect_current_occupancy
 	)
 
@@ -445,12 +445,12 @@ func _get_entity_id(entity: Node) -> String:
 	return ""
 
 
-func _sync_current_cell() -> void:
+func _sync_current_surface() -> void:
 	if runtime == null:
 		runtime = _find_runtime()
 
 	if runtime != null:
-		current_cell = runtime.world_to_cell(global_position)
+		current_surface = runtime.world_to_surface(global_position, current_surface.z)
 
 
 func _is_turn_mode_enabled() -> bool:

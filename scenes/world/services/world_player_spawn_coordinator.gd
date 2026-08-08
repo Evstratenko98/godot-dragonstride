@@ -2,13 +2,13 @@ class_name WorldPlayerSpawnCoordinator
 extends RefCounted
 
 const CHARACTER_SCENE := preload("res://scenes/entities/character/character.tscn")
-const INVALID_SPAWN_CELL := Vector2i(-1, -1)
+const INVALID_SPAWN_SURFACE: Vector3i = Vector3i(-1, -1, -1)
 const SINGLEPLAYER_WARRIOR_COLOR := "Purple"
 
 var runtime: WorldRuntime = null
 var players_root: Node2D = null
 var squad_registry: PlayerSquadRegistry = null
-var spawn_cells: Array[Vector2i] = []
+var spawn_surfaces: Array[Vector3i] = []
 var authoritative_snapshot: Dictionary = {}
 
 
@@ -16,20 +16,20 @@ func configure(
 	new_runtime: WorldRuntime,
 	new_players_root: Node2D,
 	new_registry: PlayerSquadRegistry,
-	new_spawn_cells: Array[Vector2i]
+	new_spawn_surfaces: Array[Vector3i]
 ) -> void:
 	runtime = new_runtime
 	players_root = new_players_root
 	squad_registry = new_registry
-	spawn_cells = new_spawn_cells.duplicate()
+	spawn_surfaces = new_spawn_surfaces.duplicate()
 
 
 func spawn_singleplayer() -> String:
 	var player_info: Dictionary = GameSession.get_local_player_record()
 	for squad_slot: int in range(GameSession.get_squad_size()):
 		var spawn_index: int = squad_slot
-		var spawn_cell: Vector2i = WorldPlayerSpawnPlanner.get_default_spawn_cell(runtime, spawn_cells, spawn_index)
-		var member: PlayerCharacter = _spawn_member(player_info, squad_slot, spawn_cell, SINGLEPLAYER_WARRIOR_COLOR)
+		var spawn_surface: Vector3i = WorldPlayerSpawnPlanner.get_default_spawn_surface(runtime, spawn_surfaces, spawn_index)
+		var member: PlayerCharacter = _spawn_member(player_info, squad_slot, spawn_surface, SINGLEPLAYER_WARRIOR_COLOR)
 		if member == null:
 			return "spawn_registration_failed"
 	return ""
@@ -37,36 +37,37 @@ func spawn_singleplayer() -> String:
 
 func spawn_authoritative(session_players: Array[Dictionary]) -> String:
 	var spawn_records: Array[Dictionary] = []
-	var assigned_cells: Dictionary[Vector2i, bool] = {}
+	var assigned_surfaces: Dictionary[Vector3i, bool] = {}
 	var squad_size: int = GameSession.get_squad_size()
 	for player_index: int in range(session_players.size()):
 		var player_info: Dictionary = session_players[player_index]
 		var warrior_color: String = WorldPlayerSpawnPlanner.get_warrior_color(int(player_info.get("color_index", player_index)))
 		for squad_slot: int in range(squad_size):
 			var spawn_index: int = player_index * squad_size + squad_slot
-			var preferred_cell: Vector2i = INVALID_SPAWN_CELL
-			var has_preferred_cell: bool = spawn_index < spawn_cells.size()
-			if has_preferred_cell:
-				preferred_cell = spawn_cells[spawn_index]
-			var spawn_cell: Vector2i = WorldPlayerSpawnPlanner.find_available_cell(
+			var preferred_surface: Vector3i = INVALID_SPAWN_SURFACE
+			var has_preferred_surface: bool = spawn_index < spawn_surfaces.size()
+			if has_preferred_surface:
+				preferred_surface = spawn_surfaces[spawn_index]
+			var spawn_surface: Vector3i = WorldPlayerSpawnPlanner.find_available_surface(
 				runtime,
-				preferred_cell,
-				has_preferred_cell,
-				assigned_cells
+				preferred_surface,
+				has_preferred_surface,
+				assigned_surfaces
 			)
-			if spawn_cell == INVALID_SPAWN_CELL:
+			if spawn_surface == INVALID_SPAWN_SURFACE:
 				return "spawn_unavailable"
-			var member: PlayerCharacter = _spawn_member(player_info, squad_slot, spawn_cell, warrior_color)
+			var member: PlayerCharacter = _spawn_member(player_info, squad_slot, spawn_surface, warrior_color)
 			if member == null:
 				return "spawn_registration_failed"
-			assigned_cells[spawn_cell] = true
-			spawn_records.append(_create_spawn_record(member, spawn_cell))
+			assigned_surfaces[spawn_surface] = true
+			spawn_records.append(_create_spawn_record(member, spawn_surface))
 	authoritative_snapshot = {
 		"protocol_version": NetworkProtocol.PROTOCOL_VERSION,
 		"match_id": GameSession.get_match_id(),
 		"level_id": GameSession.selected_level_id,
 		"roster_hash": GameSession.get_roster_hash(),
 		"squad_size": squad_size,
+		"topology_hash": runtime.get_topology_hash(),
 		"members": spawn_records,
 	}
 	return ""
@@ -79,6 +80,7 @@ func spawn_from_snapshot(session_players: Array[Dictionary], snapshot: Dictionar
 		or str(snapshot.get("level_id", "")) != GameSession.selected_level_id
 		or str(snapshot.get("roster_hash", "")) != GameSession.get_roster_hash()
 		or int(snapshot.get("squad_size", 0)) != GameSession.get_squad_size()
+		or str(snapshot.get("topology_hash", "")) != runtime.get_topology_hash()
 	):
 		return false
 	var records_value: Variant = snapshot.get("members", [])
@@ -101,7 +103,7 @@ func spawn_from_snapshot(session_players: Array[Dictionary], snapshot: Dictionar
 			var member: PlayerCharacter = _spawn_member(
 				player_info,
 				squad_slot,
-				record.get("spawn_cell", INVALID_SPAWN_CELL),
+				record.get("spawn_surface", INVALID_SPAWN_SURFACE),
 				str(record.get("warrior_color", "Blue"))
 			)
 			if member == null:
@@ -116,7 +118,7 @@ static func make_member_entity_id(player_id: String, squad_slot: int) -> String:
 func _spawn_member(
 	player_info: Dictionary,
 	squad_slot: int,
-	spawn_cell: Vector2i,
+	spawn_surface: Vector3i,
 	warrior_color: String
 ) -> PlayerCharacter:
 	var member_info: Dictionary = player_info.duplicate(true)
@@ -128,7 +130,11 @@ func _spawn_member(
 	players_root.add_child(member)
 	member.setup_multiplayer_player(member_info)
 	var entity_id: String = make_member_entity_id(str(player_info.get("player_id", "")), squad_slot)
-	member.start(runtime.cell_to_world(spawn_cell), bool(player_info.get("is_local", false)), entity_id)
+	member.start(runtime.surface_to_world(spawn_surface), bool(player_info.get("is_local", false)), entity_id)
+	member.current_surface = spawn_surface
+	member.spawn_surface = spawn_surface
+	member.global_position = runtime.surface_to_world(spawn_surface)
+	member.z_index = spawn_surface.z * 20 + 10
 	if GameSession.is_multiplayer() and not GameSession.has_committed_match():
 		member.can_receive_input = false
 	member.configure_warrior_profile(warrior_color, "Последователь %d" % [squad_slot + 1])
@@ -143,12 +149,12 @@ func _spawn_member(
 	return member
 
 
-func _create_spawn_record(member: PlayerCharacter, spawn_cell: Vector2i) -> Dictionary:
+func _create_spawn_record(member: PlayerCharacter, spawn_surface: Vector3i) -> Dictionary:
 	return {
 		"player_id": member.owner_player_id,
 		"steam_id": member.steam_id,
 		"squad_slot": member.squad_slot,
 		"entity_id": member.entity_id,
-		"spawn_cell": spawn_cell,
+		"spawn_surface": spawn_surface,
 		"warrior_color": member.warrior_color,
 	}

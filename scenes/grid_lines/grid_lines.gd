@@ -29,9 +29,9 @@ func _draw() -> void:
 	var cell_size: int = _get_world_cell_size()
 	for y in range(grid_size.y):
 		for x in range(grid_size.x):
-			var cell: Vector2i = Vector2i(x, y)
-			if _is_cell_walkable(cell):
-				var rect: Rect2 = Rect2(Vector2(cell) * cell_size, Vector2(cell_size, cell_size))
+			var surface: Vector3i = Vector3i(x, y, 0)
+			if _is_surface_walkable(surface):
+				var rect: Rect2 = Rect2(Vector2(x, y) * cell_size, Vector2(cell_size, cell_size))
 				draw_rect(rect, line_color, false, line_width, false)
 
 
@@ -76,24 +76,9 @@ func _get_world_cell_size() -> int:
 	return 64
 
 
-func _is_cell_walkable(cell: Vector2i) -> bool:
+func _is_surface_walkable(cell: Vector3i) -> bool:
 	if runtime != null:
-		return runtime.is_cell_walkable_for_character(cell)
-
-	if level == null:
-		return false
-
-	if _is_cell_in_layers(cell, level.get_walkable_layer_names()):
-		return true
-
-	return _is_cell_in_layers(cell, level.get_character_walkable_layer_names())
-
-
-func _is_cell_in_layers(cell: Vector2i, layer_names: PackedStringArray) -> bool:
-	for layer_name in layer_names:
-		var layer: Node = level.get_node_or_null(NodePath(str(layer_name)))
-		if layer is TileMapLayer and layer.get_cell_source_id(cell) != -1:
-			return true
+		return runtime.is_surface_walkable_for_character(cell)
 
 	return false
 

@@ -370,7 +370,7 @@ func _is_valid_record(record: ChestLootRecord) -> bool:
 func _get_chest_for_action(action: WorldActionRecord) -> Chest:
 	if runtime == null or action == null:
 		return null
-	return runtime.get_object_at_cell(action.payload.get("target_cell", Vector2i.ZERO)) as Chest
+	return runtime.get_object_at_surface(action.payload.get("target_surface", Vector3i.ZERO)) as Chest
 
 
 func _get_record(chest_id: String) -> ChestLootRecord:

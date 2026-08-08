@@ -7,6 +7,7 @@ var runtime: WorldRuntime = null
 var level: WorldLevel = null
 var signal_bindings: WorldNetworkSignalBindings = WorldNetworkSignalBindings.new()
 var character_movement: WorldCharacterMovementBridge = WorldCharacterMovementBridge.new()
+var combat_bridge: WorldCombatNetworkBridge = WorldCombatNetworkBridge.new()
 var inventory_intents: WorldInventoryIntentController = WorldInventoryIntentController.new()
 var message_buffer: WorldNetworkMessageBuffer = WorldNetworkMessageBuffer.new()
 var inventory_bridge: WorldInventoryNetworkBridge = WorldInventoryNetworkBridge.new()
@@ -16,6 +17,7 @@ func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void
 	runtime = new_runtime
 	level = new_level
 	character_movement.configure(self)
+	combat_bridge.configure(self)
 	inventory_intents.configure(runtime)
 	message_buffer.configure(self)
 	inventory_bridge.configure(self)
@@ -56,34 +58,11 @@ func apply_cached_entity_ai_states() -> void:
 
 
 func apply_cached_entity_vitality_states() -> void:
-	var cached_states: Dictionary = NetworkManager.store.get_entity_vitality_states()
-	for entity_id_variant: Variant in cached_states.keys():
-		var entity_id: String = str(entity_id_variant)
-		var state: Dictionary = cached_states[entity_id_variant]
-		_on_entity_vitality_received(
-			0,
-			entity_id,
-			int(state.get("health", 0)),
-			int(state.get("max_health", 1)),
-			int(state.get("damage", 0))
-		)
+	combat_bridge.apply_cached_vitality_states()
 
 
-func request_entity_move_started(entity: Node, from_cell: Vector2i, target_cell: Vector2i, should_broadcast: bool = true) -> void:
-	if not should_broadcast or not GameSession.is_multiplayer() or not GameSession.is_host():
-		return
-
-	var id: String = runtime.get_entity_id(entity)
-	if id.is_empty():
-		return
-
-	NetworkManager.character.broadcast_entity_move(
-		runtime.get_current_action_sequence_id(),
-		runtime.claim_current_action_subsequence_id(),
-		id,
-		from_cell,
-		target_cell
-	)
+func request_entity_move_started(entity: Node, from_surface: Vector3i, target_surface: Vector3i, should_broadcast: bool = true) -> void:
+	character_movement.request_entity_move_started(entity, from_surface, target_surface, should_broadcast)
 
 
 func broadcast_entity_ai_state(
@@ -101,7 +80,7 @@ func broadcast_entity_ai_state(
 	)
 
 
-func request_character_move_path(player: PlayerCharacter, requested_path: Array[Vector2i]) -> bool:
+func request_character_move_path(player: PlayerCharacter, requested_path: Array[Vector3i]) -> bool:
 	return character_movement.request_move_path(player, requested_path)
 
 
@@ -117,7 +96,7 @@ func broadcast_inventory_action_payload(action: WorldActionRecord) -> void:
 	NetworkManager.inventory.broadcast_action_payload(action.match_id, action.sequence_id, action.payload)
 
 
-func request_character_interaction(interactor: PlayerCharacter, target_cell: Vector2i) -> void:
+func request_character_interaction(interactor: PlayerCharacter, target_surface: Vector3i) -> void:
 	if interactor == null or interactor != runtime.get_selected_local_character():
 		return
 
@@ -126,41 +105,17 @@ func request_character_interaction(interactor: PlayerCharacter, target_cell: Vec
 		runtime.enqueue_player_action(
 			WorldActionRecord.ActionType.INTERACTION,
 			interactor,
-			{"target_cell": target_cell},
+			{"target_surface": target_surface},
 			request_id,
 			0
 		)
 		return
 
-	NetworkManager.character.request_interaction(interactor.entity_id, target_cell, GameSession.get_match_id(), runtime.get_turn_revision(), request_id)
+	NetworkManager.character.request_interaction(interactor.entity_id, target_surface, GameSession.get_match_id(), runtime.get_turn_revision(), request_id)
 
 
-func request_character_attack(attacker: PlayerCharacter, target_cell: Vector2i) -> bool:
-	if attacker == null or attacker != runtime.get_selected_local_character():
-		return false
-	if attacker.health <= 0:
-		return false
-
-	attacker.current_cell = runtime.world_to_cell(attacker.global_position)
-	if not attacker.can_attack_cell(target_cell):
-		return false
-	if not runtime.can_entity_attack_in_turn(attacker, target_cell):
-		return false
-
-	var request_id: int = runtime.create_action_request_id()
-	if GameSession.is_singleplayer():
-		return runtime.enqueue_player_action(
-			WorldActionRecord.ActionType.ATTACK,
-			attacker,
-			{"target_cell": target_cell},
-			request_id,
-			0
-		)
-	if not NetworkManager.connection.is_ready():
-		return false
-
-	NetworkManager.combat.request_attack(attacker.entity_id, target_cell, GameSession.get_match_id(), runtime.get_turn_revision(), request_id)
-	return true
+func request_character_attack(attacker: PlayerCharacter, target_surface: Vector3i) -> bool:
+	return combat_bridge.request_attack(attacker, target_surface)
 
 
 func request_inventory_add(item_id: String, amount: int) -> void:
@@ -231,25 +186,11 @@ func _on_peer_map_updated() -> void:
 	runtime.update_player_authorities()
 	if GameSession.is_host():
 		inventory_bridge.send_snapshots_to_owners()
-		_send_entity_vitality_states_to_mapped_peers()
+		combat_bridge.send_vitality_states_to_mapped_peers()
 
 
-func _on_attack_requested(actor_entity_id: String, target_cell: Vector2i, match_id: String, turn_revision: int, request_id: int, requester_peer_id: int) -> void:
-	if not GameSession.is_host():
-		return
-
-	var player: PlayerCharacter = _get_requesting_player(requester_peer_id, actor_entity_id)
-	if player == null:
-		return
-	runtime.enqueue_player_action(
-		WorldActionRecord.ActionType.ATTACK,
-		player,
-		{"target_cell": target_cell},
-		request_id,
-		requester_peer_id,
-		turn_revision,
-		match_id
-	)
+func _on_attack_requested(actor_entity_id: String, target_surface: Vector3i, match_id: String, turn_revision: int, request_id: int, requester_peer_id: int) -> void:
+	combat_bridge.on_attack_requested(actor_entity_id, target_surface, match_id, turn_revision, request_id, requester_peer_id)
 
 
 func _on_action_profile_payload_received(match_id: String, sequence_id: int, payload: Dictionary) -> void:
@@ -257,17 +198,17 @@ func _on_action_profile_payload_received(match_id: String, sequence_id: int, pay
 		runtime.receive_action_profile_payload(sequence_id, payload)
 
 
-func _on_interaction_requested(actor_entity_id: String, target_cell: Vector2i, match_id: String, turn_revision: int, request_id: int, requester_peer_id: int) -> void:
+func _on_interaction_requested(actor_entity_id: String, target_surface: Vector3i, match_id: String, turn_revision: int, request_id: int, requester_peer_id: int) -> void:
 	if not GameSession.is_host():
 		return
 
-	var player: PlayerCharacter = _get_requesting_player(requester_peer_id, actor_entity_id)
+	var player: PlayerCharacter = get_requesting_player(requester_peer_id, actor_entity_id)
 	if player == null:
 		return
 	runtime.enqueue_player_action(
 		WorldActionRecord.ActionType.INTERACTION,
 		player,
-		{"target_cell": target_cell},
+		{"target_surface": target_surface},
 		request_id,
 		requester_peer_id,
 		turn_revision,
@@ -279,73 +220,27 @@ func _on_entity_move_received(
 	parent_sequence_id: int,
 	subsequence_id: int,
 	entity_id: String,
-	from_cell: Vector2i,
-	target_cell: Vector2i
+	from_surface: Vector3i,
+	target_surface: Vector3i
 ) -> void:
-	if message_buffer.buffer_npc_action(parent_sequence_id, {
-		"kind": "move",
-		"subsequence_id": subsequence_id,
-		"entity_id": entity_id,
-		"from_cell": from_cell,
-		"target_cell": target_cell,
-	}):
-		return
-	_apply_npc_move_message(entity_id, from_cell, target_cell)
+	character_movement.on_entity_move_received(parent_sequence_id, subsequence_id, entity_id, from_surface, target_surface)
 
 
-func _apply_npc_move_message(entity_id: String, from_cell: Vector2i, target_cell: Vector2i) -> void:
-	var entity: Entity = runtime.get_entity_by_id(entity_id) as Entity
-	if entity == null or (entity is PlayerCharacter and (entity as PlayerCharacter).is_locally_owned):
-		return
-
-	if entity is NonPlayerEntity:
-		(entity as NonPlayerEntity).play_remote_move(from_cell, target_cell)
-		return
-
-	runtime.reserve_entity_cell(entity, from_cell, target_cell)
+func _apply_npc_move_message(entity_id: String, from_surface: Vector3i, target_surface: Vector3i) -> void:
+	character_movement.apply_npc_move(entity_id, from_surface, target_surface)
 
 
 func _on_entity_attack_received(
 	parent_sequence_id: int,
 	subsequence_id: int,
 	entity_id: String,
-	target_cell: Vector2i
+	target_surface: Vector3i
 ) -> void:
-	if message_buffer.buffer_npc_action(parent_sequence_id, {
-		"kind": "attack",
-		"subsequence_id": subsequence_id,
-		"entity_id": entity_id,
-		"target_cell": target_cell,
-	}):
-		return
-	_apply_npc_attack_message(entity_id, target_cell)
+	combat_bridge.on_entity_attack_received(parent_sequence_id, subsequence_id, entity_id, target_surface)
 
 
-func _apply_npc_attack_message(entity_id: String, target_cell: Vector2i) -> void:
-	var attacker: Entity = runtime.get_entity_by_id(entity_id) as Entity
-	if attacker == null:
-		return
-
-	if GameSession.is_host() and not attacker.can_attack_cell(target_cell):
-		return
-
-	if GameSession.is_host() and not runtime.can_entity_attack_in_turn(attacker, target_cell):
-		return
-
-	if attacker is PlayerCharacter:
-		(attacker as PlayerCharacter).play_remote_attack(target_cell, false)
-	elif attacker is NonPlayerEntity:
-		(attacker as NonPlayerEntity).play_remote_attack(target_cell, false)
-	else:
-		attacker.request_attack_cell(target_cell, false, false)
-
-	if GameSession.is_host():
-		runtime.notify_entity_attacked_in_turn(attacker, target_cell)
-
-	if GameSession.is_host():
-		runtime.apply_attack_to_cell(attacker, target_cell, true, false)
-	else:
-		runtime.print_non_entity_attack_result(attacker, target_cell)
+func _apply_npc_attack_message(entity_id: String, target_surface: Vector3i) -> void:
+	combat_bridge.apply_npc_attack(entity_id, target_surface)
 
 
 func _on_entity_attack_result_received(
@@ -356,16 +251,7 @@ func _on_entity_attack_result_received(
 	target_health: int,
 	target_max_health: int
 ) -> void:
-	if message_buffer.buffer_combat(sequence_id, {
-		"kind": "attack_result",
-		"attacker_entity_id": attacker_entity_id,
-		"target_entity_id": target_entity_id,
-		"damage_amount": damage_amount,
-		"target_health": target_health,
-		"target_max_health": target_max_health,
-	}):
-		return
-	_apply_attack_result_message(attacker_entity_id, target_entity_id, damage_amount, target_health, target_max_health)
+	combat_bridge.on_attack_result_received(sequence_id, attacker_entity_id, target_entity_id, damage_amount, target_health, target_max_health)
 
 
 func _apply_attack_result_message(
@@ -375,35 +261,15 @@ func _apply_attack_result_message(
 	target_health: int,
 	target_max_health: int
 ) -> void:
-	var attacker: PlayerCharacter = runtime.get_player_by_entity_id(attacker_entity_id)
-	if attacker != null and attacker.is_locally_owned:
-		return
-
-	runtime.print_entity_attack_result(
-		attacker_entity_id,
-		target_entity_id,
-		damage_amount,
-		target_health,
-		target_max_health
-	)
+	combat_bridge.apply_attack_result(attacker_entity_id, target_entity_id, damage_amount, target_health, target_max_health)
 
 
 func _on_entity_health_received(sequence_id: int, entity_id: String, new_health: int) -> void:
-	if message_buffer.buffer_combat(sequence_id, {
-		"kind": "health",
-		"entity_id": entity_id,
-		"health": new_health,
-	}):
-		return
-	_apply_health_message(entity_id, new_health)
+	combat_bridge.on_health_received(sequence_id, entity_id, new_health)
 
 
 func _apply_health_message(entity_id: String, new_health: int) -> void:
-	var entity: Entity = runtime.get_entity_by_id(entity_id) as Entity
-	if entity == null:
-		return
-
-	entity.set_health(new_health)
+	combat_bridge.apply_health(entity_id, new_health)
 
 
 func _on_entity_vitality_received(
@@ -413,15 +279,7 @@ func _on_entity_vitality_received(
 	new_max_health: int,
 	new_damage: int
 ) -> void:
-	if message_buffer.buffer_combat(sequence_id, {
-		"kind": "vitality",
-		"entity_id": entity_id,
-		"health": new_health,
-		"max_health": new_max_health,
-		"damage": new_damage,
-	}):
-		return
-	_apply_vitality_message(entity_id, new_health, new_max_health, new_damage)
+	combat_bridge.on_vitality_received(sequence_id, entity_id, new_health, new_max_health, new_damage)
 
 
 func _apply_vitality_message(
@@ -430,12 +288,7 @@ func _apply_vitality_message(
 	new_max_health: int,
 	new_damage: int
 ) -> void:
-	var player: PlayerCharacter = runtime.get_entity_by_id(entity_id) as PlayerCharacter
-	if player == null:
-		return
-
-	player.apply_vitality_state(new_health, new_max_health)
-	player.apply_attack_damage_state(new_damage)
+	combat_bridge.apply_vitality(entity_id, new_health, new_max_health, new_damage)
 
 
 func _on_entity_ai_state_received(
@@ -464,25 +317,25 @@ func _apply_ai_state_message(entity_id: String, state: String, target_entity_id:
 	entity.apply_remote_ai_state(state, target_entity_id, reason)
 
 
-func _on_entity_respawn_received(sequence_id: int, entity_id: String, cell: Vector2i, new_health: int) -> void:
+func _on_entity_respawn_received(sequence_id: int, entity_id: String, surface: Vector3i, new_health: int) -> void:
 	if message_buffer.buffer_entity(sequence_id, {
 		"kind": "respawn",
 		"entity_id": entity_id,
-		"cell": cell,
+		"surface": surface,
 		"health": new_health,
 	}):
 		return
-	_apply_respawn_message(entity_id, cell, new_health)
+	_apply_respawn_message(entity_id, surface, new_health)
 
 
-func _apply_respawn_message(entity_id: String, cell: Vector2i, new_health: int) -> void:
+func _apply_respawn_message(entity_id: String, surface: Vector3i, new_health: int) -> void:
 	var entity: Entity = runtime.get_entity_by_id(entity_id) as Entity
 	if entity == null:
 		entity = runtime.get_player_by_entity_id(entity_id)
 	if entity == null:
 		return
 
-	entity.respawn_at_cell(cell)
+	entity.respawn_at_surface(surface)
 	entity.set_health(new_health)
 
 
@@ -540,7 +393,7 @@ func _on_inventory_snapshot_received(snapshot: Dictionary, sequence_id: int) -> 
 	inventory_bridge.on_snapshot_received(snapshot, sequence_id)
 
 
-func _get_requesting_player(requester_peer_id: int, actor_entity_id: String = "") -> PlayerCharacter:
+func get_requesting_player(requester_peer_id: int, actor_entity_id: String = "") -> PlayerCharacter:
 	if requester_peer_id == 0:
 		var local_actor: PlayerCharacter = runtime.get_selected_local_character()
 		if not actor_entity_id.is_empty():
@@ -593,29 +446,11 @@ func _on_session_cleared() -> void:
 
 
 func _send_entity_vitality_states_to_peer(peer_id: int) -> void:
-	for entity_variant: Variant in runtime.get_registered_entities():
-		var player: PlayerCharacter = entity_variant as PlayerCharacter
-		if player == null:
-			continue
-
-		NetworkManager.combat.send_entity_vitality_to_peer(
-			peer_id,
-			player.entity_id,
-			player.health,
-			player.max_health,
-			player.damage
-		)
+	combat_bridge.send_vitality_states_to_peer(peer_id)
 
 
 func _send_entity_vitality_states_to_mapped_peers() -> void:
-	for entity_variant: Variant in runtime.get_registered_entities():
-		var remote_player: PlayerCharacter = entity_variant as PlayerCharacter
-		if remote_player == null or remote_player.is_locally_owned or remote_player.steam_id == 0:
-			continue
-
-		var peer_id: int = NetworkManager.peers.get_peer_id_for_steam_id(remote_player.steam_id)
-		if peer_id != 0:
-			_send_entity_vitality_states_to_peer(peer_id)
+	combat_bridge.send_vitality_states_to_mapped_peers()
 
 
 func _on_object_state_received(sequence_id: int, object_id: String, object_state: int) -> void:

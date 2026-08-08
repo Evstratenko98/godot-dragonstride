@@ -25,7 +25,7 @@ enum ModalContext {
 var runtime: WorldRuntime = null
 var bound_player: PlayerCharacter = null
 var modal_context: ModalContext = ModalContext.NONE
-var pending_spell_target_cell: Vector2i = Vector2i.ZERO
+var pending_spell_target_surface: Vector3i = Vector3i.ZERO
 var inventory_bar_default_z_index: int = 0
 var inventory_bar_default_child_index: int = 0
 
@@ -256,7 +256,7 @@ func _on_selected_local_character_changed(character: PlayerCharacter) -> void:
 	chest_loot_dialog.bind_character(character)
 
 
-func _on_player_spell_target_selected(target_cell: Vector2i) -> void:
+func _on_player_spell_target_selected(target_surface: Vector3i) -> void:
 	if (
 		runtime == null
 		or bound_player == null
@@ -270,12 +270,12 @@ func _on_player_spell_target_selected(target_cell: Vector2i) -> void:
 		return
 	var spell_id: String = bound_player.character_inventory.get_spell_id_at_slot(selected_slot_index)
 	if spell_id != WorldSpells.SPELL_ID_METEOR:
-		runtime.request_selected_spell_cast(bound_player, target_cell)
+		runtime.request_selected_spell_cast(bound_player, target_surface)
 		return
 
-	pending_spell_target_cell = target_cell
+	pending_spell_target_surface = target_surface
 	if not modal_dialog.show_confirmation(METEOR_CONFIRMATION_TITLE, METEOR_CONFIRMATION_TEXT):
-		pending_spell_target_cell = Vector2i.ZERO
+		pending_spell_target_surface = Vector3i.ZERO
 		return
 	modal_context = ModalContext.METEOR_CONFIRMATION
 
@@ -319,15 +319,15 @@ func _on_modal_resolved(result: GameModalDialog.Result) -> void:
 	var resolved_context: ModalContext = modal_context
 	modal_context = ModalContext.NONE
 	if resolved_context != ModalContext.METEOR_CONFIRMATION:
-		pending_spell_target_cell = Vector2i.ZERO
+		pending_spell_target_surface = Vector3i.ZERO
 		return
 
-	var target_cell: Vector2i = pending_spell_target_cell
-	pending_spell_target_cell = Vector2i.ZERO
+	var target_surface: Vector3i = pending_spell_target_surface
+	pending_spell_target_surface = Vector3i.ZERO
 	if runtime == null or bound_player == null or not is_instance_valid(bound_player):
 		return
 	if result == GameModalDialog.Result.CONFIRMED:
-		runtime.request_selected_spell_cast(bound_player, target_cell)
+		runtime.request_selected_spell_cast(bound_player, target_surface)
 	else:
 		runtime.cancel_spell_targeting(bound_player)
 

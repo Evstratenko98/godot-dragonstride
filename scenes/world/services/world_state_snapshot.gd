@@ -30,6 +30,8 @@ func configure_context(
 
 func create_action_stream_snapshot(next_stream_sequence_id: int) -> Dictionary:
 	return {
+		"snapshot_schema_version": NetworkProtocol.SNAPSHOT_SCHEMA_VERSION,
+		"topology_hash": runtime.get_topology_hash(),
 		"next_sequence_id": next_stream_sequence_id,
 		"turn_revision": turns.get_turn_revision() if turns != null else 0,
 		"turn_state": turns.create_action_stream_snapshot() if turns != null else {},
@@ -40,6 +42,11 @@ func create_action_stream_snapshot(next_stream_sequence_id: int) -> Dictionary:
 
 
 func apply_action_stream_snapshot(snapshot: Dictionary) -> bool:
+	if (
+		int(snapshot.get("snapshot_schema_version", 0)) != NetworkProtocol.SNAPSHOT_SCHEMA_VERSION
+		or str(snapshot.get("topology_hash", "")) != runtime.get_topology_hash()
+	):
+		return false
 	var turn_state_value: Variant = snapshot.get("turn_state", {})
 	var spell_state_value: Variant = snapshot.get("spell_state", {})
 	var loot_state_value: Variant = snapshot.get("loot_state", {})
@@ -79,7 +86,7 @@ func _create_world_state_snapshot() -> Dictionary:
 			continue
 		entity_records.append({
 			"entity_id": entity.entity_id,
-			"cell": entity.current_cell,
+			"surface": entity.current_surface,
 			"health": entity.health,
 			"max_health": entity.max_health,
 			"damage": entity.damage,
@@ -136,20 +143,21 @@ func _validate_world_state_snapshot(world_state: Dictionary) -> bool:
 	):
 		return false
 	var seen_entity_ids: Dictionary[String, bool] = {}
-	var entity_cells_by_id: Dictionary[String, Vector2i] = {}
-	var seen_cells: Dictionary[Vector2i, bool] = {}
+	var entity_surfaces_by_id: Dictionary[String, Vector3i] = {}
+	var seen_surfaces: Dictionary[Vector3i, bool] = {}
 	for record_value: Variant in entities:
 		if not (record_value is Dictionary):
 			return false
 		var record: Dictionary = record_value as Dictionary
 		var entity_id: String = str(record.get("entity_id", ""))
-		var cell_value: Variant = record.get("cell")
+		var surface_value: Variant = record.get("surface")
 		if (
 			not NetworkProtocol.is_valid_identifier(entity_id)
 			or seen_entity_ids.has(entity_id)
-			or not (cell_value is Vector2i)
-			or not runtime.is_cell_inside(cell_value as Vector2i)
-			or seen_cells.has(cell_value as Vector2i)
+			or not (surface_value is Vector3i)
+			or not runtime.is_surface_inside(surface_value as Vector3i)
+			or not runtime.has_surface(surface_value as Vector3i)
+			or seen_surfaces.has(surface_value as Vector3i)
 			or int(record.get("max_health", 0)) <= 0
 			or int(record.get("max_health", 0)) > NetworkProtocol.MAX_GAMEPLAY_VALUE
 			or int(record.get("health", -1)) < 0
@@ -158,8 +166,8 @@ func _validate_world_state_snapshot(world_state: Dictionary) -> bool:
 		):
 			return false
 		seen_entity_ids[entity_id] = true
-		entity_cells_by_id[entity_id] = cell_value as Vector2i
-		seen_cells[cell_value as Vector2i] = true
+		entity_surfaces_by_id[entity_id] = surface_value as Vector3i
+		seen_surfaces[surface_value as Vector3i] = true
 	var seen_object_ids: Dictionary[String, bool] = {}
 	for record_value: Variant in objects:
 		if not (record_value is Dictionary):
@@ -200,25 +208,25 @@ func _validate_world_state_snapshot(world_state: Dictionary) -> bool:
 			return false
 		var spawn_record: Dictionary = record_value as Dictionary
 		var spawn_id: String = str(spawn_record.get("spawn_id", ""))
-		var spawn_cell_value: Variant = spawn_record.get("cell")
-		var spawn_cell: Vector2i = spawn_record.get("cell", Vector2i(-1, -1))
+		var spawn_surface_value: Variant = spawn_record.get("surface")
+		var spawn_surface: Vector3i = spawn_record.get("surface", Vector3i(-1, -1, -1))
 		var is_matching_entity_cell: bool = (
 			seen_entity_ids.has(spawn_id)
-			and spawn_cell_value is Vector2i
-			and entity_cells_by_id.get(spawn_id, Vector2i(-1, -1)) == spawn_cell
+			and spawn_surface_value is Vector3i
+			and entity_surfaces_by_id.get(spawn_id, Vector3i(-1, -1, -1)) == spawn_surface
 		)
 		if (
 			not NetworkProtocol.is_valid_identifier(spawn_id)
 			or seen_spawn_ids.has(spawn_id)
 			or not NetworkProtocol.is_valid_identifier(str(spawn_record.get("type_key", "")))
-			or not (spawn_cell_value is Vector2i)
-			or not runtime.is_cell_inside(spawn_cell)
-			or (seen_cells.has(spawn_cell) and not is_matching_entity_cell)
+			or not (spawn_surface_value is Vector3i)
+			or not runtime.is_surface_inside(spawn_surface)
+			or (seen_surfaces.has(spawn_surface) and not is_matching_entity_cell)
 		):
 			return false
 		seen_spawn_ids[spawn_id] = true
 		if not is_matching_entity_cell:
-			seen_cells[spawn_cell] = true
+			seen_surfaces[spawn_surface] = true
 	for record_value: Variant in removed_items_value as Array:
 		if not (record_value is Dictionary):
 			return false
@@ -255,12 +263,12 @@ func _apply_world_state_snapshot(world_state: Dictionary) -> bool:
 	if spawner != null:
 		if not spawner.apply_action_stream_snapshot(dynamic_spawn_records, removal_records):
 			return false
-	var cells_by_entity_id: Dictionary[String, Vector2i] = {}
+	var surfaces_by_entity_id: Dictionary[String, Vector3i] = {}
 	for record_value: Variant in world_state.get("entities", []):
 		if record_value is Dictionary:
-			var cell_record: Dictionary = record_value as Dictionary
-			cells_by_entity_id[str(cell_record.get("entity_id", ""))] = cell_record.get("cell", Vector2i.ZERO)
-	if registry.apply_entity_cell_batch(cells_by_entity_id) != WorldRegistry.RegistrationError.NONE:
+			var surface_record: Dictionary = record_value as Dictionary
+			surfaces_by_entity_id[str(surface_record.get("entity_id", ""))] = surface_record.get("surface", Vector3i.ZERO)
+	if registry.apply_entity_surface_batch(surfaces_by_entity_id) != WorldRegistry.RegistrationError.NONE:
 		if spawner != null:
 			spawner.rollback_action_stream_snapshot_spawns()
 		return false
@@ -271,12 +279,13 @@ func _apply_world_state_snapshot(world_state: Dictionary) -> bool:
 		var entity: Entity = runtime.get_entity_by_id(str(record.get("entity_id", ""))) as Entity
 		if entity == null:
 			return false
-		var cell: Vector2i = record.get("cell", entity.current_cell)
+		var surface: Vector3i = record.get("surface", entity.current_surface)
 		entity.max_health = maxi(int(record.get("max_health", entity.max_health)), 1)
 		entity.set_health(int(record.get("health", entity.health)))
 		entity.apply_attack_damage_state(int(record.get("damage", entity.damage)))
-		entity.current_cell = cell
-		entity.global_position = runtime.cell_to_world(cell)
+		entity.current_surface = surface
+		entity.global_position = runtime.surface_to_world(surface)
+		entity.z_index = surface.z * 20 + 10
 
 	for record_value: Variant in world_state.get("objects", []):
 		if not (record_value is Dictionary):

@@ -1,17 +1,17 @@
 class_name NetworkSpellChannel
 extends NetworkChannel
 
-signal spell_cast_requested(actor_entity_id: String, spell_slot_index: int, target_cell: Vector2i, match_id: String, turn_revision: int, request_id: int, requester_peer_id: int)
+signal spell_cast_requested(actor_entity_id: String, spell_slot_index: int, target_surface: Vector3i, match_id: String, turn_revision: int, request_id: int, requester_peer_id: int)
 signal spell_action_payload_received(match_id: String, sequence_id: int, payload: Dictionary)
 
 
-func request_spell_cast(actor_entity_id: String, spell_slot_index: int, target_cell: Vector2i, match_id: String, turn_revision: int, request_id: int) -> void:
+func request_spell_cast(actor_entity_id: String, spell_slot_index: int, target_surface: Vector3i, match_id: String, turn_revision: int, request_id: int) -> void:
 	if not _can_send():
 		return
 	if connection.is_host:
-		spell_cast_requested.emit(actor_entity_id, spell_slot_index, target_cell, match_id, turn_revision, request_id, 0)
+		spell_cast_requested.emit(actor_entity_id, spell_slot_index, target_surface, match_id, turn_revision, request_id, 0)
 		return
-	rpc_id(1, "_submit_spell_cast", actor_entity_id, spell_slot_index, target_cell, match_id, turn_revision, request_id)
+	rpc_id(1, "_submit_spell_cast", actor_entity_id, spell_slot_index, target_surface, match_id, turn_revision, request_id)
 
 
 func broadcast_action_payload(match_id: String, sequence_id: int, payload: Dictionary) -> void:
@@ -20,10 +20,10 @@ func broadcast_action_payload(match_id: String, sequence_id: int, payload: Dicti
 
 
 @rpc("any_peer", "call_remote", "reliable", 1)
-func _submit_spell_cast(actor_entity_id: String, spell_slot_index: int, target_cell: Vector2i, match_id: String, turn_revision: int, request_id: int) -> void:
+func _submit_spell_cast(actor_entity_id: String, spell_slot_index: int, target_surface: Vector3i, match_id: String, turn_revision: int, request_id: int) -> void:
 	var requester_peer_id: int = _get_registered_sender_peer_id()
-	if requester_peer_id != 0 and NetworkProtocol.is_valid_identifier(actor_entity_id) and spell_slot_index >= 0 and spell_slot_index < CharacterInventory.SPELL_SLOT_COUNT and turn_revision >= 0 and NetworkProtocol.is_valid_cell_value(target_cell) and _is_valid_intent(match_id, request_id, {"actor_entity_id": actor_entity_id, "spell_slot_index": spell_slot_index, "target_cell": target_cell, "turn_revision": turn_revision}):
-		spell_cast_requested.emit(actor_entity_id, spell_slot_index, target_cell, match_id, turn_revision, request_id, requester_peer_id)
+	if requester_peer_id != 0 and NetworkProtocol.is_valid_identifier(actor_entity_id) and spell_slot_index >= 0 and spell_slot_index < CharacterInventory.SPELL_SLOT_COUNT and turn_revision >= 0 and NetworkProtocol.is_valid_surface_value(target_surface) and _is_valid_intent(match_id, request_id, {"actor_entity_id": actor_entity_id, "spell_slot_index": spell_slot_index, "target_surface": target_surface, "turn_revision": turn_revision}):
+		spell_cast_requested.emit(actor_entity_id, spell_slot_index, target_surface, match_id, turn_revision, request_id, requester_peer_id)
 
 
 @rpc("authority", "call_remote", "reliable", 1)

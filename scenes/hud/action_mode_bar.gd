@@ -108,6 +108,7 @@ func _build_buttons() -> void:
 
 func _create_action_button(action_mode: int, tooltip: String) -> Button:
 	var action_button: Button = Button.new()
+	action_button.mouse_default_cursor_shape = Control.CURSOR_ARROW
 	action_button.icon = InventoryBarCursor.get_action_texture(action_mode)
 	action_button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	action_button.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -189,8 +190,11 @@ func _select_action_mode(action_mode: int) -> void:
 	):
 		return
 
+	var should_cancel_action: bool = not is_spell_targeting and bound_player.action_mode == action_mode
 	runtime.cancel_spell_targeting(bound_player)
-	bound_player.set_action_mode(action_mode)
+	bound_player.set_action_mode(
+		PlayerCharacter.ActionMode.NONE if should_cancel_action else action_mode
+	)
 	_refresh_buttons(bound_player.action_mode)
 
 
@@ -199,7 +203,11 @@ func _is_action_available(action_mode: int) -> bool:
 		bound_player == null
 		or not is_character_selected
 		or is_input_blocked
-		or not bound_player.can_process_local_input()
+		or not bound_player.is_locally_owned
+		or not bound_player.is_selected_local_character
+		or not bound_player.can_receive_input
+		or bound_player.is_local_input_blocked
+		or bound_player.health <= 0
 	):
 		return false
 	if runtime == null or runtime.turn_manager == null:
@@ -225,6 +233,11 @@ func _refresh_cursor(action_mode: int) -> void:
 	if _is_meteor_targeting():
 		InventoryBarCursor.apply_meteor_targeting()
 		is_action_cursor_owner = true
+		return
+	if action_mode == PlayerCharacter.ActionMode.NONE:
+		if is_action_cursor_owner:
+			InventoryBarCursor.clear_action_cursor()
+			is_action_cursor_owner = false
 		return
 	InventoryBarCursor.apply(action_mode, _is_action_available(action_mode))
 	is_action_cursor_owner = true
@@ -310,12 +323,12 @@ func _on_player_action_mode_changed(action_mode: int) -> void:
 	_refresh_buttons(action_mode)
 
 
-func _on_player_activity_changed(_from_cell: Vector2i, _target_cell: Vector2i) -> void:
+func _on_player_activity_changed(_from_surface: Vector3i, _target_surface: Vector3i) -> void:
 	if bound_player != null:
 		_refresh_buttons.call_deferred(bound_player.action_mode)
 
 
-func _on_player_attack_finished(_target_cell: Vector2i) -> void:
+func _on_player_attack_finished(_target_surface: Vector3i) -> void:
 	if bound_player != null:
 		_refresh_buttons(bound_player.action_mode)
 

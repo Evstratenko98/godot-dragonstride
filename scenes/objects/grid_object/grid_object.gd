@@ -8,6 +8,7 @@ enum ObjectState {
 }
 
 @export var occupied_offsets: Array[Vector2i] = [Vector2i.ZERO]
+@export_range(0, 15, 1) var surface_height: int = 0
 @export var object_id: String = ""
 @export var normal_texture: Texture2D
 @export var destroyed_texture: Texture2D
@@ -17,16 +18,20 @@ enum ObjectState {
 
 
 func _ready() -> void:
+	z_index = surface_height * 20 + 10
 	_prepare_textures()
 	apply_state_visual()
 
 
-func get_occupied_cells(anchor_cell: Vector2i) -> Array[Vector2i]:
-	var cells: Array[Vector2i] = []
-	for offset in occupied_offsets:
-		cells.append(anchor_cell + offset)
-
-	return cells
+func get_occupied_surfaces(anchor_surface: Vector3i) -> Array[Vector3i]:
+	var surfaces: Array[Vector3i] = []
+	for offset: Vector2i in occupied_offsets:
+		surfaces.append(Vector3i(
+			anchor_surface.x + offset.x,
+			anchor_surface.y + offset.y,
+			anchor_surface.z
+		))
+	return surfaces
 
 
 func set_normal() -> void:

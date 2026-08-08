@@ -14,7 +14,7 @@ extends Node2D
 var runtime: WorldRuntime = null
 var cell_hover: CellHover = null
 var hovered_entity: Entity = null
-var reachable_cells: Array[Vector2i] = []
+var reachable_surfaces: Array[Vector3i] = []
 
 
 func _exit_tree() -> void:
@@ -26,8 +26,8 @@ func _exit_tree() -> void:
 func _draw() -> void:
 	if runtime == null or hovered_entity == null or not is_instance_valid(hovered_entity):
 		return
-	_draw_cell_range(
-		reachable_cells,
+	_draw_surface_range(
+		reachable_surfaces,
 		_get_hover_outline_color(hovered_entity),
 		_get_hover_fill_color(hovered_entity)
 	)
@@ -54,19 +54,19 @@ func configure_context(new_runtime: WorldRuntime, new_cell_hover: CellHover) -> 
 	_refresh_range()
 
 
-func _draw_cell_range(cells: Array[Vector2i], range_outline_color: Color, range_fill_color: Color) -> void:
+func _draw_surface_range(surfaces: Array[Vector3i], range_outline_color: Color, range_fill_color: Color) -> void:
 	var cell_size: int = runtime.get_cell_size()
 	var cell_dimensions: Vector2 = Vector2(cell_size, cell_size)
 	var half_cell: Vector2 = cell_dimensions * 0.5
-	for cell: Vector2i in cells:
-		var local_center: Vector2 = to_local(runtime.cell_to_world(cell))
+	for surface: Vector3i in surfaces:
+		var local_center: Vector2 = to_local(runtime.surface_to_world(surface))
 		var cell_rect: Rect2 = Rect2(local_center - half_cell, cell_dimensions)
 		draw_rect(cell_rect, range_fill_color, true)
 		draw_rect(cell_rect, range_outline_color, false, outline_width, false)
 
 
 func _refresh_range() -> void:
-	reachable_cells.clear()
+	reachable_surfaces.clear()
 	if (
 		runtime == null
 		or hovered_entity == null
@@ -81,7 +81,8 @@ func _refresh_range() -> void:
 	var maximum_steps: int = hovered_entity.get_max_movement_steps_per_turn()
 	if runtime.turn_manager != null and runtime.turn_manager.is_entity_active_in_turn(hovered_entity):
 		maximum_steps = runtime.turn_manager.get_steps_left(hovered_entity.entity_id)
-	reachable_cells = runtime.get_reachable_cells_for_entity(hovered_entity, maximum_steps)
+	reachable_surfaces = runtime.get_reachable_surfaces_for_entity(hovered_entity, maximum_steps)
+	z_index = hovered_entity.current_surface.z * 20 + 12
 	queue_redraw()
 
 
@@ -119,7 +120,7 @@ func _disconnect_hover_signal() -> void:
 		cell_hover.hovered_entity_changed.disconnect(_on_cell_hover_hovered_entity_changed)
 	cell_hover = null
 	hovered_entity = null
-	reachable_cells.clear()
+	reachable_surfaces.clear()
 
 
 func _get_hover_outline_color(entity: Entity) -> Color:
@@ -163,12 +164,12 @@ func _on_spell_targeting_changed(_is_targeting: bool, _selected_slot_index: int)
 	_refresh_range()
 
 
-func _on_hovered_entity_movement_started(_from_cell: Vector2i, _target_cell: Vector2i) -> void:
-	reachable_cells.clear()
+func _on_hovered_entity_movement_started(_from_surface: Vector3i, _target_surface: Vector3i) -> void:
+	reachable_surfaces.clear()
 	queue_redraw()
 
 
-func _on_hovered_entity_movement_finished(_from_cell: Vector2i, _target_cell: Vector2i) -> void:
+func _on_hovered_entity_movement_finished(_from_surface: Vector3i, _target_surface: Vector3i) -> void:
 	_refresh_range()
 
 

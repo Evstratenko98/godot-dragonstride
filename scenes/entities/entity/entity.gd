@@ -1,9 +1,9 @@
 class_name Entity
 extends CharacterBody2D
 
-signal movement_finished(from_cell: Vector2i, target_cell: Vector2i)
-signal movement_started(from_cell: Vector2i, target_cell: Vector2i)
-signal attack_finished(target_cell: Vector2i)
+signal movement_finished(from_surface: Vector3i, target_surface: Vector3i)
+signal movement_started(from_surface: Vector3i, target_surface: Vector3i)
+signal attack_finished(target_surface: Vector3i)
 signal vitality_changed(current_health: int, maximum_health: int)
 signal damage_changed(current_damage: int)
 
@@ -21,29 +21,55 @@ enum EntityType {
 @export var health: int = 100
 @export var damage: int = 25
 @export var move_time: float = 0.18
+@export_range(0, 15, 1) var surface_height: int = 0
 @export var occupied_offsets: Array[Vector2i] = [Vector2i.ZERO]
 @export var health_bar_offset: Vector2 = Vector2(0, -42)
 
 var runtime: WorldRuntime = null
-var current_cell: Vector2i = Vector2i.ZERO
-var spawn_cell: Vector2i = Vector2i.ZERO
-var is_moving: bool = false
+var movement_controller: EntityMovementController = EntityMovementController.new()
+var current_surface: Vector3i:
+	get:
+		return movement_controller.current_surface
+	set(value):
+		movement_controller.current_surface = value
+var spawn_surface: Vector3i:
+	get:
+		return movement_controller.spawn_surface
+	set(value):
+		movement_controller.spawn_surface = value
+var is_moving: bool:
+	get:
+		return movement_controller.is_moving
+	set(value):
+		movement_controller.is_moving = value
 var is_attacking: bool = false
-var attack_target_cell: Vector2i = Vector2i.ZERO
-var movement_tween: Tween = null
-var action_generation: int = 0
+var attack_target_surface: Vector3i = Vector3i.ZERO
+var movement_tween: Tween:
+	get:
+		return movement_controller.movement_tween
+	set(value):
+		movement_controller.movement_tween = value
+var action_generation: int:
+	get:
+		return movement_controller.action_generation
+	set(value):
+		movement_controller.action_generation = value
 var health_presenter: EntityHealthPresenter = EntityHealthPresenter.new()
+var occlusion_silhouette: EntityOcclusionSilhouette = null
 
 
 func _ready() -> void:
 	health_presenter.configure(self)
 	runtime = _find_runtime()
+	movement_controller.configure(self, runtime)
 	if runtime != null:
-		current_cell = runtime.world_to_cell(global_position)
-		spawn_cell = current_cell
-		global_position = runtime.cell_to_world(current_cell)
+		current_surface = runtime.world_to_surface(global_position, surface_height)
+		spawn_surface = current_surface
+		global_position = runtime.surface_to_world(current_surface)
+		z_index = current_surface.z * 20 + 10
 	health_presenter.ensure_created(health_bar_offset)
 	health_presenter.update(health, max_health)
+	_configure_occlusion_silhouette()
 
 
 func start_entity(
@@ -57,10 +83,12 @@ func start_entity(
 	entity_type = new_entity_type
 	global_position = start_position
 	runtime = _find_runtime()
+	movement_controller.configure(self, runtime)
 
 	if runtime != null:
-		current_cell = runtime.world_to_cell(global_position)
-		spawn_cell = current_cell
+		current_surface = runtime.world_to_surface(global_position, surface_height)
+		spawn_surface = current_surface
+		z_index = current_surface.z * 20 + 10
 
 	health = max_health
 	show()
@@ -81,36 +109,40 @@ func get_max_movement_steps_per_turn() -> int:
 	return 1
 
 
-func can_attack_cell(target_cell: Vector2i) -> bool:
-	return can_attack_cell_from(current_cell, target_cell)
+func can_attack_surface(target_surface: Vector3i) -> bool:
+	return can_attack_surface_from(current_surface, target_surface)
 
 
-func can_attack_cell_from(anchor_cell: Vector2i, target_cell: Vector2i) -> bool:
-	if get_occupied_cells(anchor_cell).has(target_cell):
+func can_attack_surface_from(anchor_surface: Vector3i, target_surface: Vector3i) -> bool:
+	if get_occupied_surfaces(anchor_surface).has(target_surface):
 		return false
 
 	return EntityFootprint.get_adjacent_direction(
-		anchor_cell,
-		target_cell,
+		anchor_surface,
+		target_surface,
 		occupied_offsets
 	) != Vector2i.ZERO
 
 
-func get_attackable_cells(anchor_cell: Vector2i) -> Array[Vector2i]:
-	var attackable_cells: Array[Vector2i] = []
-	var occupied_cells: Array[Vector2i] = get_occupied_cells(anchor_cell)
+func get_attackable_surfaces(anchor_surface: Vector3i) -> Array[Vector3i]:
+	var attackable_surfaces: Array[Vector3i] = []
+	var occupied_surfaces: Array[Vector3i] = get_occupied_surfaces(anchor_surface)
 	var directions: Array[Vector2i] = [
 		Vector2i.RIGHT,
 		Vector2i.LEFT,
 		Vector2i.DOWN,
 		Vector2i.UP,
 	]
-	for occupied_cell: Vector2i in occupied_cells:
+	for occupied_surface: Vector3i in occupied_surfaces:
 		for direction: Vector2i in directions:
-			var target_cell: Vector2i = occupied_cell + direction
-			if not occupied_cells.has(target_cell) and not attackable_cells.has(target_cell):
-				attackable_cells.append(target_cell)
-	return attackable_cells
+			var target_surface: Vector3i = Vector3i(
+				occupied_surface.x + direction.x,
+				occupied_surface.y + direction.y,
+				occupied_surface.z
+			)
+			if not occupied_surfaces.has(target_surface) and not attackable_surfaces.has(target_surface):
+				attackable_surfaces.append(target_surface)
+	return attackable_surfaces
 
 
 func request_move(direction: Vector2i) -> bool:
@@ -127,38 +159,39 @@ func execute_move(direction: Vector2i, should_broadcast: bool, movement_step_cos
 	if not runtime.can_entity_move_in_turn(self):
 		return false
 
-	current_cell = runtime.world_to_cell(global_position)
-	var target_cell: Vector2i = current_cell + direction
+	var target_surface: Vector3i = runtime.get_surface_in_direction(current_surface, direction)
 	_on_move_direction_selected(direction)
-
-	if not runtime.can_enter_cell(target_cell, self):
-		_on_move_blocked(direction, target_cell)
+	if target_surface == WorldGridTopology.INVALID_SURFACE:
+		_on_move_blocked(direction, target_surface)
 		return false
 
-	if not runtime.reserve_entity_cell(self, current_cell, target_cell):
-		_on_move_blocked(direction, target_cell)
+	if not runtime.can_enter_surface(target_surface, self):
+		_on_move_blocked(direction, target_surface)
 		return false
 
-	_move_to_cell(target_cell, should_broadcast, movement_step_cost)
+	if not runtime.reserve_entity_surface(self, current_surface, target_surface):
+		_on_move_blocked(direction, target_surface)
+		return false
+
+	_move_to_surface(target_surface, should_broadcast, movement_step_cost)
 	return true
 
 
-func request_attack_cell(target_cell: Vector2i, should_apply: bool = true, should_broadcast: bool = true) -> bool:
+func request_attack_surface(target_surface: Vector3i, should_apply: bool = true, should_broadcast: bool = true) -> bool:
 	if runtime == null:
 		return false
 
 	if is_moving or is_attacking or health <= 0 or runtime.is_entity_casting(self):
 		return false
 
-	current_cell = runtime.world_to_cell(global_position)
-	if not can_attack_cell(target_cell):
+	if not can_attack_surface(target_surface):
 		return false
 
-	var direction: Vector2i = _get_attack_direction_to_cell(target_cell)
-	if not runtime.can_entity_attack_in_turn(self, target_cell):
+	var direction: Vector2i = _get_attack_direction_to_surface(target_surface)
+	if not runtime.can_entity_attack_in_turn(self, target_surface):
 		return false
 
-	_attack_cell(target_cell, direction, should_apply, should_broadcast)
+	_attack_surface(target_surface, direction, should_apply, should_broadcast)
 	return true
 
 
@@ -232,25 +265,17 @@ func die() -> void:
 func respawn() -> bool:
 	if runtime != null and self is PlayerCharacter:
 		return runtime.request_player_respawn(self as PlayerCharacter)
-	return respawn_at_cell(spawn_cell)
+	return respawn_at_surface(spawn_surface)
 
 
-func respawn_at_cell(respawn_cell: Vector2i) -> bool:
+func respawn_at_surface(respawn_surface: Vector3i) -> bool:
 	if runtime != null:
-		var registration_result: int = runtime.respawn_entity(self, respawn_cell)
+		var registration_result: int = runtime.respawn_entity(self, respawn_surface)
 		if registration_result != WorldRegistry.RegistrationError.NONE:
 			return false
-	action_generation += 1
-	if movement_tween != null and movement_tween.is_valid():
-		movement_tween.kill()
-	movement_tween = null
+	movement_controller.reset_at_surface(respawn_surface)
 	set_health(max_health)
-	is_moving = false
 	is_attacking = false
-	current_cell = respawn_cell
-
-	if runtime != null:
-		global_position = runtime.cell_to_world(respawn_cell)
 
 	show()
 	health_presenter.update(health, max_health)
@@ -258,17 +283,8 @@ func respawn_at_cell(respawn_cell: Vector2i) -> bool:
 	return true
 
 
-func force_cancel_movement(from_cell: Vector2i) -> void:
-	action_generation += 1
-	if movement_tween != null and movement_tween.is_valid():
-		movement_tween.kill()
-	movement_tween = null
-	is_moving = false
-	current_cell = from_cell
-	if runtime != null:
-		global_position = runtime.cell_to_world(from_cell)
-		runtime.sync_entity_cell(self, from_cell)
-	_on_move_stopped()
+func force_cancel_movement(from_surface: Vector3i) -> void:
+	movement_controller.cancel_to_surface(from_surface)
 
 
 func force_finish_attack_presentation() -> void:
@@ -277,7 +293,7 @@ func force_finish_attack_presentation() -> void:
 	_on_attack_presentation_forced()
 
 
-func get_expected_attack_duration(_target_cell: Vector2i) -> float:
+func get_expected_attack_duration(_target_surface: Vector3i) -> float:
 	return 0.0
 
 
@@ -288,60 +304,27 @@ func get_display_name() -> String:
 	return name
 
 
-func get_occupied_cells(anchor_cell: Vector2i) -> Array[Vector2i]:
-	return EntityFootprint.get_occupied_cells(anchor_cell, occupied_offsets)
+func get_occupied_surfaces(anchor_surface: Vector3i) -> Array[Vector3i]:
+	return EntityFootprint.get_occupied_surfaces(anchor_surface, occupied_offsets)
 
 
 func get_action_generation() -> int:
 	return action_generation
 
 
-func _move_to_cell(target_cell: Vector2i, should_broadcast: bool = true, movement_step_cost: int = 1) -> void:
-	if runtime == null:
-		return
-
-	is_moving = true
-	var from_cell: Vector2i = current_cell
-	var target_position: Vector2 = runtime.cell_to_world(target_cell)
-	var move_generation: int = action_generation
-	movement_tween = create_tween()
-	movement_tween.set_trans(Tween.TRANS_LINEAR)
-	movement_tween.set_ease(Tween.EASE_IN)
-	movement_tween.tween_property(self, "global_position", target_position, move_time)
-	_on_move_started(target_cell)
-	if runtime != null:
-		runtime.handle_entity_move_started(self, from_cell, target_cell, should_broadcast)
-	movement_started.emit(from_cell, target_cell)
-	movement_tween.finished.connect(func() -> void:
-		if move_generation != action_generation:
-			return
-
-		movement_tween = null
-		global_position = target_position
-		current_cell = target_cell
-		is_moving = false
-
-		if runtime != null:
-			runtime.handle_entity_move_completed(self, from_cell, target_cell, movement_step_cost)
-		movement_finished.emit(from_cell, target_cell)
-
-		_on_move_finished(target_cell)
-		if _try_continue_moving():
-			return
-
-		_on_move_stopped()
-	)
+func _move_to_surface(target_surface: Vector3i, should_broadcast: bool = true, movement_step_cost: int = 1) -> void:
+	movement_controller.move_to_surface(target_surface, should_broadcast, movement_step_cost)
 
 
-func _attack_cell(target_cell: Vector2i, _direction: Vector2i, should_apply: bool, should_broadcast: bool) -> void:
+func _attack_surface(target_surface: Vector3i, _direction: Vector2i, should_apply: bool, should_broadcast: bool) -> void:
 	is_attacking = true
-	attack_target_cell = target_cell
+	attack_target_surface = target_surface
 	if should_apply:
 		_apply_attack_to_world(should_broadcast)
 	is_attacking = false
 	if runtime != null:
 		runtime.notify_entity_action_finished_in_turn(self)
-	attack_finished.emit(target_cell)
+	attack_finished.emit(target_surface)
 
 
 func _apply_attack_to_world(
@@ -351,10 +334,10 @@ func _apply_attack_to_world(
 	if runtime == null:
 		return
 
-	runtime.notify_entity_attacked_in_turn(self, attack_target_cell)
+	runtime.notify_entity_attacked_in_turn(self, attack_target_surface)
 	runtime.handle_entity_attack(
 		self,
-		attack_target_cell,
+		attack_target_surface,
 		should_broadcast,
 		should_broadcast_action
 	)
@@ -364,11 +347,11 @@ func _on_attack_presentation_forced() -> void:
 	pass
 
 
-func _play_target_incoming_attack_guard(target_cell: Vector2i, duration: float) -> void:
+func _play_target_incoming_attack_guard(target_surface: Vector3i, duration: float) -> void:
 	if duration <= 0.0 or runtime == null:
 		return
 
-	var target_entity: Node = runtime.get_entity_at_cell(target_cell)
+	var target_entity: Node = runtime.get_entity_at_surface(target_surface)
 	if target_entity == null or target_entity == self:
 		return
 
@@ -376,23 +359,23 @@ func _play_target_incoming_attack_guard(target_cell: Vector2i, duration: float) 
 		(target_entity as NonPlayerEntity).play_incoming_attack_guard(duration)
 
 
-func _get_attack_direction_to_cell(target_cell: Vector2i) -> Vector2i:
-	return EntityFootprint.get_adjacent_direction(current_cell, target_cell, occupied_offsets)
+func _get_attack_direction_to_surface(target_surface: Vector3i) -> Vector2i:
+	return EntityFootprint.get_adjacent_direction(current_surface, target_surface, occupied_offsets)
 
 
 func _on_move_direction_selected(_direction: Vector2i) -> void:
 	pass
 
 
-func _on_move_blocked(_direction: Vector2i, _target_cell: Vector2i) -> void:
+func _on_move_blocked(_direction: Vector2i, _target_surface: Vector3i) -> void:
 	pass
 
 
-func _on_move_started(_target_cell: Vector2i) -> void:
+func _on_move_started(_target_surface: Vector3i) -> void:
 	pass
 
 
-func _on_move_finished(_target_cell: Vector2i) -> void:
+func _on_move_finished(_target_surface: Vector3i) -> void:
 	pass
 
 
@@ -419,3 +402,13 @@ func _on_respawned() -> void:
 
 func _find_runtime() -> WorldRuntime:
 	return WorldRuntimeResolver.from_node(self)
+
+
+func _configure_occlusion_silhouette() -> void:
+	var source_sprite: Sprite2D = get_node_or_null("Sprite2D") as Sprite2D
+	if source_sprite == null:
+		return
+	occlusion_silhouette = EntityOcclusionSilhouette.new()
+	occlusion_silhouette.name = "OcclusionSilhouette"
+	add_child(occlusion_silhouette)
+	occlusion_silhouette.configure(self, source_sprite)

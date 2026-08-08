@@ -32,7 +32,7 @@ func start(
 
 
 func die() -> void:
-	var death_cell: Vector2i = current_cell
+	var death_surface: Vector3i = current_surface
 	_on_died()
 	if runtime == null:
 		queue_free()
@@ -40,10 +40,10 @@ func die() -> void:
 	if not runtime.remove_defeated_non_player(self):
 		return
 
-	spawn_death_drop(death_cell)
+	spawn_death_drop(death_surface)
 
 
-func spawn_death_drop(_death_cell: Vector2i) -> bool:
+func spawn_death_drop(_death_surface: Vector3i) -> bool:
 	return false
 
 
@@ -79,23 +79,23 @@ func play_incoming_attack_guard(_duration: float) -> void:
 	pass
 
 
-func play_remote_move(from_cell: Vector2i, target_cell: Vector2i) -> void:
+func play_remote_move(from_surface: Vector3i, target_surface: Vector3i) -> void:
 	if runtime == null:
 		runtime = _find_runtime()
 
 	if runtime == null or is_moving or is_attacking:
 		return
 
-	current_cell = from_cell
-	global_position = runtime.cell_to_world(from_cell)
-	if not runtime.reserve_entity_cell(self, from_cell, target_cell):
+	current_surface = from_surface
+	global_position = runtime.surface_to_world(from_surface)
+	if not runtime.reserve_entity_surface(self, from_surface, target_surface):
 		return
 
-	_move_to_cell(target_cell, false)
+	_move_to_surface(target_surface, false)
 
 
-func play_remote_attack(target_cell: Vector2i, should_apply: bool = true) -> void:
-	request_attack_cell(target_cell, should_apply, false)
+func play_remote_attack(target_surface: Vector3i, should_apply: bool = true) -> void:
+	request_attack_surface(target_surface, should_apply, false)
 
 
 func request_behavior_move(direction: Vector2i) -> bool:
@@ -104,7 +104,7 @@ func request_behavior_move(direction: Vector2i) -> bool:
 
 func cancel_behavior() -> void:
 	if is_moving:
-		force_cancel_movement(current_cell)
+		force_cancel_movement(current_surface)
 	if is_attacking:
 		force_finish_attack_presentation()
 	active_behavior_generation = 0
@@ -114,8 +114,11 @@ func can_behavior_move(direction: Vector2i) -> bool:
 	if direction == Vector2i.ZERO or runtime == null:
 		return false
 
-	current_cell = runtime.world_to_cell(global_position)
-	return runtime.can_enter_cell(current_cell + direction, self)
+	var target_surface: Vector3i = runtime.get_surface_in_direction(current_surface, direction)
+	return (
+		target_surface != WorldGridTopology.INVALID_SURFACE
+		and runtime.can_enter_surface(target_surface, self)
+	)
 
 
 func _on_move_direction_selected(direction: Vector2i) -> void:
@@ -123,7 +126,7 @@ func _on_move_direction_selected(direction: Vector2i) -> void:
 		view.face_direction(direction)
 
 
-func _on_move_started(_target_cell: Vector2i) -> void:
+func _on_move_started(_target_surface: Vector3i) -> void:
 	if view != null:
 		view.play_walk()
 

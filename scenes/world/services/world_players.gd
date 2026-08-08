@@ -12,9 +12,9 @@ enum ConnectionState {
 const CAMERA_SCENE := preload("res://scenes/camera/camera.tscn")
 const PLAYER_SNAPSHOT_RETRY_MSEC := 500
 const PLAYER_COMMIT_TIMEOUT_MSEC := 10000
-const INVALID_SPAWN_CELL := Vector2i(-1, -1)
+const INVALID_SPAWN_SURFACE: Vector3i = Vector3i(-1, -1, -1)
 
-@export var spawn_cells: Array[Vector2i] = []
+@export var spawn_surfaces: Array[Vector3i] = []
 @export var players_root_path: NodePath = ^"../WorldRuntime/Players"
 
 @onready var players_root: Node2D = get_node(players_root_path) as Node2D
@@ -58,8 +58,8 @@ func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void
 	_configure_helpers()
 
 
-func configure(new_spawn_cells: Array[Vector2i]) -> void:
-	spawn_cells = new_spawn_cells.duplicate()
+func configure(new_spawn_surfaces: Array[Vector3i]) -> void:
+	spawn_surfaces = new_spawn_surfaces.duplicate()
 	_configure_helpers()
 
 
@@ -219,8 +219,8 @@ func get_players_root() -> Node2D:
 func request_player_respawn(member: PlayerCharacter) -> bool:
 	if member == null or runtime == null:
 		return false
-	var target_cell: Vector2i = WorldPlayerSpawnPlanner.find_available_cell(runtime, member.spawn_cell, true, {}, member)
-	if target_cell == INVALID_SPAWN_CELL:
+	var target_surface: Vector3i = WorldPlayerSpawnPlanner.find_available_surface(runtime, member.spawn_surface, true, {}, member)
+	if target_surface == INVALID_SPAWN_SURFACE:
 		runtime.unregister_entity(member)
 		member.can_receive_input = false
 		member.hide()
@@ -230,7 +230,7 @@ func request_player_respawn(member: PlayerCharacter) -> bool:
 			NetworkManager.players.broadcast_player_respawn_pending(GameSession.get_match_id(), member.entity_id)
 		selection_controller.ensure_available_selection()
 		return false
-	var was_respawned: bool = member.respawn_at_cell(target_cell)
+	var was_respawned: bool = member.respawn_at_surface(target_surface)
 	if was_respawned:
 		member.can_receive_input = member.is_locally_owned
 		_broadcast_player_respawn(member)
@@ -254,8 +254,8 @@ func _retry_pending_respawns() -> void:
 		if member == null or not is_instance_valid(member):
 			pending_respawn_players.erase(entity_id)
 			continue
-		var target_cell: Vector2i = WorldPlayerSpawnPlanner.find_available_cell(runtime, member.spawn_cell, true, {}, member)
-		if target_cell == INVALID_SPAWN_CELL or not member.respawn_at_cell(target_cell):
+		var target_surface: Vector3i = WorldPlayerSpawnPlanner.find_available_surface(runtime, member.spawn_surface, true, {}, member)
+		if target_surface == INVALID_SPAWN_SURFACE or not member.respawn_at_surface(target_surface):
 			continue
 		pending_respawn_players.erase(entity_id)
 		member.can_receive_input = member.is_locally_owned
@@ -289,7 +289,7 @@ func execute_character_kill_action(member: PlayerCharacter) -> bool:
 func _configure_helpers() -> void:
 	if runtime == null or players_root == null:
 		return
-	spawn_coordinator.configure(runtime, players_root, squad_registry, spawn_cells)
+	spawn_coordinator.configure(runtime, players_root, squad_registry, spawn_surfaces)
 	if selection_controller != null:
 		selection_controller.configure(runtime, squad_registry, local_camera)
 
@@ -318,7 +318,7 @@ func _configure_camera() -> void:
 
 func _broadcast_player_respawn(member: PlayerCharacter) -> void:
 	if GameSession.is_multiplayer() and GameSession.is_host():
-		NetworkManager.entity.broadcast_entity_respawn(member.entity_id, member.current_cell, member.health, runtime.get_current_action_sequence_id())
+		NetworkManager.entity.broadcast_entity_respawn(member.entity_id, member.current_surface, member.health, runtime.get_current_action_sequence_id())
 
 
 func _wait_for_spawn_snapshot() -> String:

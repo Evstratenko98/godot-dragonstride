@@ -5,6 +5,7 @@ signal action_mode_changed(action_mode: ActionMode)
 signal movement_input_state_requested(character: PlayerCharacter, is_held: bool)
 
 enum ActionMode {
+	NONE = -1,
 	MOVE,
 	ATTACK,
 	INTERACT,
@@ -129,51 +130,49 @@ func get_max_movement_steps_per_turn() -> int:
 	return WorldSquadTurnBudget.MAX_STEPS_PER_MEMBER
 
 
-func request_interaction_cell(target_cell: Vector2i) -> bool:
+func request_interaction_surface(target_surface: Vector3i) -> bool:
 	if runtime == null or health <= 0:
 		return false
 
-	current_cell = runtime.world_to_cell(global_position)
-	if not can_attack_cell(target_cell):
+	if not can_attack_surface(target_surface):
 		return false
 
-	runtime.request_character_interaction(self, target_cell)
+	runtime.request_character_interaction(self, target_surface)
 	return true
 
 
-func request_move_path(requested_path: Array[Vector2i]) -> bool:
+func request_move_path(requested_path: Array[Vector3i]) -> bool:
 	if runtime == null or requested_path.is_empty():
 		return false
 	return runtime.request_character_move_path(self, requested_path)
 
 
-func execute_authoritative_move_path(path: Array[Vector2i]) -> bool:
+func execute_authoritative_move_path(path: Array[Vector3i]) -> bool:
 	return await _play_move_path(path, true)
 
 
-func play_remote_move_path(path: Array[Vector2i]) -> bool:
+func play_remote_move_path(path: Array[Vector3i]) -> bool:
 	return await _play_move_path(path, false)
 
 
-func play_remote_attack(target_cell: Vector2i, should_apply: bool = true) -> void:
+func play_remote_attack(target_surface: Vector3i, should_apply: bool = true) -> void:
 	if runtime == null:
 		runtime = _find_runtime()
 
 	if runtime == null or is_attacking or health <= 0:
 		return
 
-	current_cell = runtime.world_to_cell(global_position)
-	var direction: Vector2i = _get_attack_direction_to_cell(target_cell)
+	var direction: Vector2i = _get_attack_direction_to_surface(target_surface)
 	if direction == Vector2i.ZERO:
 		return
-	_attack_cell(target_cell, direction, should_apply, false)
+	_attack_surface(target_surface, direction, should_apply, false)
 
 
-func get_expected_attack_duration(target_cell: Vector2i) -> float:
+func get_expected_attack_duration(target_surface: Vector3i) -> float:
 	var character_view: CharacterView = _get_view()
 	if character_view == null:
 		return 0.0
-	var direction: Vector2i = _get_attack_direction_to_cell(target_cell)
+	var direction: Vector2i = _get_attack_direction_to_surface(target_surface)
 	if direction == Vector2i.RIGHT or direction == Vector2i.LEFT:
 		return character_view.get_animation_length(&"attack_right")
 	if direction == Vector2i.DOWN:
@@ -220,7 +219,7 @@ func _on_move_direction_selected(direction: Vector2i) -> void:
 	_sync_facing_from_view()
 
 
-func _play_move_path(path: Array[Vector2i], should_consume_steps: bool) -> bool:
+func _play_move_path(path: Array[Vector3i], should_consume_steps: bool) -> bool:
 	if (
 		runtime == null
 		or path.is_empty()
@@ -233,20 +232,23 @@ func _play_move_path(path: Array[Vector2i], should_consume_steps: bool) -> bool:
 	if should_consume_steps and not runtime.can_entity_move_in_turn(self):
 		return false
 
-	var start_cell: Vector2i = runtime.world_to_cell(global_position)
+	var start_surface: Vector3i = current_surface
 	var move_path_generation: int = get_action_generation()
-	current_cell = start_cell
+	current_surface = start_surface
 	is_executing_move_path = true
 	for path_index: int in range(path.size()):
-		var target_cell: Vector2i = path[path_index]
-		var from_cell: Vector2i = current_cell
-		var direction: Vector2i = target_cell - from_cell
-		if absi(direction.x) + absi(direction.y) != 1:
-			force_cancel_movement(start_cell)
+		var target_surface: Vector3i = path[path_index]
+		var from_surface: Vector3i = current_surface
+		var direction: Vector2i = Vector2i(
+			target_surface.x - from_surface.x,
+			target_surface.y - from_surface.y
+		)
+		if not runtime.has_traversal_edge(from_surface, target_surface):
+			force_cancel_movement(start_surface)
 			_finish_move_path()
 			return false
-		if not runtime.reserve_entity_cell(self, from_cell, target_cell):
-			force_cancel_movement(start_cell)
+		if not runtime.reserve_entity_surface(self, from_surface, target_surface):
+			force_cancel_movement(start_surface)
 			_finish_move_path()
 			return false
 
@@ -254,8 +256,9 @@ func _play_move_path(path: Array[Vector2i], should_consume_steps: bool) -> bool:
 		if should_consume_steps and path_index == path.size() - 1:
 			movement_step_cost = path.size()
 		_on_move_direction_selected(direction)
-		_move_to_cell(target_cell, false, movement_step_cost)
-		var move_deadline_msec: int = Time.get_ticks_msec() + int((move_time + 2.0) * 1000.0)
+		_move_to_surface(target_surface, false, movement_step_cost)
+		var edge_duration: float = move_time * (2.0 if runtime.is_ramp_edge(from_surface, target_surface) else 1.0)
+		var move_deadline_msec: int = Time.get_ticks_msec() + int((edge_duration + 2.0) * 1000.0)
 		while is_inside_tree() and is_moving and Time.get_ticks_msec() < move_deadline_msec:
 			await get_tree().process_frame
 		if not is_inside_tree():
@@ -265,7 +268,7 @@ func _play_move_path(path: Array[Vector2i], should_consume_steps: bool) -> bool:
 			_finish_move_path()
 			return false
 		if is_moving:
-			force_cancel_movement(start_cell)
+			force_cancel_movement(start_surface)
 			_finish_move_path()
 			return false
 
@@ -273,7 +276,7 @@ func _play_move_path(path: Array[Vector2i], should_consume_steps: bool) -> bool:
 	return true
 
 
-func _on_move_started(_target_cell: Vector2i) -> void:
+func _on_move_started(_target_surface: Vector3i) -> void:
 	update_move_animation(true)
 
 
@@ -297,27 +300,27 @@ func _finish_move_path() -> void:
 		update_move_animation(is_movement_input_held)
 
 
-func _attack_cell(target_cell: Vector2i, direction: Vector2i, should_apply: bool, should_broadcast: bool) -> void:
+func _attack_surface(target_surface: Vector3i, direction: Vector2i, should_apply: bool, should_broadcast: bool) -> void:
 	if direction == Vector2i.RIGHT:
-		_attack(&"attack_right", false, true, target_cell, should_apply, should_broadcast)
+		_attack(&"attack_right", false, true, target_surface, should_apply, should_broadcast)
 	elif direction == Vector2i.LEFT:
-		_attack(&"attack_right", true, true, target_cell, should_apply, should_broadcast)
+		_attack(&"attack_right", true, true, target_surface, should_apply, should_broadcast)
 	elif direction == Vector2i.DOWN:
-		_attack(&"attack_down", false, false, target_cell, should_apply, should_broadcast)
+		_attack(&"attack_down", false, false, target_surface, should_apply, should_broadcast)
 	elif direction == Vector2i.UP:
-		_attack(&"attack_up", false, false, target_cell, should_apply, should_broadcast)
+		_attack(&"attack_up", false, false, target_surface, should_apply, should_broadcast)
 
 
 func _attack(
 	animation_name: StringName,
 	attack_facing_left: bool,
 	update_horizontal_facing: bool,
-	target_cell: Vector2i,
+	target_surface: Vector3i,
 	should_apply: bool,
 	should_broadcast: bool
 ) -> void:
 	is_attacking = true
-	attack_target_cell = target_cell
+	attack_target_surface = target_surface
 	var attack_generation: int = get_action_generation()
 	var character_view: CharacterView = _get_view()
 	if character_view == null:
@@ -326,7 +329,7 @@ func _attack(
 
 	if should_apply:
 		_apply_attack_to_world(should_broadcast)
-	_play_target_incoming_attack_guard(target_cell, character_view.get_animation_length(animation_name))
+	_play_target_incoming_attack_guard(target_surface, character_view.get_animation_length(animation_name))
 
 	await character_view.play_attack(animation_name, attack_facing_left, update_horizontal_facing)
 	if attack_generation != get_action_generation():
@@ -335,7 +338,7 @@ func _attack(
 	is_attacking = false
 	if runtime != null:
 		runtime.notify_entity_action_finished_in_turn(self)
-	attack_finished.emit(target_cell)
+	attack_finished.emit(target_surface)
 	character_view.play_idle()
 	_sync_facing_from_view()
 

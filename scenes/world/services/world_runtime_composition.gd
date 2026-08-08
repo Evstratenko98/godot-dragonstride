@@ -45,31 +45,7 @@ func bind_services(runtime: WorldRuntime, level: WorldLevel) -> void:
 		runtime.loot.configure_context(runtime, level)
 	if runtime.action_stream != null:
 		runtime.action_stream.configure_context(runtime, level)
-	runtime.action_router.configure_context(
-		runtime,
-		runtime.players_service,
-		runtime.network,
-		runtime.turn_manager,
-		runtime.spells,
-		runtime.loot
-	)
-	runtime.state_snapshot.configure_context(
-		runtime,
-		runtime.registry,
-		runtime.spawner,
-		runtime.turn_manager,
-		runtime.spells,
-		runtime.loot,
-		NetworkManager.store
-	)
-	runtime.match_startup.configure_context(
-		runtime,
-		runtime.registry,
-		runtime.network,
-		runtime.players_service,
-		runtime.action_stream,
-		runtime.spawner
-	)
+	runtime.action_coordinator.configure_context(runtime)
 
 
 func configure_level_services(runtime: WorldRuntime, level: WorldLevel) -> void:
@@ -82,4 +58,4 @@ func configure_level_services(runtime: WorldRuntime, level: WorldLevel) -> void:
 			level.get_character_walkable_layer_names()
 		)
 	if runtime.players_service != null:
-		runtime.players_service.configure(level.get_spawn_cells())
+		runtime.players_service.configure(level.get_spawn_surfaces())

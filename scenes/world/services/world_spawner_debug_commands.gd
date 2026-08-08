@@ -15,7 +15,7 @@ func configure(owner: WorldSpawner, should_register: bool, type_keys: Array) -> 
 	var console: Node = spawner.get_node_or_null("/root/Console")
 	if console == null or not console.has_method("add_command"):
 		return
-	console.add_command(CREATE_COMMAND, spawner.console_create, ["type", "x", "y"], 3, "Create an allowed entity or object on a grid cell.")
+	console.add_command(CREATE_COMMAND, spawner.console_create, ["type", "x", "y", "height"], 4, "Create an allowed entity or object on a world surface.")
 	console.add_command(FILL_COMMAND, spawner.console_create_full, ["type"], 1, "Fill available ground cells with an allowed entity or object.")
 	console.add_command(CLEAR_COMMAND, spawner.console_clear_full, ["type"], 0, "Remove one allowed type, or all world items when type is omitted.")
 	if console.has_method("add_command_autocomplete_list"):

@@ -1,7 +1,7 @@
 class_name CharacterModel
 extends Node
 
-signal spell_target_selected(target_cell: Vector2i)
+signal spell_target_selected(target_surface: Vector3i)
 
 var character: PlayerCharacter = null
 var console: Node = null
@@ -52,23 +52,28 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-		var target_cell: Vector2i = character.runtime.world_to_cell(character.get_global_mouse_position())
-		var clicked_character: PlayerCharacter = character.runtime.get_entity_at_cell(target_cell) as PlayerCharacter
+		var target_surface: Vector3i = character.runtime.resolve_selected_surface_at_world(
+			character.get_global_mouse_position(),
+			character.current_surface.z
+		)
+		var clicked_character: PlayerCharacter = character.runtime.get_entity_at_surface(target_surface) as PlayerCharacter
 		if clicked_character != null and clicked_character.is_locally_owned:
 			return
 		if character.runtime.has_selected_spell(character):
-			if character.runtime.is_cell_inside(target_cell):
-				spell_target_selected.emit(target_cell)
+			if character.runtime.is_surface_inside(target_surface):
+				spell_target_selected.emit(target_surface)
 			else:
-				character.runtime.request_selected_spell_cast(character, target_cell)
+				character.runtime.request_selected_spell_cast(character, target_surface)
 			get_viewport().set_input_as_handled()
 			return
+		if character.action_mode == PlayerCharacter.ActionMode.NONE:
+			return
 		if character.action_mode == PlayerCharacter.ActionMode.MOVE:
-			_request_mouse_move(target_cell)
+			_request_mouse_move(target_surface)
 		elif character.action_mode == PlayerCharacter.ActionMode.INTERACT:
-			character.request_interaction_cell(target_cell)
-		else:
-			character.runtime.request_character_attack(character, target_cell)
+			character.request_interaction_surface(target_surface)
+		elif character.action_mode == PlayerCharacter.ActionMode.ATTACK:
+			character.runtime.request_character_attack(character, target_surface)
 
 
 func get_input_direction() -> Vector2i:
@@ -103,20 +108,24 @@ func try_continue_moving() -> bool:
 func _request_keyboard_move(direction: Vector2i) -> void:
 	if character.runtime == null or direction == Vector2i.ZERO:
 		return
-	var start_cell: Vector2i = character.runtime.world_to_cell(character.global_position)
-	var requested_path: Array[Vector2i] = [start_cell + direction]
+	var target_surface: Vector3i = character.runtime.get_surface_in_direction(
+		character.current_surface,
+		direction
+	)
+	if target_surface == WorldGridTopology.INVALID_SURFACE:
+		return
+	var requested_path: Array[Vector3i] = [target_surface]
 	character.request_move_path(requested_path)
 
 
-func _request_mouse_move(target_cell: Vector2i) -> void:
+func _request_mouse_move(target_surface: Vector3i) -> void:
 	if character.runtime == null or not character.runtime.can_entity_move_in_turn(character):
 		return
-	var start_cell: Vector2i = character.runtime.world_to_cell(character.global_position)
-	var requested_path: Array[Vector2i] = WorldGridPathfinder.find_path_to_cell(
+	var requested_path: Array[Vector3i] = WorldGridPathfinder.find_path_to_surface(
 		character.runtime,
 		character,
-		start_cell,
-		target_cell,
+		character.current_surface,
+		target_surface,
 		true
 	)
 	if not requested_path.is_empty():

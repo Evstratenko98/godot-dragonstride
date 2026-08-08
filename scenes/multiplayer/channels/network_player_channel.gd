@@ -143,7 +143,7 @@ func _is_valid_player_spawn_snapshot(snapshot: Dictionary) -> bool:
 	):
 		return false
 	var seen_entity_ids: Dictionary[String, bool] = {}
-	var seen_cells: Dictionary[Vector2i, bool] = {}
+	var seen_surfaces: Dictionary[Vector3i, bool] = {}
 	var member_count_by_player_id: Dictionary[String, int] = {}
 	var warrior_color_by_player_id: Dictionary[String, String] = {}
 	for record_value: Variant in members_value as Array:
@@ -154,8 +154,8 @@ func _is_valid_player_spawn_snapshot(snapshot: Dictionary) -> bool:
 		var player_id: String = str(record.get("player_id", ""))
 		var squad_slot: int = int(record.get("squad_slot", -1))
 		var entity_id: String = str(record.get("entity_id", ""))
-		var cell_value: Variant = record.get("spawn_cell")
-		var cell: Vector2i = record.get("spawn_cell", Vector2i.ZERO)
+		var cell_value: Variant = record.get("spawn_surface")
+		var surface: Vector3i = record.get("spawn_surface", Vector3i.ZERO)
 		var warrior_color: String = str(record.get("warrior_color", ""))
 		var roster_player: Dictionary = GameSession.get_player_record_by_steam_id(steam_id)
 		if (
@@ -167,9 +167,9 @@ func _is_valid_player_spawn_snapshot(snapshot: Dictionary) -> bool:
 			or not NetworkProtocol.is_valid_identifier(entity_id)
 			or entity_id != NetworkProtocol.make_squad_member_entity_id(player_id, squad_slot)
 			or seen_entity_ids.has(entity_id)
-			or not (cell_value is Vector2i)
-			or not NetworkProtocol.is_valid_cell_value(cell)
-			or seen_cells.has(cell)
+			or not (cell_value is Vector3i)
+			or not NetworkProtocol.is_valid_surface_value(surface)
+			or seen_surfaces.has(surface)
 			or warrior_color not in ALLOWED_WARRIOR_COLORS
 		):
 			return false
@@ -177,7 +177,7 @@ func _is_valid_player_spawn_snapshot(snapshot: Dictionary) -> bool:
 			return false
 		warrior_color_by_player_id[player_id] = warrior_color
 		seen_entity_ids[entity_id] = true
-		seen_cells[cell] = true
+		seen_surfaces[surface] = true
 		member_count_by_player_id[player_id] = int(member_count_by_player_id.get(player_id, 0)) + 1
 	for player: Dictionary in GameSession.get_players():
 		if int(member_count_by_player_id.get(str(player.get("player_id", "")), 0)) != squad_size:

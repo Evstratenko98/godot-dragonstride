@@ -123,7 +123,7 @@ func _apply_entity(message: Dictionary) -> void:
 		"ai_state":
 			network._apply_ai_state_message(str(message.get("entity_id", "")), str(message.get("state", "")), str(message.get("target_entity_id", "")), str(message.get("reason", "")))
 		"respawn":
-			network._apply_respawn_message(str(message.get("entity_id", "")), message.get("cell", Vector2i.ZERO), int(message.get("health", 0)))
+			network._apply_respawn_message(str(message.get("entity_id", "")), message.get("surface", Vector3i.ZERO), int(message.get("health", 0)))
 		"removed":
 			network._apply_removed_message(str(message.get("entity_id", "")))
 
@@ -131,6 +131,6 @@ func _apply_entity(message: Dictionary) -> void:
 func _apply_npc_action(message: Dictionary) -> void:
 	match str(message.get("kind", "")):
 		"move":
-			network._apply_npc_move_message(str(message.get("entity_id", "")), message.get("from_cell", Vector2i.ZERO), message.get("target_cell", Vector2i.ZERO))
+			network._apply_npc_move_message(str(message.get("entity_id", "")), message.get("from_surface", Vector3i.ZERO), message.get("target_surface", Vector3i.ZERO))
 		"attack":
-			network._apply_npc_attack_message(str(message.get("entity_id", "")), message.get("target_cell", Vector2i.ZERO))
+			network._apply_npc_attack_message(str(message.get("entity_id", "")), message.get("target_surface", Vector3i.ZERO))

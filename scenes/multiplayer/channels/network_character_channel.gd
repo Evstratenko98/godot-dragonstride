@@ -1,12 +1,12 @@
 class_name NetworkCharacterChannel
 extends NetworkChannel
 
-signal interaction_requested(actor_entity_id: String, target_cell: Vector2i, match_id: String, turn_revision: int, request_id: int, requester_peer_id: int)
+signal interaction_requested(actor_entity_id: String, target_surface: Vector3i, match_id: String, turn_revision: int, request_id: int, requester_peer_id: int)
 signal character_action_payload_received(match_id: String, sequence_id: int, payload: Dictionary)
 signal character_move_path_requested(
 	requester_steam_id: int,
 	actor_entity_id: String,
-	requested_path: Array[Vector2i],
+	requested_path: Array[Vector3i],
 	match_id: String,
 	turn_revision: int,
 	request_id: int
@@ -15,8 +15,8 @@ signal entity_move_received(
 	parent_sequence_id: int,
 	subsequence_id: int,
 	entity_id: String,
-	from_cell: Vector2i,
-	target_cell: Vector2i
+	from_surface: Vector3i,
+	target_surface: Vector3i
 )
 signal movement_input_state_requested(
 	requester_steam_id: int,
@@ -30,13 +30,13 @@ signal movement_input_state_received(actor_entity_id: String, is_held: bool)
 signal character_kill_requested(actor_entity_id: String, match_id: String, turn_revision: int, request_id: int, requester_peer_id: int)
 
 
-func request_interaction(actor_entity_id: String, target_cell: Vector2i, match_id: String, turn_revision: int, request_id: int) -> void:
+func request_interaction(actor_entity_id: String, target_surface: Vector3i, match_id: String, turn_revision: int, request_id: int) -> void:
 	if not _can_send():
 		return
 	if connection.is_host:
-		interaction_requested.emit(actor_entity_id, target_cell, match_id, turn_revision, request_id, 0)
+		interaction_requested.emit(actor_entity_id, target_surface, match_id, turn_revision, request_id, 0)
 		return
-	rpc_id(1, "_submit_interaction", actor_entity_id, target_cell, match_id, turn_revision, request_id)
+	rpc_id(1, "_submit_interaction", actor_entity_id, target_surface, match_id, turn_revision, request_id)
 
 
 func broadcast_action_payload(match_id: String, sequence_id: int, payload: Dictionary) -> void:
@@ -46,7 +46,7 @@ func broadcast_action_payload(match_id: String, sequence_id: int, payload: Dicti
 
 func request_character_move_path(
 	actor_entity_id: String,
-	requested_path: Array[Vector2i],
+	requested_path: Array[Vector3i],
 	match_id: String,
 	turn_revision: int,
 	request_id: int
@@ -70,18 +70,18 @@ func broadcast_entity_move(
 	parent_sequence_id: int,
 	subsequence_id: int,
 	entity_id: String,
-	from_cell: Vector2i,
-	target_cell: Vector2i
+	from_surface: Vector3i,
+	target_surface: Vector3i
 ) -> void:
 	if (
 		_can_host_send()
 		and parent_sequence_id > 0
 		and subsequence_id >= 0
 		and NetworkProtocol.is_valid_identifier(entity_id)
-		and NetworkProtocol.is_valid_cell_value(from_cell)
-		and NetworkProtocol.is_valid_cell_value(target_cell)
+		and NetworkProtocol.is_valid_surface_value(from_surface)
+		and NetworkProtocol.is_valid_surface_value(target_surface)
 	):
-		rpc("_receive_entity_move", GameSession.get_match_id(), parent_sequence_id, subsequence_id, entity_id, from_cell, target_cell)
+		rpc("_receive_entity_move", GameSession.get_match_id(), parent_sequence_id, subsequence_id, entity_id, from_surface, target_surface)
 
 
 func request_movement_input_state(
@@ -121,10 +121,10 @@ func request_character_kill(actor_entity_id: String, match_id: String, turn_revi
 
 
 @rpc("any_peer", "call_remote", "reliable", 1)
-func _submit_interaction(actor_entity_id: String, target_cell: Vector2i, match_id: String, turn_revision: int, request_id: int) -> void:
+func _submit_interaction(actor_entity_id: String, target_surface: Vector3i, match_id: String, turn_revision: int, request_id: int) -> void:
 	var requester_peer_id: int = _get_registered_sender_peer_id()
-	if requester_peer_id != 0 and NetworkProtocol.is_valid_identifier(actor_entity_id) and turn_revision >= 0 and NetworkProtocol.is_valid_cell_value(target_cell) and _is_valid_intent(match_id, request_id, {"actor_entity_id": actor_entity_id, "target_cell": target_cell, "turn_revision": turn_revision}):
-		interaction_requested.emit(actor_entity_id, target_cell, match_id, turn_revision, request_id, requester_peer_id)
+	if requester_peer_id != 0 and NetworkProtocol.is_valid_identifier(actor_entity_id) and turn_revision >= 0 and NetworkProtocol.is_valid_surface_value(target_surface) and _is_valid_intent(match_id, request_id, {"actor_entity_id": actor_entity_id, "target_surface": target_surface, "turn_revision": turn_revision}):
+		interaction_requested.emit(actor_entity_id, target_surface, match_id, turn_revision, request_id, requester_peer_id)
 
 
 @rpc("authority", "call_remote", "reliable", 1)
@@ -136,7 +136,7 @@ func _receive_action_payload(match_id: String, sequence_id: int, payload: Dictio
 @rpc("any_peer", "call_remote", "reliable", 1)
 func _submit_character_move_path(
 	actor_entity_id: String,
-	requested_path: Array[Vector2i],
+	requested_path: Array[Vector3i],
 	match_id: String,
 	turn_revision: int,
 	request_id: int
@@ -169,11 +169,11 @@ func _receive_entity_move(
 	parent_sequence_id: int,
 	subsequence_id: int,
 	entity_id: String,
-	from_cell: Vector2i,
-	target_cell: Vector2i
+	from_surface: Vector3i,
+	target_surface: Vector3i
 ) -> void:
-	if _is_valid_match_message(match_id) and parent_sequence_id > 0 and subsequence_id >= 0 and NetworkProtocol.is_valid_identifier(entity_id) and NetworkProtocol.is_valid_cell_value(from_cell) and NetworkProtocol.is_valid_cell_value(target_cell):
-		entity_move_received.emit(parent_sequence_id, subsequence_id, entity_id, from_cell, target_cell)
+	if _is_valid_match_message(match_id) and parent_sequence_id > 0 and subsequence_id >= 0 and NetworkProtocol.is_valid_identifier(entity_id) and NetworkProtocol.is_valid_surface_value(from_surface) and NetworkProtocol.is_valid_surface_value(target_surface):
+		entity_move_received.emit(parent_sequence_id, subsequence_id, entity_id, from_surface, target_surface)
 
 
 @rpc("any_peer", "call_remote", "reliable", 1)

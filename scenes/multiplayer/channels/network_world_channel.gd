@@ -1,7 +1,7 @@
 class_name NetworkWorldChannel
 extends NetworkChannel
 
-signal world_spawn_requested(type_key: String, cell: Vector2i, requester_peer_id: int)
+signal world_spawn_requested(type_key: String, surface: Vector3i, requester_peer_id: int)
 signal world_spawn_received(record: Dictionary)
 signal world_spawns_received(records: Array[Dictionary])
 signal world_fill_requested(type_key: String, requester_peer_id: int)
@@ -10,16 +10,16 @@ signal world_items_removed_received(sequence_id: int, records: Array[Dictionary]
 signal world_spawn_failed_received(reason_code: String)
 
 
-func request_world_spawn(type_key: String, cell: Vector2i) -> void:
+func request_world_spawn(type_key: String, surface: Vector3i) -> void:
 	if not GameSession.is_multiplayer():
 		return
 	if not _can_send():
 		world_spawn_failed_received.emit("network_unavailable")
 		return
 	if connection.is_host:
-		world_spawn_requested.emit(type_key, cell, 0)
+		world_spawn_requested.emit(type_key, surface, 0)
 		return
-	rpc_id(1, "_submit_world_spawn", GameSession.get_match_id(), type_key, cell)
+	rpc_id(1, "_submit_world_spawn", GameSession.get_match_id(), type_key, surface)
 
 
 func request_world_fill(type_key: String) -> void:
@@ -90,10 +90,10 @@ func send_world_removals_to_peer(peer_id: int) -> void:
 
 
 @rpc("any_peer", "reliable")
-func _submit_world_spawn(match_id: String, type_key: String, cell: Vector2i) -> void:
+func _submit_world_spawn(match_id: String, type_key: String, surface: Vector3i) -> void:
 	var requester_peer_id: int = _get_registered_sender_peer_id()
-	if requester_peer_id != 0 and _is_valid_match_message(match_id) and NetworkProtocol.is_valid_identifier(type_key) and NetworkProtocol.is_valid_cell_value(cell):
-		world_spawn_requested.emit(type_key, cell, requester_peer_id)
+	if requester_peer_id != 0 and _is_valid_match_message(match_id) and NetworkProtocol.is_valid_identifier(type_key) and NetworkProtocol.is_valid_surface_value(surface):
+		world_spawn_requested.emit(type_key, surface, requester_peer_id)
 
 
 @rpc("any_peer", "reliable")
@@ -143,13 +143,13 @@ func _receive_world_spawn_failed(match_id: String, reason_code: String) -> void:
 func _is_valid_spawn_record(record: Dictionary) -> bool:
 	var spawn_id: String = str(record.get("spawn_id", ""))
 	var type_key: String = str(record.get("type_key", ""))
-	var cell_value: Variant = record.get("cell")
-	var cell: Vector2i = record.get("cell", Vector2i.ZERO)
+	var surface_value: Variant = record.get("surface")
+	var surface: Vector3i = record.get("surface", Vector3i.ZERO)
 	return (
 		NetworkProtocol.is_valid_identifier(spawn_id)
 		and NetworkProtocol.is_valid_identifier(type_key)
-		and cell_value is Vector2i
-		and NetworkProtocol.is_valid_cell_value(cell)
+		and surface_value is Vector3i
+		and NetworkProtocol.is_valid_surface_value(surface)
 	)
 
 

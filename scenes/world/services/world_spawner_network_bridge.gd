@@ -54,9 +54,9 @@ func clear() -> void:
 	pending_remote_removals.clear()
 
 
-func _on_world_spawn_requested(type_key: String, cell: Vector2i, requester_peer_id: int) -> void:
+func _on_world_spawn_requested(type_key: String, surface: Vector3i, requester_peer_id: int) -> void:
 	if GameSession.is_host() and spawner._can_use_debug_commands():
-		spawner._try_create_authoritative(WorldSpawnCatalog.normalize_type_key(type_key), cell, true, requester_peer_id)
+		spawner._try_create_authoritative(WorldSpawnCatalog.normalize_type_key(type_key), surface, true, requester_peer_id)
 
 
 func _on_world_spawn_received(record: Dictionary) -> void:

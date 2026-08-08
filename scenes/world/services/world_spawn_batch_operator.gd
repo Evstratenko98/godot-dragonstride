@@ -14,14 +14,15 @@ func fill(type_key: String, requester_peer_id: int) -> void:
 		return
 	var created_records: Array[Dictionary] = []
 	var grid_size: Vector2i = spawner.runtime.get_grid_size()
-	for y: int in range(grid_size.y):
-		for x: int in range(grid_size.x):
-			var cell: Vector2i = Vector2i(x, y)
-			if not spawner.runtime.is_cell_walkable(cell):
-				continue
-			var record: Dictionary = spawner._try_fill_cell(type_key, cell)
-			if not record.is_empty():
-				created_records.append(record)
+	for elevation: int in range(WorldGridTopology.MIN_ELEVATION, WorldGridTopology.MAX_ELEVATION + 1):
+		for y: int in range(grid_size.y):
+			for x: int in range(grid_size.x):
+				var surface: Vector3i = Vector3i(x, y, elevation)
+				if not spawner.runtime.is_surface_walkable(surface):
+					continue
+				var record: Dictionary = spawner._try_fill_surface(type_key, surface)
+				if not record.is_empty():
+					created_records.append(record)
 	if GameSession.is_multiplayer() and not created_records.is_empty():
 		NetworkManager.world.broadcast_world_spawns(created_records)
 	ConsoleOutput.print_console("Created %d %s instance(s) on available cells." % [created_records.size(), type_key], spawner.runtime)

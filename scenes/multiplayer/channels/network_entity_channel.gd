@@ -3,7 +3,7 @@ extends NetworkChannel
 
 signal object_state_received(sequence_id: int, object_id: String, object_state: int)
 signal entity_ai_state_received(sequence_id: int, entity_id: String, state: String, target_entity_id: String, reason: String)
-signal entity_respawn_received(sequence_id: int, entity_id: String, cell: Vector2i, health: int)
+signal entity_respawn_received(sequence_id: int, entity_id: String, surface: Vector3i, health: int)
 signal entity_removed_received(sequence_id: int, entity_id: String)
 
 
@@ -27,9 +27,9 @@ func broadcast_entity_ai_state(
 	rpc("_receive_entity_ai_state", GameSession.get_match_id(), sequence_id, entity_id, state, target_entity_id, reason)
 
 
-func broadcast_entity_respawn(entity_id: String, cell: Vector2i, health: int, sequence_id: int = 0) -> void:
-	if _can_host_send() and _is_valid_entity_lifecycle(entity_id, sequence_id) and NetworkProtocol.is_valid_cell_value(cell) and NetworkProtocol.is_valid_nonnegative_value(health):
-		rpc("_receive_entity_respawn", GameSession.get_match_id(), sequence_id, entity_id, cell, health)
+func broadcast_entity_respawn(entity_id: String, surface: Vector3i, health: int, sequence_id: int = 0) -> void:
+	if _can_host_send() and _is_valid_entity_lifecycle(entity_id, sequence_id) and NetworkProtocol.is_valid_surface_value(surface) and NetworkProtocol.is_valid_nonnegative_value(health):
+		rpc("_receive_entity_respawn", GameSession.get_match_id(), sequence_id, entity_id, surface, health)
 
 
 func broadcast_entity_removed(entity_id: String, sequence_id: int = 0) -> void:
@@ -73,9 +73,9 @@ func _receive_entity_ai_state(match_id: String, sequence_id: int, entity_id: Str
 
 
 @rpc("authority", "call_remote", "reliable", 1)
-func _receive_entity_respawn(match_id: String, sequence_id: int, entity_id: String, cell: Vector2i, health: int) -> void:
-	if _is_valid_match_message(match_id) and _is_valid_entity_lifecycle(entity_id, sequence_id) and NetworkProtocol.is_valid_cell_value(cell) and NetworkProtocol.is_valid_nonnegative_value(health):
-		entity_respawn_received.emit(sequence_id, entity_id, cell, health)
+func _receive_entity_respawn(match_id: String, sequence_id: int, entity_id: String, surface: Vector3i, health: int) -> void:
+	if _is_valid_match_message(match_id) and _is_valid_entity_lifecycle(entity_id, sequence_id) and NetworkProtocol.is_valid_surface_value(surface) and NetworkProtocol.is_valid_nonnegative_value(health):
+		entity_respawn_received.emit(sequence_id, entity_id, surface, health)
 
 
 @rpc("authority", "call_remote", "reliable", 1)
