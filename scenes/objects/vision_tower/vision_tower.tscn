@@ -1,0 +1,26 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scenes/objects/vision_tower/vision_tower.gd" id="1_tower"]
+[ext_resource type="Texture2D" path="res://art/Tiny Swords (Update 010)/Factions/Knights/Buildings/Tower/Tower_Blue.png" id="2_texture"]
+[ext_resource type="Script" path="res://scenes/inspection/world_inspectable.gd" id="3_inspectable"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_tower"]
+size = Vector2(56, 56)
+
+[node name="VisionTower" type="StaticBody2D" groups=["game_blocker"]]
+script = ExtResource("1_tower")
+blocks_vision = true
+is_large_visual_object = true
+normal_texture = ExtResource("2_texture")
+
+[node name="Inspectable" type="Node" parent="."]
+script = ExtResource("3_inspectable")
+display_name = "Башня обзора"
+description = "Сторожевая башня, расширяющая обзор владельца. Её можно захватить, подойдя бойцом вплотную."
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+position = Vector2(0, -64)
+texture = ExtResource("2_texture")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("RectangleShape2D_tower")

@@ -6,6 +6,7 @@ var runtime: WorldRuntime = null
 var current_surface: Vector3i = Vector3i.ZERO
 var spawn_surface: Vector3i = Vector3i.ZERO
 var is_moving: bool = false
+var is_traversing_ramp: bool = false
 var movement_tween: Tween = null
 var action_generation: int = 0
 
@@ -19,6 +20,7 @@ func reset_at_surface(surface: Vector3i) -> void:
 	action_generation += 1
 	_kill_tween()
 	is_moving = false
+	is_traversing_ramp = false
 	current_surface = surface
 	if entity != null and runtime != null:
 		entity.global_position = runtime.surface_to_world(surface)
@@ -49,8 +51,8 @@ func move_to_surface(
 	movement_tween.set_trans(Tween.TRANS_LINEAR)
 	movement_tween.set_ease(Tween.EASE_IN)
 	var duration: float = entity.move_time
-	var is_ramp_transition: bool = runtime.is_ramp_edge(from_surface, target_surface)
-	if is_ramp_transition:
+	is_traversing_ramp = runtime.is_ramp_edge(from_surface, target_surface)
+	if is_traversing_ramp:
 		duration *= 2.0
 		# The ramp terrain is rendered in the upper terrain band. Keep the moving
 		# entity in the corresponding entity band for the whole diagonal tween.
@@ -67,6 +69,7 @@ func move_to_surface(
 		entity.z_index = target_surface.z * 20 + 10
 		current_surface = target_surface
 		is_moving = false
+		is_traversing_ramp = false
 		runtime.handle_entity_move_completed(entity, from_surface, target_surface, movement_step_cost)
 		entity.movement_finished.emit(from_surface, target_surface)
 		entity._on_move_finished(target_surface)

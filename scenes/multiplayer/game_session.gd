@@ -13,6 +13,7 @@ const ROSTER_REVISION := 2
 const MIN_SQUAD_SIZE := 1
 const MAX_SQUAD_SIZE := 4
 const DEFAULT_SQUAD_SIZE := 2
+const MATCH_SETTING_FOG_OF_WAR := "fog_of_war_enabled"
 
 var mode: String = MODE_NONE
 var selected_level_id: String = LevelCatalog.DEFAULT_LEVEL_ID
@@ -31,6 +32,8 @@ func start_singleplayer(settings: Dictionary = {}) -> void:
 	mode = MODE_SINGLEPLAYER
 	match_settings = settings.duplicate(true)
 	match_settings["squad_size"] = DEFAULT_SQUAD_SIZE
+	if not match_settings.has(MATCH_SETTING_FOG_OF_WAR):
+		match_settings[MATCH_SETTING_FOG_OF_WAR] = true
 	_select_level_from_settings()
 	players = [_make_player_info(0, "Player", true, true, "player_1", 0)]
 	is_committed = true
@@ -231,6 +234,7 @@ func _prepare_multiplayer_state(new_match_id: String, level_id: String, roster: 
 	match_settings = {
 		"level_id": level_id,
 		"squad_size": DEFAULT_SQUAD_SIZE,
+		MATCH_SETTING_FOG_OF_WAR: true,
 	}
 	is_committed = false
 	session_started.emit(mode)

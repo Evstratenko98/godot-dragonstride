@@ -1,0 +1,157 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/inspection/world_inspection_dialog.gd" id="1_dialog"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_preview"]
+bg_color = Color(0.02, 0.027, 0.042, 0.9)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.3, 0.32, 0.38, 0.9)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[node name="WorldInspectionDialog" type="Control"]
+visible = false
+z_index = 120
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+script = ExtResource("1_dialog")
+
+[node name="Backdrop" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+color = Color(0, 0, 0, 0.58)
+
+[node name="Center" type="CenterContainer" parent="Backdrop"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 16.0
+offset_right = -16.0
+offset_bottom = -16.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 1
+
+[node name="Panel" type="PanelContainer" parent="Backdrop/Center"]
+custom_minimum_size = Vector2(560, 300)
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="Backdrop/Center/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 22
+theme_override_constants/margin_top = 18
+theme_override_constants/margin_right = 22
+theme_override_constants/margin_bottom = 18
+
+[node name="Content" type="VBoxContainer" parent="Backdrop/Center/Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="Header" type="Control" parent="Backdrop/Center/Panel/Margin/Content"]
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+
+[node name="TitleLabel" type="Label" parent="Backdrop/Center/Panel/Margin/Content/Header"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 52.0
+offset_right = -52.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_font_sizes/font_size = 24
+text = "Название"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="CloseButton" type="Button" parent="Backdrop/Center/Panel/Margin/Content/Header"]
+custom_minimum_size = Vector2(48, 48)
+layout_mode = 1
+anchors_preset = 6
+anchor_left = 1.0
+anchor_top = 0.5
+anchor_right = 1.0
+anchor_bottom = 0.5
+offset_left = -48.0
+offset_top = -24.0
+offset_bottom = 24.0
+grow_horizontal = 0
+grow_vertical = 2
+theme_override_font_sizes/font_size = 24
+text = "×"
+tooltip_text = "Закрыть"
+
+[node name="Body" type="HBoxContainer" parent="Backdrop/Center/Panel/Margin/Content"]
+custom_minimum_size = Vector2(0, 210)
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 18
+
+[node name="PreviewPanel" type="PanelContainer" parent="Backdrop/Center/Panel/Margin/Content/Body"]
+custom_minimum_size = Vector2(200, 200)
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_preview")
+
+[node name="PreviewArea" type="Control" parent="Backdrop/Center/Panel/Margin/Content/Body/PreviewPanel"]
+custom_minimum_size = Vector2(200, 200)
+layout_mode = 2
+mouse_filter = 2
+clip_contents = true
+
+[node name="PreviewSprite" type="Sprite2D" parent="Backdrop/Center/Panel/Margin/Content/Body/PreviewPanel/PreviewArea"]
+texture_filter = 1
+
+[node name="DetailsScroll" type="ScrollContainer" parent="Backdrop/Center/Panel/Margin/Content/Body"]
+custom_minimum_size = Vector2(290, 200)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="Details" type="VBoxContainer" parent="Backdrop/Center/Panel/Margin/Content/Body/DetailsScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 12
+
+[node name="DescriptionLabel" type="Label" parent="Backdrop/Center/Panel/Margin/Content/Body/DetailsScroll/Details"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_font_sizes/font_size = 16
+text = "Описание"
+autowrap_mode = 3
+
+[node name="StatsTitle" type="Label" parent="Backdrop/Center/Panel/Margin/Content/Body/DetailsScroll/Details"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_font_sizes/font_size = 17
+text = "Характеристики"
+
+[node name="StatsGrid" type="GridContainer" parent="Backdrop/Center/Panel/Margin/Content/Body/DetailsScroll/Details"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/h_separation = 20
+theme_override_constants/v_separation = 8
+columns = 2
+
+[connection signal="pressed" from="Backdrop/Center/Panel/Margin/Content/Header/CloseButton" to="." method="_on_close_button_pressed"]

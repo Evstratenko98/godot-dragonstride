@@ -9,6 +9,7 @@ var network: WorldNetwork = null
 var turns: WorldTurns = null
 var spells: WorldSpells = null
 var loot: WorldLoot = null
+var visibility: WorldVisibility = null
 
 
 func configure_context(
@@ -17,7 +18,8 @@ func configure_context(
 	new_network: WorldNetwork,
 	new_turns: WorldTurns,
 	new_spells: WorldSpells,
-	new_loot: WorldLoot
+	new_loot: WorldLoot,
+	new_visibility: WorldVisibility
 ) -> void:
 	runtime = new_runtime
 	players = new_players
@@ -25,6 +27,7 @@ func configure_context(
 	turns = new_turns
 	spells = new_spells
 	loot = new_loot
+	visibility = new_visibility
 
 
 func broadcast_action_profile_payload(action: WorldActionRecord) -> void:
@@ -118,16 +121,35 @@ func get_rejection_reason(action: WorldActionRecord) -> String:
 			return WorldMovePathPolicy.prepare_authoritative_path(runtime, turns, player, action)
 		WorldActionRecord.ActionType.ATTACK:
 			var attack_cell: Vector3i = action.payload.get("target_surface", Vector3i.ZERO)
-			if not player.can_attack_surface(attack_cell) or not runtime.can_entity_attack_in_turn(player, attack_cell):
+			if (
+				not player.can_attack_surface(attack_cell)
+				or not runtime.can_entity_attack_in_turn(player, attack_cell)
+				or (visibility != null and not visibility.is_surface_visible_for_character(player, attack_cell))
+			):
 				return WorldActionStream.REJECTION_INVALID_ACTION
 		WorldActionRecord.ActionType.INTERACTION:
 			var interaction_cell: Vector3i = action.payload.get("target_surface", Vector3i.ZERO)
-			if not player.can_act() or not player.can_attack_surface(interaction_cell) or not runtime.can_entity_interact_in_turn(player):
+			if (
+				not player.can_act()
+				or not player.can_attack_surface(interaction_cell)
+				or not runtime.can_entity_interact_in_turn(player)
+				or (visibility != null and not visibility.is_surface_visible_for_character(player, interaction_cell))
+				or not runtime.interaction.can_interact_with_surface(player, interaction_cell)
+			):
 				return WorldActionStream.REJECTION_INVALID_ACTION
 			if loot != null:
 				return loot.get_action_rejection_reason(action)
 		WorldActionRecord.ActionType.SPELL_CAST:
+			var spell_target_surface: Vector3i = action.payload.get("target_surface", Vector3i(-1, -1, -1))
+			var spell_target: Entity = runtime.get_entity_by_id(str(action.payload.get("target_entity_id", ""))) as Entity
+			if spell_target != null:
+				spell_target_surface = spell_target.current_surface
+			if visibility != null and not visibility.is_surface_visible_for_character(player, spell_target_surface):
+				return WorldActionStream.REJECTION_INVALID_ACTION
 			return spells.get_action_rejection_reason(action) if spells != null else WorldActionStream.REJECTION_INVALID_ACTION
+		WorldActionRecord.ActionType.SET_FOG_OF_WAR:
+			if action.request_id != 0 or not (action.payload.get("is_enabled") is bool):
+				return WorldActionStream.REJECTION_INVALID_ACTION
 		WorldActionRecord.ActionType.INVENTORY_ADD, \
 		WorldActionRecord.ActionType.INVENTORY_MOVE, \
 		WorldActionRecord.ActionType.INVENTORY_DELETE:
@@ -244,6 +266,8 @@ func execute_authoritative(action: WorldActionRecord) -> bool:
 			return turns != null and turns.execute_world_turn_ended_action()
 		WorldActionRecord.ActionType.SET_TURN_MODE:
 			return turns != null and turns.execute_set_turn_mode_action(bool(action.payload.get("is_enabled", false)))
+		WorldActionRecord.ActionType.SET_FOG_OF_WAR:
+			return visibility != null and visibility.execute_set_fog_enabled(bool(action.payload.get("is_enabled", true)))
 		WorldActionRecord.ActionType.PLAYER_TURN_SKIPPED:
 			return turns != null and turns.execute_player_turn_skipped_action(
 				action.actor_entity_id,
@@ -264,6 +288,10 @@ func play_remote(action: WorldActionRecord) -> void:
 		return
 	var scene_tree: SceneTree = runtime.get_tree()
 	var player: PlayerCharacter = runtime.get_entity_by_id(action.actor_entity_id) as PlayerCharacter
+	if action.action_type == WorldActionRecord.ActionType.SET_FOG_OF_WAR:
+		if visibility != null:
+			visibility.execute_set_fog_enabled(bool(action.payload.get("is_enabled", true)))
+		return
 	if player == null:
 		return
 	match action.action_type:
@@ -287,8 +315,13 @@ func play_remote(action: WorldActionRecord) -> void:
 			if player.is_attacking:
 				player.force_finish_attack_presentation()
 		WorldActionRecord.ActionType.INTERACTION:
-			if loot != null:
+			if loot != null and loot.is_chest_interaction_action(action):
 				await loot.play_remote_open_action(action)
+			elif visibility != null:
+				var interaction_surface: Vector3i = action.payload.get("target_surface", Vector3i.ZERO)
+				var tower: VisionTower = runtime.get_object_at_surface(interaction_surface) as VisionTower
+				if tower != null:
+					visibility.capture_tower(tower, player)
 		WorldActionRecord.ActionType.SPELL_CAST:
 			if spells != null:
 				await spells.execute_action_cast(action, false)

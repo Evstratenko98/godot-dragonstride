@@ -11,6 +11,7 @@ const GAME_HUD_SCRIPT := preload("res://scenes/hud/hud.gd")
 @export var action_target_range_overlay_path: NodePath = ^"../ActionTargetRangeOverlay"
 @export var movement_path_overlay_path: NodePath = ^"../MovementPathOverlay"
 @export var cell_hover_path: NodePath = ^"../CellHover"
+@export var fog_presenter_path: NodePath = ^"../FogOfWarPresenter"
 @export var hud_path: NodePath = ^"../HUD"
 @export var music_player_path: NodePath = ^"../Music"
 @export var death_sound_player_path: NodePath = ^"../DeathSound"
@@ -22,6 +23,7 @@ const GAME_HUD_SCRIPT := preload("res://scenes/hud/hud.gd")
 @onready var action_target_range_overlay: ActionTargetRangeOverlay = get_node(action_target_range_overlay_path) as ActionTargetRangeOverlay
 @onready var movement_path_overlay: MovementPathOverlay = get_node(movement_path_overlay_path) as MovementPathOverlay
 @onready var cell_hover: CellHover = get_node(cell_hover_path) as CellHover
+@onready var fog_presenter: FogOfWarPresenter = get_node(fog_presenter_path) as FogOfWarPresenter
 @onready var hud: GAME_HUD_SCRIPT = get_node(hud_path) as GAME_HUD_SCRIPT
 @onready var music_player: AudioStreamPlayer = get_node(music_player_path) as AudioStreamPlayer
 @onready var death_sound_player: AudioStreamPlayer = get_node(death_sound_player_path) as AudioStreamPlayer
@@ -102,12 +104,14 @@ func _initialize_match() -> void:
 	if not runtime.runtime_sync_failed.is_connected(_on_runtime_sync_failed):
 		runtime.runtime_sync_failed.connect(_on_runtime_sync_failed)
 	level_container.add_child(level)
+	fog_presenter.configure_context(runtime, level)
 	grid_lines.configure_context(runtime, level)
 	cell_hover.configure_context(runtime)
 	movement_range_overlay.configure_context(runtime, cell_hover)
 	action_target_range_overlay.configure_context(runtime)
 	movement_path_overlay.configure_context(runtime, cell_hover)
 	hud.configure_runtime(runtime)
+	hud.configure_inspection_source(cell_hover)
 	_configure_level_audio()
 	runtime.connect_signals()
 	call_deferred("_start_match_deferred")

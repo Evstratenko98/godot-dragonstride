@@ -83,12 +83,19 @@ func _refresh_preview() -> void:
 
 	var start_surface: Vector3i = bound_player.current_surface
 	var target_surface: Vector3i = cell_hover.get_hovered_surface()
+	if (
+		runtime.visibility != null
+		and runtime.visibility.get_visibility_mode(bound_player.owner_player_id, target_surface) == WorldVisibility.VisibilityMode.HIDDEN
+	):
+		queue_redraw()
+		return
 	preview_path = WorldGridPathfinder.find_path_to_surface(
 		runtime,
 		bound_player,
 		start_surface,
 		target_surface,
-		true
+		true,
+		bound_player.owner_player_id
 	)
 	if preview_path.is_empty():
 		queue_redraw()
@@ -100,7 +107,7 @@ func _refresh_preview() -> void:
 			preview_path.size() <= runtime.turn_manager.get_steps_left(bound_player.entity_id)
 		)
 	_update_step_label(target_surface)
-	z_index = target_surface.z * 20 + 12
+	z_index = 2012
 	queue_redraw()
 
 

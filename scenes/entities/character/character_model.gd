@@ -121,12 +121,19 @@ func _request_keyboard_move(direction: Vector2i) -> void:
 func _request_mouse_move(target_surface: Vector3i) -> void:
 	if character.runtime == null or not character.runtime.can_entity_move_in_turn(character):
 		return
+	if (
+		character.runtime.visibility != null
+		and character.runtime.visibility.get_visibility_mode(character.owner_player_id, target_surface) == WorldVisibility.VisibilityMode.HIDDEN
+	):
+		character.request_move_path([target_surface])
+		return
 	var requested_path: Array[Vector3i] = WorldGridPathfinder.find_path_to_surface(
 		character.runtime,
 		character,
 		character.current_surface,
 		target_surface,
-		true
+		true,
+		character.owner_player_id
 	)
 	if not requested_path.is_empty():
 		character.request_move_path(requested_path)

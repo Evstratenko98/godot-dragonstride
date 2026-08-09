@@ -324,6 +324,8 @@ func _create_effect(
 		return null
 
 	effect.name = cast_id
+	if runtime.visibility != null:
+		effect.visible = runtime.visibility.is_surface_visible_for_local_player(target_surface)
 	effect.impact.connect(_on_effect_impact.bind(cast_id, caster_entity_id, spell_id, target_surface))
 	effect.finished.connect(_on_effect_finished.bind(cast_id, caster_entity_id))
 	return effect

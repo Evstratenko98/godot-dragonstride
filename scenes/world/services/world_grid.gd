@@ -71,6 +71,10 @@ func is_ramp_edge(from_surface: Vector3i, to_surface: Vector3i) -> bool:
 	return topology.is_ramp_edge(from_surface, to_surface)
 
 
+func is_ramp_footprint_cell(cell: Vector2i) -> bool:
+	return topology.is_ramp_footprint_cell(cell)
+
+
 func get_traversal_kind(from_surface: Vector3i, to_surface: Vector3i) -> int:
 	return topology.get_traversal_kind(from_surface, to_surface)
 
@@ -81,6 +85,10 @@ func get_traversal_input_direction(from_surface: Vector3i, to_surface: Vector3i)
 
 func get_surfaces_at(cell: Vector2i) -> Array[Vector3i]:
 	return topology.get_surfaces_at(cell)
+
+
+func get_all_surfaces() -> Array[Vector3i]:
+	return topology.get_all_surfaces()
 
 
 func get_topology_hash() -> String:

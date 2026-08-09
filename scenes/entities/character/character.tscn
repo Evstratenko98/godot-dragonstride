@@ -8,6 +8,7 @@
 [ext_resource type="Script" path="res://addons/gloot/core/inventory.gd" id="6_gloot_inventory"]
 [ext_resource type="Script" path="res://addons/gloot/core/constraints/grid_constraint.gd" id="7_grid_constraint"]
 [ext_resource type="JSON" path="res://scenes/inventory/item_prototypes.json" id="8_item_prototypes"]
+[ext_resource type="Script" path="res://scenes/inspection/world_inspectable.gd" id="9_inspectable"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_1"]
 radius = 14.0
@@ -116,6 +117,12 @@ script = ExtResource("3")
 
 [node name="Model" type="Node" parent="." unique_id=3930656237]
 script = ExtResource("4")
+
+[node name="Inspectable" type="Node" parent="."]
+script = ExtResource("9_inspectable")
+description = "Закалённый боец отряда. Он перемещается по клеткам, сражается в ближнем бою и взаимодействует с объектами мира."
+title_source = 1
+stat_flags = 15
 
 [node name="CharacterInventory" type="Node" parent="."]
 script = ExtResource("5_inventory")

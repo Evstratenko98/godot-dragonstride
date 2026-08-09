@@ -7,6 +7,7 @@ var spawner: WorldSpawner = null
 var turns: WorldTurns = null
 var spells: WorldSpells = null
 var loot: WorldLoot = null
+var visibility: WorldVisibility = null
 var replication_store: NetworkReplicationStore = null
 
 
@@ -17,6 +18,7 @@ func configure_context(
 	new_turns: WorldTurns,
 	new_spells: WorldSpells,
 	new_loot: WorldLoot,
+	new_visibility: WorldVisibility,
 	new_replication_store: NetworkReplicationStore
 ) -> void:
 	runtime = new_runtime
@@ -25,6 +27,7 @@ func configure_context(
 	turns = new_turns
 	spells = new_spells
 	loot = new_loot
+	visibility = new_visibility
 	replication_store = new_replication_store
 
 
@@ -37,6 +40,7 @@ func create_action_stream_snapshot(next_stream_sequence_id: int) -> Dictionary:
 		"turn_state": turns.create_action_stream_snapshot() if turns != null else {},
 		"spell_state": spells.create_action_stream_snapshot() if spells != null else {},
 		"loot_state": loot.create_snapshot() if loot != null else {},
+		"visibility_state": visibility.create_snapshot() if visibility != null else {},
 		"world_state": _create_world_state_snapshot(),
 	}
 
@@ -63,11 +67,13 @@ func apply_action_stream_snapshot(snapshot: Dictionary) -> bool:
 	var turn_state_value: Variant = snapshot.get("turn_state", {})
 	var spell_state_value: Variant = snapshot.get("spell_state", {})
 	var loot_state_value: Variant = snapshot.get("loot_state", {})
+	var visibility_state_value: Variant = snapshot.get("visibility_state", {})
 	var world_state_value: Variant = snapshot.get("world_state", {})
 	if (
 		not (turn_state_value is Dictionary)
 		or not (spell_state_value is Dictionary)
 		or not (loot_state_value is Dictionary)
+		or not (visibility_state_value is Dictionary)
 		or not (world_state_value is Dictionary)
 	):
 		return false
@@ -76,6 +82,9 @@ func apply_action_stream_snapshot(snapshot: Dictionary) -> bool:
 	if spells != null and not spells.is_valid_action_stream_snapshot(spell_state_value as Dictionary):
 		return false
 	if loot != null and not loot.is_valid_snapshot(loot_state_value as Dictionary):
+		return false
+	var pending_tower_ids: Dictionary[String, bool] = _get_pending_vision_tower_ids(world_state_value as Dictionary)
+	if visibility != null and not visibility.is_valid_snapshot(visibility_state_value as Dictionary, pending_tower_ids):
 		return false
 	if not _validate_world_state_snapshot(world_state_value as Dictionary):
 		return false
@@ -87,7 +96,22 @@ func apply_action_stream_snapshot(snapshot: Dictionary) -> bool:
 		spells.apply_action_stream_snapshot(spell_state_value as Dictionary)
 	if loot != null and not loot.apply_snapshot(loot_state_value as Dictionary):
 		return false
+	if visibility != null and not visibility.apply_snapshot(visibility_state_value as Dictionary):
+		return false
 	return true
+
+
+func _get_pending_vision_tower_ids(world_state: Dictionary) -> Dictionary[String, bool]:
+	var result: Dictionary[String, bool] = {}
+	for record_value: Variant in world_state.get("dynamic_spawns", []):
+		if not (record_value is Dictionary):
+			continue
+		var record: Dictionary = record_value as Dictionary
+		if str(record.get("type_key", "")) == "vision_tower":
+			var spawn_id: String = str(record.get("spawn_id", ""))
+			if runtime.get_object_by_id(spawn_id) == null:
+				result[spawn_id] = true
+	return result
 
 
 func _create_world_state_snapshot() -> Dictionary:
@@ -103,6 +127,7 @@ func _create_world_state_snapshot() -> Dictionary:
 			"health": entity.health,
 			"max_health": entity.max_health,
 			"damage": entity.damage,
+			"vision_radius": entity.vision_radius,
 		})
 	for player: PlayerCharacter in runtime.players_service.get_all_characters():
 		if player.character_inventory != null:
@@ -176,6 +201,8 @@ func _validate_world_state_snapshot(world_state: Dictionary) -> bool:
 			or int(record.get("health", -1)) < 0
 			or int(record.get("health", -1)) > int(record.get("max_health", 0))
 			or not NetworkProtocol.is_valid_nonnegative_value(int(record.get("damage", -1)))
+			or int(record.get("vision_radius", -1)) < 0
+			or int(record.get("vision_radius", -1)) > WorldVisionSolver.MAX_VISION_RADIUS
 		):
 			return false
 		seen_entity_ids[entity_id] = true
@@ -296,6 +323,7 @@ func _apply_world_state_snapshot(world_state: Dictionary) -> bool:
 		entity.max_health = maxi(int(record.get("max_health", entity.max_health)), 1)
 		entity.set_health(int(record.get("health", entity.health)))
 		entity.apply_attack_damage_state(int(record.get("damage", entity.damage)))
+		entity.vision_radius = int(record.get("vision_radius", entity.vision_radius))
 		entity.current_surface = surface
 		entity.global_position = runtime.surface_to_world(surface)
 		entity.z_index = surface.z * 20 + 10

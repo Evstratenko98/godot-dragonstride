@@ -6,6 +6,7 @@ signal movement_started(from_surface: Vector3i, target_surface: Vector3i)
 signal attack_finished(target_surface: Vector3i)
 signal vitality_changed(current_health: int, maximum_health: int)
 signal damage_changed(current_damage: int)
+signal vision_radius_changed(current_radius: int)
 
 enum EntityType {
 	CHARACTER,
@@ -22,6 +23,13 @@ enum EntityType {
 @export var damage: int = 25
 @export var move_time: float = 0.18
 @export_range(0, 15, 1) var surface_height: int = 0
+@export_range(0, WorldVisionSolver.MAX_VISION_RADIUS, 1) var vision_radius: int = 5:
+	set(value):
+		var bounded_value: int = clampi(value, 0, WorldVisionSolver.MAX_VISION_RADIUS)
+		if vision_radius == bounded_value:
+			return
+		vision_radius = bounded_value
+		vision_radius_changed.emit(vision_radius)
 @export var occupied_offsets: Array[Vector2i] = [Vector2i.ZERO]
 @export var health_bar_offset: Vector2 = Vector2(0, -42)
 

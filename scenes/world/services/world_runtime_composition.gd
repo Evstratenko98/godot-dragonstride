@@ -18,6 +18,7 @@ func bind_services(runtime: WorldRuntime, level: WorldLevel) -> void:
 	runtime.spells = runtime.get_node_or_null(runtime.spells_path) as WorldSpells
 	runtime.loot = runtime.get_node_or_null(runtime.loot_path) as WorldLoot
 	runtime.action_stream = runtime.get_node_or_null(runtime.action_stream_path) as WorldActionStream
+	runtime.visibility = runtime.get_node_or_null(runtime.visibility_path) as WorldVisibility
 
 	if runtime.grid != null:
 		runtime.grid.configure_context(runtime, level)
@@ -59,3 +60,5 @@ func configure_level_services(runtime: WorldRuntime, level: WorldLevel) -> void:
 		)
 	if runtime.players_service != null:
 		runtime.players_service.configure(level.get_spawn_surfaces())
+	if runtime.visibility != null:
+		runtime.visibility.configure_context(runtime, level)

@@ -9,6 +9,8 @@ enum ObjectState {
 
 @export var occupied_offsets: Array[Vector2i] = [Vector2i.ZERO]
 @export_range(0, 15, 1) var surface_height: int = 0
+@export var blocks_vision: bool = false
+@export var is_large_visual_object: bool = false
 @export var object_id: String = ""
 @export var normal_texture: Texture2D
 @export var destroyed_texture: Texture2D

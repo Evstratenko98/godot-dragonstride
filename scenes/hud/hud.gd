@@ -19,6 +19,8 @@ enum ModalContext {
 @onready var end_turn_button: Button = get_node("EndTurnButton") as Button
 @onready var modal_dialog: GameModalDialog = get_node("ModalDialog") as GameModalDialog
 @onready var chest_loot_dialog: ChestLootDialog = get_node("ChestLootDialog") as ChestLootDialog
+@onready var inspection_dialog: WorldInspectionDialog = get_node("WorldInspectionDialog") as WorldInspectionDialog
+@onready var inspection_coordinator: WorldInspectionCoordinator = get_node("InspectionCoordinator") as WorldInspectionCoordinator
 @onready var cursor_controller: HudCursorController = get_node("CursorController") as HudCursorController
 @onready var pause_menu: GamePauseMenu = get_node("GamePauseMenu") as GamePauseMenu
 
@@ -32,6 +34,7 @@ var inventory_bar_default_child_index: int = 0
 
 func _ready() -> void:
 	cursor_controller.configure(self)
+	inspection_coordinator.configure(runtime, inspection_dialog)
 	inventory_bar_default_z_index = inventory_bar.z_index
 	inventory_bar_default_child_index = inventory_bar.get_index()
 	inventory_bar.configure_loot_dialog(chest_loot_dialog)
@@ -41,6 +44,8 @@ func _ready() -> void:
 		modal_dialog.resolved.connect(_on_modal_resolved)
 	if not chest_loot_dialog.open_state_changed.is_connected(_on_chest_loot_open_state_changed):
 		chest_loot_dialog.open_state_changed.connect(_on_chest_loot_open_state_changed)
+	if not inspection_dialog.open_state_changed.is_connected(_on_modal_open_state_changed):
+		inspection_dialog.open_state_changed.connect(_on_modal_open_state_changed)
 
 
 func _exit_tree() -> void:
@@ -48,6 +53,7 @@ func _exit_tree() -> void:
 	_disconnect_spell_targeting_signal()
 	_disconnect_turn_signal()
 	_disconnect_selection_signal()
+	_disconnect_visibility_signal()
 	inventory_bar.set_loot_modal_mode(false)
 	inventory_bar.z_index = inventory_bar_default_z_index
 	_set_local_squad_input_blocked(false)
@@ -64,7 +70,12 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		return
 	if _is_gameplay_modal_open() or _is_console_open() or _is_text_input_focused():
 		return
-	pause_menu.open(GameCamera.MODE_FOLLOW if runtime == null else runtime.get_local_camera_mode())
+	var fog_enabled: bool = true if runtime == null or runtime.visibility == null else runtime.visibility.fog_enabled
+	pause_menu.open(
+		GameCamera.MODE_FOLLOW if runtime == null else runtime.get_local_camera_mode(),
+		fog_enabled,
+		GameSession.is_host()
+	)
 	get_viewport().set_input_as_handled()
 
 
@@ -72,7 +83,9 @@ func configure_runtime(new_runtime: WorldRuntime) -> void:
 	_disconnect_spell_targeting_signal()
 	_disconnect_turn_signal()
 	_disconnect_selection_signal()
+	_disconnect_visibility_signal()
 	runtime = new_runtime
+	inspection_coordinator.configure(runtime, inspection_dialog)
 	chest_loot_dialog.configure_runtime(runtime)
 	if runtime == null:
 		_refresh_end_turn_button()
@@ -83,6 +96,7 @@ func configure_runtime(new_runtime: WorldRuntime) -> void:
 	_connect_spell_targeting_signal()
 	_connect_turn_signal()
 	_connect_selection_signal()
+	_connect_visibility_signal()
 	_refresh_end_turn_button()
 
 
@@ -99,6 +113,10 @@ func bind_session() -> void:
 	turn_status_panel.bind_session()
 	player_roster_panel.bind_session()
 	_refresh_end_turn_button()
+
+
+func configure_inspection_source(source: CellHover) -> void:
+	inspection_coordinator.bind_source(source)
 
 
 func show_level_welcome(title_text: String, body_text: String) -> bool:
@@ -223,6 +241,8 @@ func _get_local_turn_representative() -> PlayerCharacter:
 func _apply_modal_input_block() -> void:
 	var should_block: bool = is_modal_open()
 	_set_local_squad_input_blocked(should_block)
+	if runtime != null:
+		runtime.set_local_camera_input_blocked(should_block)
 	_refresh_end_turn_button()
 
 
@@ -236,7 +256,7 @@ func _set_local_squad_input_blocked(should_be_blocked: bool) -> void:
 
 
 func _is_gameplay_modal_open() -> bool:
-	return modal_dialog.is_open() or chest_loot_dialog.is_open()
+	return modal_dialog.is_open() or chest_loot_dialog.is_open() or inspection_dialog.is_open()
 
 
 func _is_text_input_focused() -> bool:
@@ -293,6 +313,29 @@ func _on_chest_loot_open_state_changed(is_open: bool) -> void:
 func _on_pause_menu_camera_mode_requested(camera_mode: String) -> void:
 	if runtime != null:
 		runtime.set_local_camera_mode(camera_mode)
+
+
+func _on_pause_menu_fog_of_war_requested(is_enabled: bool) -> void:
+	if runtime == null or runtime.visibility == null or not GameSession.is_host():
+		return
+	runtime.enqueue_system_action(
+		WorldActionRecord.ActionType.SET_FOG_OF_WAR,
+		{"is_enabled": is_enabled}
+	)
+
+
+func _connect_visibility_signal() -> void:
+	if runtime != null and runtime.visibility != null and not runtime.visibility.fog_enabled_changed.is_connected(_on_fog_enabled_changed):
+		runtime.visibility.fog_enabled_changed.connect(_on_fog_enabled_changed)
+
+
+func _disconnect_visibility_signal() -> void:
+	if runtime != null and runtime.visibility != null and runtime.visibility.fog_enabled_changed.is_connected(_on_fog_enabled_changed):
+		runtime.visibility.fog_enabled_changed.disconnect(_on_fog_enabled_changed)
+
+
+func _on_fog_enabled_changed(is_enabled: bool) -> void:
+	pause_menu.set_fog_of_war_state(is_enabled, GameSession.is_host())
 
 
 func _on_pause_menu_exit_game_requested() -> void:

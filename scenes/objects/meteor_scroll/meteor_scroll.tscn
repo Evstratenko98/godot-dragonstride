@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" uid="uid://ha53qchwj2kg" path="res://scenes/objects/meteor_scroll/meteor_scroll.gd" id="1_scroll"]
 [ext_resource type="Texture2D" uid="uid://jas5sqiecgok" path="res://art/spells/meteor_list.png" id="2_texture"]
+[ext_resource type="Script" path="res://scenes/inspection/world_inspectable.gd" id="3_inspectable"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_scroll"]
 size = Vector2(48, 48)
@@ -10,6 +11,11 @@ size = Vector2(48, 48)
 scale = Vector2(0.75, 0.75)
 script = ExtResource("1_scroll")
 normal_texture = ExtResource("2_texture")
+
+[node name="Inspectable" type="Node" parent="."]
+script = ExtResource("3_inspectable")
+display_name = "Свиток метеора"
+description = "Свиток разрушительного заклинания, вызывающего метеоритный удар по выбранной клетке."
 
 [node name="Sprite2D" type="Sprite2D" parent="." unique_id=572245768]
 texture = ExtResource("2_texture")

@@ -66,8 +66,8 @@ func configure(new_spawn_surfaces: Array[Vector3i]) -> void:
 func prepare_players_root() -> void:
 	if selection_controller != null:
 		selection_controller.clear_selection()
-	for child: Node in players_root.get_children():
-		child.queue_free()
+	for member: PlayerCharacter in squad_registry.get_all_members():
+		member.queue_free()
 	if local_camera != null:
 		local_camera.queue_free()
 	squad_registry.clear()
@@ -287,9 +287,9 @@ func execute_character_kill_action(member: PlayerCharacter) -> bool:
 
 
 func _configure_helpers() -> void:
-	if runtime == null or players_root == null:
+	if runtime == null or players_root == null or level == null:
 		return
-	spawn_coordinator.configure(runtime, players_root, squad_registry, spawn_surfaces)
+	spawn_coordinator.configure(runtime, level.get_world_entities_root(), squad_registry, spawn_surfaces)
 	if selection_controller != null:
 		selection_controller.configure(runtime, squad_registry, local_camera)
 

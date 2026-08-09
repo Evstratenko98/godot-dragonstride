@@ -36,6 +36,10 @@ static func get_reachable_surfaces_for_entity(
 	if runtime == null or entity == null or max_steps <= 0:
 		return reachable
 	var start: Vector3i = entity.current_surface
+	var known_map_player_id: String = ""
+	var local_player: PlayerCharacter = entity as PlayerCharacter
+	if local_player != null and local_player.is_locally_owned:
+		known_map_player_id = local_player.owner_player_id
 	var maximum_distance: int = mini(max_steps, WorldGridTopology.MAX_SURFACES)
 	var frontier: Array[Vector3i] = [start]
 	var distances: Dictionary[Vector3i, int] = {start: 0}
@@ -47,7 +51,7 @@ static func get_reachable_surfaces_for_entity(
 		if current_distance >= maximum_distance:
 			continue
 		for next_surface: Vector3i in runtime.get_surface_neighbors(current):
-			if distances.has(next_surface) or not runtime.can_enter_surface(next_surface, entity):
+			if distances.has(next_surface) or not _can_enter(runtime, entity, next_surface, true, known_map_player_id):
 				continue
 			distances[next_surface] = current_distance + 1
 			frontier.append(next_surface)
@@ -60,7 +64,8 @@ static func find_path_to_any(
 	moving_entity: Entity,
 	start_surface: Vector3i,
 	goal_surfaces: Array[Vector3i],
-	should_respect_occupancy: bool
+	should_respect_occupancy: bool,
+	known_map_player_id: String = ""
 ) -> Array[Vector3i]:
 	var empty_path: Array[Vector3i] = []
 	if runtime == null or moving_entity == null or goal_surfaces.is_empty():
@@ -79,7 +84,7 @@ static func find_path_to_any(
 		for next_surface: Vector3i in runtime.get_surface_neighbors(surface):
 			if came_from.has(next_surface):
 				continue
-			if not _can_enter(runtime, moving_entity, next_surface, should_respect_occupancy):
+			if not _can_enter(runtime, moving_entity, next_surface, should_respect_occupancy, known_map_player_id):
 				continue
 			came_from[next_surface] = surface
 			if goals.has(next_surface):
@@ -93,14 +98,16 @@ static func find_path_to_surface(
 	moving_entity: Entity,
 	start_surface: Vector3i,
 	target_surface: Vector3i,
-	should_respect_occupancy: bool = true
+	should_respect_occupancy: bool = true,
+	known_map_player_id: String = ""
 ) -> Array[Vector3i]:
 	return find_path_to_any(
 		runtime,
 		moving_entity,
 		start_surface,
 		[target_surface],
-		should_respect_occupancy
+		should_respect_occupancy,
+		known_map_player_id
 	)
 
 
@@ -108,13 +115,22 @@ static func _can_enter(
 	runtime: WorldRuntime,
 	moving_entity: Entity,
 	surface: Vector3i,
-	should_respect_occupancy: bool
+	should_respect_occupancy: bool,
+	known_map_player_id: String = ""
 ) -> bool:
 	if not runtime.is_surface_inside(surface):
 		return false
 	if not runtime.is_surface_walkable_for_entity(surface, moving_entity):
 		return false
-	if runtime.get_object_at_surface(surface) != null:
+	if not known_map_player_id.is_empty() and runtime.visibility != null:
+		if runtime.visibility.is_surface_blocked_on_known_map(known_map_player_id, surface):
+			return false
+		var visibility_mode: WorldVisibility.VisibilityMode = runtime.visibility.get_visibility_mode(known_map_player_id, surface)
+		if visibility_mode == WorldVisibility.VisibilityMode.HIDDEN:
+			return false
+		if visibility_mode == WorldVisibility.VisibilityMode.EXPLORED:
+			return true
+	elif runtime.get_object_at_surface(surface) != null:
 		return false
 	return not should_respect_occupancy or runtime.can_enter_surface(surface, moving_entity)
 

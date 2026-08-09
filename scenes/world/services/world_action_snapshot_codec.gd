@@ -36,6 +36,7 @@ static func get_capacity_rejection_reason(snapshot: Dictionary) -> String:
 	var turn_state: Dictionary = snapshot.get("turn_state", {}) as Dictionary
 	var spell_state: Dictionary = snapshot.get("spell_state", {}) as Dictionary
 	var loot_state: Dictionary = snapshot.get("loot_state", {}) as Dictionary
+	var visibility_state: Dictionary = snapshot.get("visibility_state", {}) as Dictionary
 	if (
 		_get_collection_size(turn_state.get("turn_order", [])) > NetworkProtocol.MAX_ROSTER_SIZE
 		or _get_collection_size(turn_state.get("steps_left_by_entity_id", {})) > NetworkProtocol.MAX_PLAYER_CHARACTERS
@@ -43,8 +44,16 @@ static func get_capacity_rejection_reason(snapshot: Dictionary) -> String:
 		or _get_collection_size(turn_state.get("interactions_left_by_entity_id", {})) > NetworkProtocol.MAX_PLAYER_CHARACTERS
 		or _get_collection_size(spell_state.get("used_spell_slots", {})) > NetworkProtocol.MAX_PLAYER_CHARACTERS
 		or _get_collection_size(loot_state.get("pending_rewards", [])) > NetworkProtocol.MAX_WORLD_RECORDS
+		or _get_collection_size(visibility_state.get(WorldVisibilitySnapshotCodec.KEY_EXPLORED, {})) > NetworkProtocol.MAX_ROSTER_SIZE
+		or _get_collection_size(visibility_state.get(WorldVisibilitySnapshotCodec.KEY_TOWERS, [])) > NetworkProtocol.MAX_WORLD_RECORDS
+		or _get_collection_size(visibility_state.get(WorldVisibilitySnapshotCodec.KEY_MEMORIES, {})) > NetworkProtocol.MAX_ROSTER_SIZE
 	):
 		return REJECTION_SNAPSHOT_TOO_LARGE
+	var memories_value: Variant = visibility_state.get(WorldVisibilitySnapshotCodec.KEY_MEMORIES, {})
+	if memories_value is Dictionary:
+		for records_value: Variant in (memories_value as Dictionary).values():
+			if _get_collection_size(records_value) > NetworkProtocol.MAX_WORLD_RECORDS:
+				return REJECTION_SNAPSHOT_TOO_LARGE
 	var world_state_value: Variant = snapshot.get("world_state", {})
 	if world_state_value is Dictionary:
 		var world_state: Dictionary = world_state_value as Dictionary

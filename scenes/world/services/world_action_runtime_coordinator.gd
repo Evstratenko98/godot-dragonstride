@@ -15,7 +15,8 @@ func configure_context(owner: WorldRuntime) -> void:
 		runtime.network,
 		runtime.turn_manager,
 		runtime.spells,
-		runtime.loot
+		runtime.loot,
+		runtime.visibility
 	)
 	snapshot.configure_context(
 		runtime,
@@ -24,6 +25,7 @@ func configure_context(owner: WorldRuntime) -> void:
 		runtime.turn_manager,
 		runtime.spells,
 		runtime.loot,
+		runtime.visibility,
 		NetworkManager.store
 	)
 	startup.configure_context(

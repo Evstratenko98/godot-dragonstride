@@ -54,7 +54,7 @@ func _refresh_displayed_cells(should_force_redraw: bool = false) -> void:
 	displayed_mode = next_mode
 	displayed_surfaces = next_surfaces
 	if selected_character != null:
-		z_index = selected_character.current_surface.z * 20 + 12
+		z_index = 2012
 	queue_redraw()
 
 

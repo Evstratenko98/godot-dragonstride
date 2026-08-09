@@ -12,6 +12,7 @@ var debug_commands: WorldSpawnerDebugCommands = WorldSpawnerDebugCommands.new()
 var snapshot_transaction: WorldSpawnSnapshotTransaction = WorldSpawnSnapshotTransaction.new()
 var batch_operator: WorldSpawnBatchOperator = WorldSpawnBatchOperator.new()
 var network_bridge: WorldSpawnerNetworkBridge = WorldSpawnerNetworkBridge.new()
+var spawn_roots: WorldSpawnRoots = WorldSpawnRoots.new()
 
 
 func _ready() -> void:
@@ -24,6 +25,7 @@ func _ready() -> void:
 func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void:
 	runtime = new_runtime
 	level = new_level
+	spawn_roots.configure(level)
 	snapshot_transaction.configure(self)
 	batch_operator.configure(self)
 	debug_commands.configure(self, _can_use_debug_commands(), CATALOG.keys())
@@ -274,7 +276,7 @@ func _spawn_instance(instance: Node, definition: Dictionary, type_key: String, s
 	var world_position: Vector2 = runtime.surface_to_world(surface)
 
 	if kind == SPAWN_KIND_ENTITY:
-		var entities_root: Node2D = _get_world_entities_root()
+		var entities_root: Node2D = spawn_roots.get_world_entities_root()
 		instance.name = spawn_id
 		entities_root.add_child(instance)
 		if instance is NonPlayerEntity:
@@ -297,8 +299,11 @@ func _spawn_instance(instance: Node, definition: Dictionary, type_key: String, s
 		return ""
 
 	if kind == SPAWN_KIND_OBJECT:
-		var objects_root: Node2D = _get_spawned_objects_root()
+		var objects_root: Node2D = spawn_roots.get_world_entities_root()
 		instance.name = spawn_id
+		var grid_object: GridObject = instance as GridObject
+		if grid_object != null:
+			grid_object.surface_height = surface.z
 		if not instance.is_in_group("game_blocker"):
 			instance.add_to_group("game_blocker")
 		if instance is Node2D:
@@ -453,28 +458,6 @@ func _make_spawn_id(type_key: String) -> String:
 
 func _has_spawn_id(spawn_id: String) -> bool:
 	return runtime.get_entity_by_id(spawn_id) != null or runtime.get_object_by_id(spawn_id) != null
-
-
-func _get_world_entities_root() -> Node2D:
-	var root: Node2D = level.get_world_entities_root()
-	if root != null:
-		return root
-
-	root = Node2D.new()
-	root.name = "WorldEntities"
-	level.add_child(root)
-	return root
-
-
-func _get_spawned_objects_root() -> Node2D:
-	var root: Node2D = level.get_spawned_objects_root()
-	if root != null:
-		return root
-
-	root = Node2D.new()
-	root.name = "SpawnedObjects"
-	level.add_child(root)
-	return root
 
 
 func _normalize_type_key(type_key: String) -> String:

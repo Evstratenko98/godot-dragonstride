@@ -16,6 +16,7 @@ const KEY_REQUIRES_PROFILE_PAYLOAD := "requires_profile_payload"
 const KEY_REQUIRES_TURN_PROFILE := "requires_turn_profile"
 const KEY_REQUIRES_TURN_PROFILE_IN_TURN_MODE := "requires_turn_profile_in_turn_mode"
 const KEY_PROFILE_CHANNEL := "profile_channel"
+const KEY_INLINE_LIFECYCLE_PAYLOAD := "inline_lifecycle_payload"
 
 const DEFINITIONS := {
 	WorldActionRecord.ActionType.MOVE_PATH: {KEY_IS_EXTERNAL: true, KEY_IS_TURN_BOUND: true, KEY_REQUIRES_PROFILE_PAYLOAD: true, KEY_REQUIRES_TURN_PROFILE_IN_TURN_MODE: true, KEY_PROFILE_CHANNEL: ProfileChannel.CHARACTER},
@@ -34,6 +35,7 @@ const DEFINITIONS := {
 	WorldActionRecord.ActionType.SET_TURN_MODE: {KEY_REQUIRES_TURN_PROFILE: true},
 	WorldActionRecord.ActionType.PLAYER_TURN_SKIPPED: {KEY_REQUIRES_TURN_PROFILE: true},
 	WorldActionRecord.ActionType.BLOCKING_EVENT: {},
+	WorldActionRecord.ActionType.SET_FOG_OF_WAR: {KEY_INLINE_LIFECYCLE_PAYLOAD: true},
 }
 
 
@@ -67,6 +69,10 @@ static func requires_turn_profile(action_type: WorldActionRecord.ActionType, is_
 static func get_profile_channel(action_type: WorldActionRecord.ActionType) -> ProfileChannel:
 	var definition: Dictionary = DEFINITIONS.get(action_type, {}) as Dictionary
 	return int(definition.get(KEY_PROFILE_CHANNEL, int(ProfileChannel.NONE))) as ProfileChannel
+
+
+static func uses_inline_lifecycle_payload(action_type: WorldActionRecord.ActionType) -> bool:
+	return _read_flag(action_type, KEY_INLINE_LIFECYCLE_PAYLOAD)
 
 
 static func _read_flag(action_type: WorldActionRecord.ActionType, key: String) -> bool:

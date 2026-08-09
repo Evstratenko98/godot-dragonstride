@@ -104,12 +104,30 @@ func get_surfaces_at(cell: Vector2i) -> Array[Vector3i]:
 	return result
 
 
+func get_all_surfaces() -> Array[Vector3i]:
+	var result: Array[Vector3i] = []
+	for surface: Vector3i in surfaces.keys():
+		result.append(surface)
+	result.sort_custom(func(first: Vector3i, second: Vector3i) -> bool:
+		if first.x != second.x:
+			return first.x < second.x
+		if first.y != second.y:
+			return first.y < second.y
+		return first.z < second.z
+	)
+	return result
+
+
 func has_edge(from_surface: Vector3i, to_surface: Vector3i) -> bool:
 	return get_neighbors(from_surface).has(to_surface)
 
 
 func is_ramp_edge(from_surface: Vector3i, to_surface: Vector3i) -> bool:
 	return get_traversal_kind(from_surface, to_surface) == WorldRampConnection.TraversalKind.RAMP
+
+
+func is_ramp_footprint_cell(cell: Vector2i) -> bool:
+	return ramp_footprint_owners.has(cell)
 
 
 func get_traversal_kind(from_surface: Vector3i, to_surface: Vector3i) -> int:

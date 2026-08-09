@@ -25,8 +25,19 @@ func _get_target_display_name(entity_id: String) -> String:
 	if entity_id.is_empty():
 		return "none"
 	var entity: Node = warrior.runtime.get_entity_by_id(entity_id)
+	if (
+		entity is Entity
+		and warrior.runtime.visibility != null
+		and not warrior.runtime.visibility.is_surface_visible_for_local_player((entity as Entity).current_surface)
+	):
+		return "unknown"
 	return warrior.runtime.get_entity_display_name(entity) if entity != null else entity_id
 
 
 func _print(text: String) -> void:
+	if (
+		warrior.runtime.visibility != null
+		and not warrior.runtime.visibility.is_surface_visible_for_local_player(warrior.current_surface)
+	):
+		return
 	ConsoleOutput.print_console(text, warrior.runtime)

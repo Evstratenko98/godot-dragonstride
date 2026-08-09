@@ -9,6 +9,8 @@
 [ext_resource type="PackedScene" path="res://scenes/hud/chest_loot_dialog.tscn" id="7_chest_loot"]
 [ext_resource type="Script" path="res://scenes/hud/hud_cursor_controller.gd" id="8_cursor"]
 [ext_resource type="PackedScene" path="res://scenes/hud/game_pause_menu.tscn" id="9_pause"]
+[ext_resource type="Script" path="res://scenes/inspection/world_inspection_coordinator.gd" id="10_inspection_coordinator"]
+[ext_resource type="PackedScene" path="res://scenes/inspection/world_inspection_dialog.tscn" id="11_inspection_dialog"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_end_turn"]
 bg_color = Color(0.06, 0.06, 0.08, 0.7)
@@ -40,6 +42,9 @@ script = ExtResource("1_64ctp")
 
 [node name="CursorController" type="Node" parent="."]
 script = ExtResource("8_cursor")
+
+[node name="InspectionCoordinator" type="Node" parent="."]
+script = ExtResource("10_inspection_coordinator")
 
 [node name="TurnStatusPanel" type="PanelContainer" parent="." unique_id=650445380]
 anchors_preset = 5
@@ -132,9 +137,12 @@ script = ExtResource("5_roster")
 
 [node name="ChestLootDialog" parent="." unique_id=523605113 instance=ExtResource("7_chest_loot")]
 
+[node name="WorldInspectionDialog" parent="." instance=ExtResource("11_inspection_dialog")]
+
 [node name="GamePauseMenu" parent="." instance=ExtResource("9_pause")]
 
 [connection signal="pressed" from="EndTurnButton" to="." method="_on_end_turn_button_pressed"]
 [connection signal="camera_mode_requested" from="GamePauseMenu" to="." method="_on_pause_menu_camera_mode_requested"]
+[connection signal="fog_of_war_requested" from="GamePauseMenu" to="." method="_on_pause_menu_fog_of_war_requested"]
 [connection signal="exit_game_requested" from="GamePauseMenu" to="." method="_on_pause_menu_exit_game_requested"]
 [connection signal="open_state_changed" from="GamePauseMenu" to="." method="_on_pause_menu_open_state_changed"]

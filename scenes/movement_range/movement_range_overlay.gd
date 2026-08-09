@@ -82,7 +82,7 @@ func _refresh_range() -> void:
 	if runtime.turn_manager != null and runtime.turn_manager.is_entity_active_in_turn(hovered_entity):
 		maximum_steps = runtime.turn_manager.get_steps_left(hovered_entity.entity_id)
 	reachable_surfaces = runtime.get_reachable_surfaces_for_entity(hovered_entity, maximum_steps)
-	z_index = hovered_entity.current_surface.z * 20 + 12
+	z_index = 2012
 	queue_redraw()
 
 

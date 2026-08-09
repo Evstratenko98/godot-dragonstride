@@ -469,6 +469,8 @@ func _apply_object_state_message(object_id: String, object_state: int) -> void:
 		return
 
 	target_object.apply_network_state(object_state)
+	if runtime.visibility != null:
+		runtime.visibility.request_recompute()
 
 
 func _on_end_game_requested() -> void:

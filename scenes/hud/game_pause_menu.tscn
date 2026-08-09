@@ -46,7 +46,7 @@ grow_vertical = 2
 mouse_filter = 1
 
 [node name="Panel" type="PanelContainer" parent="Center"]
-custom_minimum_size = Vector2(440, 300)
+custom_minimum_size = Vector2(440, 350)
 layout_mode = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
 
@@ -117,6 +117,22 @@ layout_mode = 2
 focus_mode = 0
 mouse_default_cursor_shape = 2
 
+[node name="FogOfWarRow" type="HBoxContainer" parent="Center/Panel/Margin/SettingsMenu"]
+layout_mode = 2
+theme_override_constants/separation = 16
+alignment = 1
+
+[node name="FogOfWarLabel" type="Label" parent="Center/Panel/Margin/SettingsMenu/FogOfWarRow"]
+layout_mode = 2
+text = "Туман войны"
+vertical_alignment = 1
+
+[node name="FogOfWarToggle" type="CheckButton" parent="Center/Panel/Margin/SettingsMenu/FogOfWarRow"]
+custom_minimum_size = Vector2(90, 42)
+layout_mode = 2
+focus_mode = 0
+mouse_default_cursor_shape = 2
+
 [node name="BackButton" type="Button" parent="Center/Panel/Margin/SettingsMenu"]
 custom_minimum_size = Vector2(320, 46)
 layout_mode = 2
@@ -128,4 +144,5 @@ text = "Назад"
 [connection signal="pressed" from="Center/Panel/Margin/RootMenu/SettingsButton" to="." method="_on_settings_button_pressed"]
 [connection signal="pressed" from="Center/Panel/Margin/RootMenu/ExitButton" to="." method="_on_exit_button_pressed"]
 [connection signal="item_selected" from="Center/Panel/Margin/SettingsMenu/CameraModeRow/CameraModeSelect" to="." method="_on_camera_mode_select_item_selected"]
+[connection signal="toggled" from="Center/Panel/Margin/SettingsMenu/FogOfWarRow/FogOfWarToggle" to="." method="_on_fog_of_war_toggle_toggled"]
 [connection signal="pressed" from="Center/Panel/Margin/SettingsMenu/BackButton" to="." method="_on_back_button_pressed"]

@@ -20,6 +20,7 @@ signal selected_local_character_changed(character: PlayerCharacter)
 @export var spells_path: NodePath = ^"../Spells"
 @export var loot_path: NodePath = ^"../Loot"
 @export var action_stream_path: NodePath = ^"../ActionStream"
+@export var visibility_path: NodePath = ^"../Visibility"
 
 var level: WorldLevel = null
 var grid: WorldGrid = null
@@ -35,14 +36,14 @@ var item_usage: WorldItemUsage = null
 var spells: WorldSpells = null
 var loot: WorldLoot = null
 var action_stream: WorldActionStream = null
+var visibility: WorldVisibility = null
 var action_coordinator: WorldActionRuntimeCoordinator = WorldActionRuntimeCoordinator.new()
 var composition: WorldRuntimeComposition = WorldRuntimeComposition.new()
 var event_coordinator: WorldRuntimeEventCoordinator = WorldRuntimeEventCoordinator.new()
-var selected_input_surface: Vector3i = WorldGridTopology.INVALID_SURFACE
+var spatial: WorldSpatialFacade = WorldSpatialFacade.new()
 
 
 func configure_for_level(new_level: WorldLevel) -> void:
-	selected_input_surface = WorldGridTopology.INVALID_SURFACE
 	event_coordinator.configure(self)
 	level = new_level
 	if level != null:
@@ -71,6 +72,7 @@ func is_configured_for(target_level: WorldLevel) -> bool:
 		and spells != null
 		and loot != null
 		and action_stream != null
+		and visibility != null
 	)
 
 
@@ -130,6 +132,8 @@ func handle_character_attack(attacker: Node, target_surface: Vector3i) -> void:
 
 
 func request_character_attack(attacker: PlayerCharacter, target_surface: Vector3i) -> bool:
+	if visibility != null and not visibility.is_surface_visible_for_character(attacker, target_surface):
+		return false
 	return network.request_character_attack(attacker, target_surface)
 
 
@@ -138,6 +142,8 @@ func request_character_move_path(player: PlayerCharacter, requested_path: Array[
 
 
 func request_character_interaction(interactor: PlayerCharacter, target_surface: Vector3i) -> void:
+	if visibility != null and not visibility.is_surface_visible_for_character(interactor, target_surface):
+		return
 	network.request_character_interaction(interactor, target_surface)
 
 
@@ -200,6 +206,8 @@ func get_selected_spell_slot_index(player: PlayerCharacter) -> int:
 
 
 func request_selected_spell_cast(player: PlayerCharacter, target_surface: Vector3i) -> bool:
+	if visibility != null and not visibility.is_surface_visible_for_character(player, target_surface):
+		return false
 	return spells != null and spells.request_selected_spell_cast(player, target_surface)
 
 
@@ -301,11 +309,11 @@ func clear_registered_entities() -> void:
 
 
 func get_entity_by_id(entity_id: String) -> Node:
-	return registry.get_entity_by_id(entity_id)
+	return spatial.get_entity_by_id(entity_id)
 
 
 func get_entity_at_surface(cell: Vector3i) -> Node:
-	return registry.get_entity_at_surface(cell)
+	return spatial.get_entity_at_surface(cell)
 
 
 func is_entity_registered_at_surface(entity: Node, surface: Vector3i) -> bool:
@@ -317,19 +325,19 @@ func has_entity_surface_reservation(entity: Node, surface: Vector3i) -> bool:
 
 
 func get_object_at_surface(cell: Vector3i) -> Node:
-	return registry.get_object_at_surface(cell)
+	return spatial.get_object_at_surface(cell)
 
 
 func get_object_by_id(object_id: String) -> Node:
-	return registry.get_object_by_id(object_id)
+	return spatial.get_object_by_id(object_id)
 
 
 func get_registered_objects() -> Array:
-	return registry.get_registered_objects()
+	return spatial.get_registered_objects()
 
 
 func get_registered_entities() -> Array:
-	return registry.get_registered_entities()
+	return spatial.get_registered_entities()
 
 
 func can_enter_surface(cell: Vector3i, moving_entity: Node = null) -> bool:
@@ -345,11 +353,26 @@ func get_reachable_surfaces_for_entity(entity: Entity, max_steps: int) -> Array[
 
 
 func get_available_attack_surfaces(entity: Entity) -> Array[Vector3i]:
-	return [] if combat == null else combat.get_available_attack_surfaces(entity)
+	var surfaces: Array[Vector3i] = [] if combat == null else combat.get_available_attack_surfaces(entity)
+	var player: PlayerCharacter = entity as PlayerCharacter
+	if visibility == null or player == null:
+		return surfaces
+	var visible_surfaces: Array[Vector3i] = []
+	for surface: Vector3i in surfaces:
+		if visibility.is_surface_visible_for_character(player, surface):
+			visible_surfaces.append(surface)
+	return visible_surfaces
 
 
 func get_available_interaction_surfaces(character: PlayerCharacter) -> Array[Vector3i]:
-	return [] if interaction == null else interaction.get_available_interaction_surfaces(character)
+	var surfaces: Array[Vector3i] = [] if interaction == null else interaction.get_available_interaction_surfaces(character)
+	if visibility == null:
+		return surfaces
+	var visible_surfaces: Array[Vector3i] = []
+	for surface: Vector3i in surfaces:
+		if visibility.is_surface_visible_for_character(character, surface):
+			visible_surfaces.append(surface)
+	return visible_surfaces
 
 
 func is_surface_interactable(cell: Vector3i) -> bool:
@@ -660,119 +683,67 @@ func get_players_root() -> Node2D:
 func update_player_authorities() -> void:
 	players_service.update_player_authorities()
 
-
 func broadcast_object_state(target_object: Node) -> void:
 	network.broadcast_object_state(target_object)
-
+	if visibility != null:
+		visibility.request_recompute()
 
 func broadcast_all_object_states() -> void:
 	network.broadcast_all_object_states()
 
 
 func has_surface(surface: Vector3i) -> bool:
-	return grid != null and grid.has_surface(surface)
-
-
+	return spatial.has_surface(surface)
 func is_surface_walkable(surface: Vector3i) -> bool:
-	return grid.is_surface_walkable(surface)
-
-
+	return spatial.is_surface_walkable(surface)
 func is_surface_walkable_for_entity(surface: Vector3i, entity: Entity) -> bool:
-	return grid.is_surface_walkable_for_entity(surface, entity)
-
-
+	return spatial.is_surface_walkable_for_entity(surface, entity)
 func is_surface_walkable_for_character(surface: Vector3i) -> bool:
-	return grid.is_surface_walkable_for_character(surface)
-
-
+	return spatial.is_surface_walkable_for_character(surface)
 func is_surface_inside(surface: Vector3i) -> bool:
-	return grid.is_surface_inside(surface)
-
-
+	return spatial.is_surface_inside(surface)
 func get_surface_neighbors(surface: Vector3i) -> Array[Vector3i]:
-	return grid.get_surface_neighbors(surface)
-
-
+	return spatial.get_surface_neighbors(surface)
 func get_surface_in_direction(surface: Vector3i, direction: Vector2i) -> Vector3i:
-	return grid.get_surface_in_direction(surface, direction)
-
-
+	return spatial.get_surface_in_direction(surface, direction)
 func has_traversal_edge(from_surface: Vector3i, to_surface: Vector3i) -> bool:
-	return grid.has_traversal_edge(from_surface, to_surface)
-
-
+	return spatial.has_traversal_edge(from_surface, to_surface)
 func is_ramp_edge(from_surface: Vector3i, to_surface: Vector3i) -> bool:
-	return grid.is_ramp_edge(from_surface, to_surface)
-
-
+	return spatial.is_ramp_edge(from_surface, to_surface)
+func is_ramp_footprint_cell(cell: Vector2i) -> bool:
+	return spatial.is_ramp_footprint_cell(cell)
 func get_traversal_kind(from_surface: Vector3i, to_surface: Vector3i) -> int:
-	return grid.get_traversal_kind(from_surface, to_surface)
-
-
+	return spatial.get_traversal_kind(from_surface, to_surface)
 func get_traversal_input_direction(from_surface: Vector3i, to_surface: Vector3i) -> Vector2i:
-	return grid.get_traversal_input_direction(from_surface, to_surface)
-
-
+	return spatial.get_traversal_input_direction(from_surface, to_surface)
 func get_surfaces_at(cell: Vector2i) -> Array[Vector3i]:
-	return grid.get_surfaces_at(cell)
-
-
+	return spatial.get_surfaces_at(cell)
+func get_all_surfaces() -> Array[Vector3i]:
+	return spatial.get_all_surfaces()
 func resolve_surface_at_world(world_position: Vector2, preferred_elevation: int) -> Vector3i:
-	var projected: Vector3i = grid.world_to_surface(world_position, preferred_elevation)
-	var available: Array[Vector3i] = grid.get_surfaces_at(Vector2i(projected.x, projected.y))
-	if available.has(projected):
-		return projected
-	if available.is_empty():
-		return projected
-	return available[available.size() - 1]
-
-
+	return spatial.resolve_surface_at_world(world_position, preferred_elevation)
 func set_selected_input_surface(surface: Vector3i) -> void:
-	selected_input_surface = surface if has_surface(surface) else WorldGridTopology.INVALID_SURFACE
-
-
+	spatial.set_selected_input_surface(surface)
 func resolve_selected_surface_at_world(world_position: Vector2, preferred_elevation: int) -> Vector3i:
-	var projected: Vector3i = grid.world_to_surface(world_position, preferred_elevation)
-	if (
-		selected_input_surface != WorldGridTopology.INVALID_SURFACE
-		and selected_input_surface.x == projected.x
-		and selected_input_surface.y == projected.y
-		and has_surface(selected_input_surface)
-	):
-		return selected_input_surface
-	return resolve_surface_at_world(world_position, preferred_elevation)
-
-
+	return spatial.resolve_selected_surface_at_world(world_position, preferred_elevation)
 func get_topology_hash() -> String:
-	return grid.get_topology_hash()
-
-
+	return spatial.get_topology_hash()
 func get_grid_size() -> Vector2i:
-	return _get_grid_service().get_grid_size()
-
-
+	return spatial.get_grid_size()
 func get_cell_size() -> int:
-	return _get_grid_service().get_cell_size()
-
-
+	return spatial.get_cell_size()
 func get_grid_world_bounds() -> Rect2:
-	return _get_grid_service().get_world_bounds()
-
-
+	return spatial.get_grid_world_bounds()
 func world_to_surface(world_position: Vector2, elevation: int = 0) -> Vector3i:
-	return _get_grid_service().world_to_surface(world_position, elevation)
-
-
+	return spatial.world_to_surface(world_position, elevation)
 func surface_to_world(surface: Vector3i) -> Vector2:
-	return _get_grid_service().surface_to_world(surface)
-
-
+	return spatial.surface_to_world(surface)
 func get_surface_center(world_position: Vector2, elevation: int = 0) -> Vector2:
-	return _get_grid_service().get_surface_center(world_position, elevation)
-
-
+	return spatial.surface_to_world(spatial.world_to_surface(world_position, elevation))
 func get_adjacent_surface_center(world_position: Vector2, direction: Vector2i, elevation: int = 0) -> Vector2:
-	return _get_grid_service().get_adjacent_surface_center(world_position, direction, elevation)
+	var surface: Vector3i = spatial.world_to_surface(world_position, elevation)
+	var target: Vector3i = spatial.get_surface_in_direction(surface, direction)
+	return spatial.surface_to_world(surface if target == WorldGridTopology.INVALID_SURFACE else target)
 
 
 func print_console(text: String) -> void:
@@ -781,6 +752,7 @@ func print_console(text: String) -> void:
 
 func _bind_services() -> void:
 	composition.bind_services(self, level)
+	spatial.configure(grid, registry)
 	if registry != null and not registry.occupancy_changed.is_connected(event_coordinator.on_registry_occupancy_changed):
 		registry.occupancy_changed.connect(event_coordinator.on_registry_occupancy_changed)
 	if network != null and not network.match_end_requested.is_connected(event_coordinator.on_network_match_end_requested):
@@ -793,7 +765,3 @@ func _configure_services() -> void:
 
 func register_level_entities() -> void:
 	event_coordinator.register_level_entities()
-
-
-func _get_grid_service() -> WorldGrid:
-	return grid

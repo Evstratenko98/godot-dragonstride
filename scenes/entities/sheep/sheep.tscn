@@ -3,6 +3,7 @@
 [ext_resource type="Texture2D" path="res://art/Tiny Swords (Update 010)/Resources/Sheep/HappySheep_All.png" id="1"]
 [ext_resource type="Script" path="res://scenes/entities/sheep/sheep.gd" id="2"]
 [ext_resource type="Script" path="res://scenes/entities/sheep/sheep_view.gd" id="3"]
+[ext_resource type="Script" path="res://scenes/inspection/world_inspectable.gd" id="4_inspectable"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_1"]
 radius = 14.0
@@ -56,6 +57,12 @@ move_time = 0.6
 
 [node name="View" type="Node" parent="."]
 script = ExtResource("3")
+
+[node name="Inspectable" type="Node" parent="."]
+script = ExtResource("4_inspectable")
+display_name = "Овца"
+description = "Мирная овца, бродящая по округе. Она не нападает и после гибели оставляет мясо."
+stat_flags = 11
 
 [node name="Sprite2D" type="Sprite2D" parent="."]
 position = Vector2(0, -8)

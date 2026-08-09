@@ -20,6 +20,7 @@ const MEAT_SCENE := preload("res://scenes/objects/meat/meat.tscn")
 const PRECISION_STONE_SCENE := preload("res://scenes/objects/precision_stone/precision_stone.tscn")
 const METEOR_SCROLL_SCENE := preload("res://scenes/objects/meteor_scroll/meteor_scroll.tscn")
 const CHEST_SCENE := preload("res://scenes/objects/chest/chest.tscn")
+const VISION_TOWER_SCENE := preload("res://scenes/objects/vision_tower/vision_tower.tscn")
 
 const DEFINITIONS := {
 	"sheep": {"kind": KIND_ENTITY, "scene": SHEEP_SCENE, "display_name": "Sheep"},
@@ -30,6 +31,7 @@ const DEFINITIONS := {
 	"precision_stone": {"kind": KIND_OBJECT, "scene": PRECISION_STONE_SCENE, "display_name": "Precision Stone"},
 	"meteor_scroll": {"kind": KIND_OBJECT, "scene": METEOR_SCROLL_SCENE, "display_name": "Meteor Scroll"},
 	"chest": {"kind": KIND_OBJECT, "scene": CHEST_SCENE, "display_name": "Chest"},
+	"vision_tower": {"kind": KIND_OBJECT, "scene": VISION_TOWER_SCENE, "display_name": "Vision Tower"},
 }
 
 

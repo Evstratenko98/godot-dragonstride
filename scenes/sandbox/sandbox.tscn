@@ -11,6 +11,7 @@
 [ext_resource type="Texture2D" uid="uid://1nkuwf8grh3o" path="res://art/Tiny Swords (Update 010)/Terrain/Bridge/Bridge_All.png" id="15_ditf4"]
 [ext_resource type="PackedScene" path="res://scenes/entities/enemies/warrior/warrior.tscn" id="21_hswqa"]
 [ext_resource type="PackedScene" path="res://scenes/objects/chest/chest.tscn" id="22_chest"]
+[ext_resource type="PackedScene" path="res://scenes/objects/vision_tower/vision_tower.tscn" id="23_vision_tower"]
 [ext_resource type="Script" uid="uid://c8m5cyqp3ubkn" path="res://scenes/world/topology/world_surface_layer.gd" id="30_surface"]
 [ext_resource type="Script" uid="uid://diqy8b26w2bbu" path="res://scenes/world/topology/world_ramp_connection.gd" id="31_ramp"]
 
@@ -430,6 +431,7 @@ tile_map_data = PackedByteArray("AAAJAAQAAQAAAAIAAAAJAAUAAQAAAAIAAAAJAAYAAQAAAAM
 tile_set = SubResource("TileSet_urllo")
 
 [node name="WorldEntities" type="Node2D" parent="." unique_id=2014890136]
+y_sort_enabled = true
 
 [node name="House" parent="WorldEntities" unique_id=438279484 instance=ExtResource("7_80wl1")]
 position = Vector2(92, 214)
@@ -449,6 +451,11 @@ position = Vector2(94, 340)
 [node name="Chest" parent="WorldEntities" unique_id=2093048575 instance=ExtResource("22_chest")]
 position = Vector2(608, 672)
 object_id = "chest_1"
+
+[node name="VisionTower" parent="WorldEntities" unique_id=1511029350 instance=ExtResource("23_vision_tower")]
+position = Vector2(288, 608)
+surface_height = 1
+object_id = "vision_tower_1"
 
 [node name="SpawnedObjects" type="Node2D" parent="." unique_id=1900879963]
 

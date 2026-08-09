@@ -1,4 +1,4 @@
-[gd_scene load_steps=22 format=3]
+[gd_scene load_steps=25 format=3]
 
 [ext_resource type="Script" path="res://scenes/world/services/world_grid.gd" id="1_grid"]
 [ext_resource type="Script" path="res://scenes/world/services/world_registry.gd" id="2_registry"]
@@ -13,6 +13,7 @@
 [ext_resource type="Script" path="res://scenes/world/services/world_spells.gd" id="9_spells"]
 [ext_resource type="Script" path="res://scenes/world/services/world_loot.gd" id="9_loot"]
 [ext_resource type="Script" path="res://scenes/world/services/world_action_stream.gd" id="9_stream"]
+[ext_resource type="Script" path="res://scenes/world/services/world_visibility.gd" id="9_visibility"]
 [ext_resource type="Script" path="res://scenes/world/world_runtime.gd" id="9_runtime"]
 [ext_resource type="Script" path="res://scenes/world/match_controller.gd" id="10_match"]
 [ext_resource type="PackedScene" path="res://scenes/grid_lines/grid_lines.tscn" id="11_grid_lines"]
@@ -21,6 +22,8 @@
 [ext_resource type="PackedScene" path="res://scenes/movement_range/movement_range_overlay.tscn" id="14_movement_range"]
 [ext_resource type="PackedScene" path="res://scenes/movement_range/movement_path_overlay.tscn" id="15_movement_path"]
 [ext_resource type="PackedScene" path="res://scenes/movement_range/action_target_range_overlay.tscn" id="16_action_target_range"]
+[ext_resource type="Script" path="res://scenes/world/presenters/fog_of_war_presenter.gd" id="17_fog_presenter"]
+[ext_resource type="Script" path="res://scenes/world/presenters/fog_explored_layer.gd" id="18_fog_explored"]
 
 [node name="MatchWorld" type="Node2D"]
 y_sort_enabled = true
@@ -64,6 +67,9 @@ script = ExtResource("9_loot")
 [node name="ActionStream" type="Node" parent="."]
 script = ExtResource("9_stream")
 
+[node name="Visibility" type="Node" parent="."]
+script = ExtResource("9_visibility")
+
 [node name="WorldRuntime" type="Node" parent="."]
 script = ExtResource("9_runtime")
 
@@ -85,6 +91,14 @@ script = ExtResource("10_match")
 [node name="MovementPathOverlay" parent="." instance=ExtResource("15_movement_path")]
 
 [node name="CellHover" parent="." instance=ExtResource("12_cell_hover")]
+
+[node name="FogOfWarPresenter" type="Node2D" parent="."]
+z_index = 2000
+z_as_relative = false
+script = ExtResource("17_fog_presenter")
+
+[node name="ExploredLayer" type="Node2D" parent="FogOfWarPresenter"]
+script = ExtResource("18_fog_explored")
 
 [node name="Music" type="AudioStreamPlayer" parent="."]
 

@@ -39,6 +39,11 @@ static func prepare_authoritative_path(
 	if shortest_path.is_empty():
 		return WorldActionStream.REJECTION_INVALID_ACTION
 	var executable_step_count: int = shortest_path.size()
+	if runtime.visibility != null and runtime.visibility.fog_enabled:
+		for path_index: int in range(shortest_path.size()):
+			if runtime.visibility.get_visibility_mode(player.owner_player_id, shortest_path[path_index]) == WorldVisibility.VisibilityMode.HIDDEN:
+				executable_step_count = path_index + 1
+				break
 	if turns != null and turns.is_turn_mode_enabled():
 		if executable_step_count > turns.get_steps_left(player.entity_id):
 			return WorldActionStream.REJECTION_INVALID_ACTION

@@ -1,4 +1,4 @@
-[gd_scene load_steps=14 format=3]
+[gd_scene load_steps=15 format=3]
 
 [ext_resource type="Script" path="res://scenes/objects/chest/chest.gd" id="1_chest"]
 [ext_resource type="Texture2D" path="res://art/chest/frame_000.png" id="2_closed"]
@@ -10,6 +10,7 @@
 [ext_resource type="Texture2D" path="res://art/chest/frame_006.png" id="8_frame_6"]
 [ext_resource type="Texture2D" path="res://art/chest/frame_007.png" id="9_frame_7"]
 [ext_resource type="Texture2D" path="res://art/chest/frame_008.png" id="10_opened"]
+[ext_resource type="Script" path="res://scenes/inspection/world_inspectable.gd" id="11_inspectable"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_chest"]
 size = Vector2(46, 30)
@@ -54,6 +55,11 @@ _data = {
 script = ExtResource("1_chest")
 normal_texture = ExtResource("2_closed")
 destroyed_texture = ExtResource("10_opened")
+
+[node name="Inspectable" type="Node" parent="."]
+script = ExtResource("11_inspectable")
+display_name = "Сундук"
+description = "Старинный сундук со случайной наградой. Откройте его соседним бойцом, чтобы узнать содержимое."
 
 [node name="Sprite2D" type="Sprite2D" parent="."]
 texture = ExtResource("2_closed")

@@ -19,6 +19,7 @@ enum ActionType {
 	SET_TURN_MODE,
 	PLAYER_TURN_SKIPPED,
 	BLOCKING_EVENT,
+	SET_FOG_OF_WAR,
 }
 
 const KEY_REQUEST_ID := "request_id"
@@ -65,11 +66,16 @@ static func from_dictionary(record: Dictionary) -> WorldActionRecord:
 	if not NetworkProtocol.is_current_version(int(record.get(KEY_PROTOCOL_VERSION, 0))):
 		return null
 	var action_type_value: int = int(record.get(KEY_ACTION_TYPE, int(ActionType.NONE)))
-	if action_type_value <= int(ActionType.NONE) or action_type_value > int(ActionType.BLOCKING_EVENT):
+	if action_type_value <= int(ActionType.NONE) or action_type_value > int(ActionType.SET_FOG_OF_WAR):
 		return null
 
 	var payload_value: Variant = record.get(KEY_PAYLOAD, {})
 	if not (payload_value is Dictionary):
+		return null
+	if (
+		action_type_value == int(ActionType.SET_FOG_OF_WAR)
+		and not ((payload_value as Dictionary).get("is_enabled") is bool)
+	):
 		return null
 
 	var action: WorldActionRecord = WorldActionRecord.new()
@@ -101,7 +107,7 @@ func to_dictionary() -> Dictionary:
 
 
 func to_lifecycle_dictionary() -> Dictionary:
-	return {
+	var record: Dictionary = {
 		KEY_PROTOCOL_VERSION: NetworkProtocol.PROTOCOL_VERSION,
 		KEY_REQUEST_ID: request_id,
 		KEY_MATCH_ID: match_id,
@@ -111,3 +117,6 @@ func to_lifecycle_dictionary() -> Dictionary:
 		KEY_ACTION_TYPE: int(action_type),
 		KEY_TURN_REVISION: turn_revision,
 	}
+	if WorldActionCatalog.uses_inline_lifecycle_payload(action_type):
+		record[KEY_PAYLOAD] = payload.duplicate(true)
+	return record

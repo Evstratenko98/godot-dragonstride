@@ -128,6 +128,8 @@ func print_entity_attack_result(
 	target_health: int,
 	target_max_health: int
 ) -> void:
+	if not _can_reveal_combat_event(attacker_entity_id, target_entity_id, Vector3i.ZERO, false):
+		return
 	var attacker_name: String = _get_entity_display_name_by_id(attacker_entity_id)
 	var target_name: String = _get_entity_display_name_by_id(target_entity_id)
 	runtime.print_console("%s hit %s for %d damage. %s HP: %d/%d" % [
@@ -214,6 +216,8 @@ func _broadcast_entity_damage_result(target_entity: Node, was_lethal: bool) -> v
 
 
 func print_non_entity_attack_result(attacker: Node, cell: Vector3i) -> void:
+	if not _can_reveal_combat_event(get_entity_id(attacker), "", cell, true):
+		return
 	var target_entity: Node = runtime.get_entity_at_surface(cell)
 	if target_entity != null and target_entity != attacker:
 		return
@@ -224,6 +228,26 @@ func print_non_entity_attack_result(attacker: Node, cell: Vector3i) -> void:
 		return
 
 	runtime.print_console("%s hit %s" % [get_entity_display_name(attacker), runtime.get_surface_display_name(cell)])
+
+
+func _can_reveal_combat_event(
+	attacker_entity_id: String,
+	target_entity_id: String,
+	target_surface: Vector3i,
+	uses_explicit_surface: bool
+) -> bool:
+	if runtime.visibility == null or not runtime.visibility.fog_enabled:
+		return true
+	var attacker: Entity = runtime.get_entity_by_id(attacker_entity_id) as Entity
+	if attacker == null or not runtime.visibility.is_surface_visible_for_local_player(attacker.current_surface):
+		return false
+	var resolved_target_surface: Vector3i = target_surface
+	if not uses_explicit_surface:
+		var target: Entity = runtime.get_entity_by_id(target_entity_id) as Entity
+		if target == null:
+			return false
+		resolved_target_surface = target.current_surface
+	return runtime.visibility.is_surface_visible_for_local_player(resolved_target_surface)
 
 
 func _get_entity_display_name_by_id(entity_id: String) -> String:

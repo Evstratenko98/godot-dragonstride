@@ -3,6 +3,7 @@ extends Control
 
 signal resume_requested
 signal camera_mode_requested(camera_mode: String)
+signal fog_of_war_requested(is_enabled: bool)
 signal exit_game_requested
 signal open_state_changed(is_open: bool)
 
@@ -16,8 +17,13 @@ enum MenuView {
 @onready var camera_mode_select: OptionButton = get_node(
 	"Center/Panel/Margin/SettingsMenu/CameraModeRow/CameraModeSelect"
 ) as OptionButton
+@onready var fog_of_war_toggle: CheckButton = get_node(
+	"Center/Panel/Margin/SettingsMenu/FogOfWarRow/FogOfWarToggle"
+) as CheckButton
 
 var current_view: MenuView = MenuView.ROOT
+var authoritative_fog_enabled: bool = true
+var can_edit_fog: bool = false
 
 
 func _ready() -> void:
@@ -29,8 +35,9 @@ func _ready() -> void:
 	hide()
 
 
-func open(camera_mode: String) -> void:
+func open(camera_mode: String, fog_enabled: bool, allow_fog_edit: bool) -> void:
 	_select_camera_mode(camera_mode)
+	set_fog_of_war_state(fog_enabled, allow_fog_edit)
 	_set_view(MenuView.ROOT)
 	show()
 	open_state_changed.emit(true)
@@ -49,6 +56,15 @@ func is_open() -> bool:
 
 func get_current_view() -> MenuView:
 	return current_view
+
+
+func set_fog_of_war_state(is_enabled: bool, allow_edit: bool) -> void:
+	authoritative_fog_enabled = is_enabled
+	can_edit_fog = allow_edit
+	if fog_of_war_toggle == null:
+		return
+	fog_of_war_toggle.set_pressed_no_signal(authoritative_fog_enabled)
+	fog_of_war_toggle.disabled = not can_edit_fog
 
 
 func handle_cancel() -> void:
@@ -92,6 +108,14 @@ func _on_exit_button_pressed() -> void:
 func _on_camera_mode_select_item_selected(item_index: int) -> void:
 	var camera_mode: String = str(camera_mode_select.get_item_metadata(item_index))
 	camera_mode_requested.emit(camera_mode)
+
+
+func _on_fog_of_war_toggle_toggled(is_enabled: bool) -> void:
+	if not can_edit_fog:
+		fog_of_war_toggle.set_pressed_no_signal(authoritative_fog_enabled)
+		return
+	fog_of_war_requested.emit(is_enabled)
+	fog_of_war_toggle.set_pressed_no_signal(authoritative_fog_enabled)
 
 
 func _on_back_button_pressed() -> void:

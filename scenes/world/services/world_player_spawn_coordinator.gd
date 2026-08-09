@@ -6,7 +6,7 @@ const INVALID_SPAWN_SURFACE: Vector3i = Vector3i(-1, -1, -1)
 const SINGLEPLAYER_WARRIOR_COLOR := "Purple"
 
 var runtime: WorldRuntime = null
-var players_root: Node2D = null
+var visual_entities_root: Node2D = null
 var squad_registry: PlayerSquadRegistry = null
 var spawn_surfaces: Array[Vector3i] = []
 var authoritative_snapshot: Dictionary = {}
@@ -14,12 +14,12 @@ var authoritative_snapshot: Dictionary = {}
 
 func configure(
 	new_runtime: WorldRuntime,
-	new_players_root: Node2D,
+	new_visual_entities_root: Node2D,
 	new_registry: PlayerSquadRegistry,
 	new_spawn_surfaces: Array[Vector3i]
 ) -> void:
 	runtime = new_runtime
-	players_root = new_players_root
+	visual_entities_root = new_visual_entities_root
 	squad_registry = new_registry
 	spawn_surfaces = new_spawn_surfaces.duplicate()
 
@@ -127,7 +127,7 @@ func _spawn_member(
 	if member == null:
 		return null
 	member.name = WorldPlayerSpawnPlanner.get_player_node_name(member_info)
-	players_root.add_child(member)
+	visual_entities_root.add_child(member)
 	member.setup_multiplayer_player(member_info)
 	var entity_id: String = make_member_entity_id(str(player_info.get("player_id", "")), squad_slot)
 	member.start(runtime.surface_to_world(spawn_surface), bool(player_info.get("is_local", false)), entity_id)
