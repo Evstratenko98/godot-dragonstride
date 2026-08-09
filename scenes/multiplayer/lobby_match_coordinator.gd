@@ -19,14 +19,14 @@ const LOBBY_SCENE_PATH := "res://scenes/menu/lobby/lobby_host.tscn"
 const MAIN_MENU_SCENE_PATH := "res://scenes/menu/main_menu/main_menu.tscn"
 const PREPARE_RETRY_MSEC := 1000
 const TRANSPORT_TIMEOUT_MSEC := 15000
-const WORLD_TIMEOUT_MSEC := 10000
+const WORLD_TIMEOUT_MSEC := 60000
 const MAX_HANDLED_MATCH_IDS := 32
 
 var state: State = State.IDLE
 var deadline_msec: int = 0
 var next_prepare_send_msec: int = 0
 var ready_steam_ids: Dictionary[int, bool] = {}
-var world_ready_steam_ids: Dictionary[int, bool] = {}
+var world_ready_steam_ids: Dictionary[int, String] = {}
 var handled_match_ids: Dictionary[String, bool] = {}
 var handled_match_id_order: Array[String] = []
 var last_notice_code: String = ""
@@ -257,20 +257,34 @@ func _on_match_load_requested(submitted_match_id: String) -> void:
 		return
 	if state == State.LOADING_MATCH or state == State.WAITING_FOR_WORLD or state == State.IN_MATCH:
 		return
+	world_ready_steam_ids.clear()
 	_set_state(State.LOADING_MATCH)
 	deadline_msec = Time.get_ticks_msec() + WORLD_TIMEOUT_MSEC
 	GameSession.go_to_selected_scene()
 	_set_state(State.WAITING_FOR_WORLD)
 
 
-func _on_player_world_ready_received(steam_id: int, submitted_match_id: String) -> void:
+func _on_player_world_ready_received(
+	steam_id: int,
+	submitted_match_id: String,
+	document_hash: String,
+	topology_hash: String
+) -> void:
 	if submitted_match_id != GameSession.get_match_id() or state != State.WAITING_FOR_WORLD:
 		return
-	world_ready_steam_ids[steam_id] = true
+	world_ready_steam_ids[steam_id] = document_hash + ":" + topology_hash
 	if not GameSession.is_host():
 		return
+	var expected_hashes: String = ""
 	for player: Dictionary in GameSession.get_players():
-		if not world_ready_steam_ids.has(int(player.get("steam_id", 0))):
+		var player_steam_id: int = int(player.get("steam_id", 0))
+		if not world_ready_steam_ids.has(player_steam_id):
+			return
+		var reported_hashes: String = world_ready_steam_ids[player_steam_id]
+		if expected_hashes.is_empty():
+			expected_hashes = reported_hashes
+		elif reported_hashes != expected_hashes:
+			_cancel_start("map_invalid", true)
 			return
 	NetworkManager.players.broadcast_players_committed(GameSession.get_match_id())
 

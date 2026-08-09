@@ -1,4 +1,4 @@
-[gd_scene load_steps=25 format=3]
+[gd_scene load_steps=28 format=3]
 
 [ext_resource type="Script" path="res://scenes/world/services/world_grid.gd" id="1_grid"]
 [ext_resource type="Script" path="res://scenes/world/services/world_registry.gd" id="2_registry"]
@@ -24,6 +24,9 @@
 [ext_resource type="PackedScene" path="res://scenes/movement_range/action_target_range_overlay.tscn" id="16_action_target_range"]
 [ext_resource type="Script" path="res://scenes/world/presenters/fog_of_war_presenter.gd" id="17_fog_presenter"]
 [ext_resource type="Script" path="res://scenes/world/presenters/fog_explored_layer.gd" id="18_fog_explored"]
+[ext_resource type="Script" path="res://scenes/world/map/world_map_builder.gd" id="19_map_builder"]
+[ext_resource type="Script" path="res://scenes/world/map/world_map_startup_coordinator.gd" id="20_map_startup"]
+[ext_resource type="Script" path="res://scenes/world/loading/world_loading_screen.gd" id="21_loading"]
 
 [node name="MatchWorld" type="Node2D"]
 y_sort_enabled = true
@@ -72,6 +75,15 @@ script = ExtResource("9_visibility")
 
 [node name="WorldRuntime" type="Node" parent="."]
 script = ExtResource("9_runtime")
+
+[node name="MapBuilder" type="Node" parent="."]
+script = ExtResource("19_map_builder")
+
+[node name="LoadingScreen" type="CanvasLayer" parent="."]
+script = ExtResource("21_loading")
+
+[node name="MapStartupCoordinator" type="Node" parent="."]
+script = ExtResource("20_map_startup")
 
 [node name="MatchController" type="Node" parent="."]
 script = ExtResource("10_match")

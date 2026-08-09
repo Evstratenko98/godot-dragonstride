@@ -3,7 +3,7 @@ extends NetworkChannel
 
 signal player_spawn_snapshot_requested(requester_peer_id: int)
 signal player_spawn_snapshot_received(snapshot: Dictionary)
-signal player_world_ready_received(steam_id: int, match_id: String)
+signal player_world_ready_received(steam_id: int, match_id: String, document_hash: String, topology_hash: String)
 signal players_committed_received(match_id: String)
 signal player_respawn_pending_received(match_id: String, entity_id: String)
 signal player_world_failed_received(steam_id: int, match_id: String, reason_code: String)
@@ -31,13 +31,13 @@ func send_player_spawn_snapshot(peer_id: int, snapshot: Dictionary) -> void:
 	rpc_id(peer_id, "_receive_player_spawn_snapshot", snapshot)
 
 
-func report_player_world_ready(match_id: String) -> void:
-	if not _can_send() or match_id.is_empty():
+func report_player_world_ready(match_id: String, document_hash: String, topology_hash: String) -> void:
+	if not _can_send() or match_id.is_empty() or not _is_valid_world_hash(document_hash) or not _is_valid_world_hash(topology_hash):
 		return
 	if connection.is_host:
-		player_world_ready_received.emit(connection.local_steam_id, match_id)
+		player_world_ready_received.emit(connection.local_steam_id, match_id, document_hash, topology_hash)
 		return
-	rpc_id(1, "_submit_player_world_ready", match_id)
+	rpc_id(1, "_submit_player_world_ready", match_id, document_hash, topology_hash)
 
 
 func report_player_world_failed(match_id: String, reason_code: String) -> void:
@@ -45,7 +45,7 @@ func report_player_world_failed(match_id: String, reason_code: String) -> void:
 		not _can_send()
 		or connection.is_host
 		or not _is_valid_match_message(match_id)
-		or not NetworkProtocol.is_safe_snapshot_sync_failure_reason(reason_code)
+		or not NetworkProtocol.is_safe_world_start_failure_reason(reason_code)
 	):
 		return
 	rpc_id(1, "_submit_player_world_failed", match_id, reason_code)
@@ -85,13 +85,17 @@ func _receive_player_spawn_snapshot(snapshot: Dictionary) -> void:
 
 
 @rpc("any_peer", "call_remote", "reliable", 1)
-func _submit_player_world_ready(match_id: String) -> void:
+func _submit_player_world_ready(match_id: String, document_hash: String, topology_hash: String) -> void:
 	var requester_peer_id: int = _get_registered_sender_peer_id()
-	if requester_peer_id == 0 or match_id != GameSession.get_match_id():
+	if requester_peer_id == 0 or match_id != GameSession.get_match_id() or not _is_valid_world_hash(document_hash) or not _is_valid_world_hash(topology_hash):
 		return
 	var steam_id: int = peers.get_steam_id_for_peer_id(requester_peer_id)
 	if not GameSession.get_player_record_by_steam_id(steam_id).is_empty():
-		player_world_ready_received.emit(steam_id, match_id)
+		player_world_ready_received.emit(steam_id, match_id, document_hash, topology_hash)
+
+
+func _is_valid_world_hash(value: String) -> bool:
+	return value.length() == 64 and value.is_valid_hex_number(false)
 
 
 @rpc("any_peer", "call_remote", "reliable", 1)
@@ -100,7 +104,7 @@ func _submit_player_world_failed(match_id: String, reason_code: String) -> void:
 	if (
 		requester_peer_id == 0
 		or not _is_valid_match_message(match_id)
-		or not NetworkProtocol.is_safe_snapshot_sync_failure_reason(reason_code)
+		or not NetworkProtocol.is_safe_world_start_failure_reason(reason_code)
 	):
 		return
 	var steam_id: int = peers.get_steam_id_for_peer_id(requester_peer_id)

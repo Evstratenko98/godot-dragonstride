@@ -3,6 +3,7 @@ extends Node
 
 const MAIN_MENU_SCENE_PATH := "res://scenes/menu/main_menu/main_menu.tscn"
 const GAME_HUD_SCRIPT := preload("res://scenes/hud/hud.gd")
+const WORLD_START_TIMEOUT_MSEC: int = 60_000
 
 @export var runtime_path: NodePath = ^"../WorldRuntime"
 @export var level_container_path: NodePath = ^"../LevelContainer"
@@ -15,6 +16,8 @@ const GAME_HUD_SCRIPT := preload("res://scenes/hud/hud.gd")
 @export var hud_path: NodePath = ^"../HUD"
 @export var music_player_path: NodePath = ^"../Music"
 @export var death_sound_player_path: NodePath = ^"../DeathSound"
+@export var map_startup_path: NodePath = ^"../MapStartupCoordinator"
+@export var loading_screen_path: NodePath = ^"../LoadingScreen"
 
 @onready var runtime: WorldRuntime = get_node(runtime_path) as WorldRuntime
 @onready var level_container: Node2D = get_node(level_container_path) as Node2D
@@ -27,16 +30,21 @@ const GAME_HUD_SCRIPT := preload("res://scenes/hud/hud.gd")
 @onready var hud: GAME_HUD_SCRIPT = get_node(hud_path) as GAME_HUD_SCRIPT
 @onready var music_player: AudioStreamPlayer = get_node(music_player_path) as AudioStreamPlayer
 @onready var death_sound_player: AudioStreamPlayer = get_node(death_sound_player_path) as AudioStreamPlayer
+@onready var map_startup: WorldMapStartupCoordinator = get_node(map_startup_path) as WorldMapStartupCoordinator
+@onready var loading_screen: WorldLoadingScreen = get_node(loading_screen_path) as WorldLoadingScreen
 
 var level: WorldLevel = null
 var is_ending_game: bool = false
 var has_started_match: bool = false
+var world_start_deadline_msec: int = 0
 
 
 func _ready() -> void:
 	if not GameSession.has_active_session():
 		GameSession.start_singleplayer()
 
+	hud.visible = false
+	world_start_deadline_msec = Time.get_ticks_msec() + WORLD_START_TIMEOUT_MSEC
 	call_deferred("_initialize_match")
 
 
@@ -57,10 +65,14 @@ func start_match() -> void:
 	var start_error: String = await runtime.start_match_runtime()
 	if not start_error.is_empty():
 		has_started_match = false
-		if GameSession.is_multiplayer():
-			LobbyMatchCoordinator.cancel_runtime_start(start_error)
+		await _handle_map_start_failure(start_error)
 		return
+	_set_local_input_enabled(false)
+	loading_screen.set_phase("Ожидание готовности игроков")
+	await loading_screen.hide_after_minimum()
+	_set_local_input_enabled(true)
 	_enable_sandbox_turn_mode()
+	hud.visible = true
 	hud.bind_session()
 	if level.has_welcome_modal():
 		hud.show_level_welcome(level.get_welcome_modal_title(), level.get_welcome_modal_text())
@@ -90,13 +102,23 @@ func _initialize_match() -> void:
 	var level_scene: PackedScene = GameSession.get_selected_level_scene()
 	if level_scene == null:
 		push_error("Selected level scene is not available: " + GameSession.selected_level_id)
+		await _handle_map_start_failure("map_build_failed")
 		return
 
 	var loaded_level: WorldLevel = level_scene.instantiate() as WorldLevel
 	if loaded_level == null:
 		push_error("Selected scene root must inherit WorldLevel: " + GameSession.selected_level_id)
+		await _handle_map_start_failure("map_build_failed")
 		return
 
+	var map_error: String = await map_startup.prepare_level(
+		loaded_level,
+		world_start_deadline_msec
+	)
+	if not map_error.is_empty():
+		loaded_level.free()
+		await _handle_map_start_failure(map_error)
+		return
 	level = loaded_level
 	runtime.configure_for_level(level)
 	if not runtime.match_end_requested.is_connected(_on_runtime_match_end_requested):
@@ -161,6 +183,31 @@ func _leave_active_multiplayer_session() -> void:
 		return
 
 	NetworkManager.connection.stop_network()
+
+
+func _set_local_input_enabled(should_enable: bool) -> void:
+	for member: PlayerCharacter in runtime.get_local_squad_members():
+		member.can_receive_input = should_enable
+	runtime.set_local_camera_input_blocked(not should_enable)
+
+
+func _handle_map_start_failure(reason_code: String) -> void:
+	var safe_reason_code: String = reason_code
+	if not NetworkProtocol.is_safe_world_start_failure_reason(safe_reason_code):
+		safe_reason_code = "map_build_failed"
+	loading_screen.show_failure(safe_reason_code)
+	await get_tree().process_frame
+	if GameSession.is_multiplayer() and not GameSession.is_host():
+		NetworkManager.players.report_player_world_failed(
+			GameSession.get_match_id(),
+			safe_reason_code
+		)
+	await loading_screen.wait_until_minimum_visible()
+	if GameSession.is_multiplayer():
+		LobbyMatchCoordinator.cancel_runtime_start(safe_reason_code)
+		return
+	GameSession.clear()
+	get_tree().change_scene_to_file(MAIN_MENU_SCENE_PATH)
 
 
 func _on_runtime_match_end_requested() -> void:

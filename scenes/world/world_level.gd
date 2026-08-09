@@ -7,6 +7,12 @@ extends Node2D
 @export var terrain_topology_root_path: NodePath = ^"TerrainTopology"
 
 var runtime: WorldRuntime = null
+var map_grid_size: Vector2i = Vector2i.ZERO
+var map_walkable_layer_names: PackedStringArray = PackedStringArray()
+var map_character_walkable_layer_names: PackedStringArray = PackedStringArray()
+var map_spawn_surfaces: Array[Vector3i] = []
+var map_document_hash: String = ""
+var has_committed_map: bool = false
 
 
 func configure_runtime(new_runtime: WorldRuntime) -> void:
@@ -22,31 +28,48 @@ func get_definition() -> LevelDefinition:
 
 
 func get_grid_size() -> Vector2i:
-	if definition == null:
-		return Vector2i.ZERO
-
-	return definition.grid_size
+	return map_grid_size
 
 
 func get_walkable_layer_names() -> PackedStringArray:
-	if definition == null:
-		return PackedStringArray()
-
-	return definition.walkable_layer_names
+	return map_walkable_layer_names.duplicate()
 
 
 func get_character_walkable_layer_names() -> PackedStringArray:
-	if definition == null:
-		return PackedStringArray()
-
-	return definition.character_walkable_layer_names
+	return map_character_walkable_layer_names.duplicate()
 
 
 func get_spawn_surfaces() -> Array[Vector3i]:
-	if definition == null:
-		return []
+	return map_spawn_surfaces.duplicate()
 
-	return definition.spawn_surfaces.duplicate()
+
+func generate_map_document(_seed: int) -> WorldMapDocument:
+	return null
+
+
+func commit_map_document(document: WorldMapDocument, document_hash: String) -> void:
+	map_grid_size = document.grid_size
+	map_spawn_surfaces = document.player_spawn_surfaces.duplicate()
+	map_document_hash = document_hash
+	map_walkable_layer_names.clear()
+	map_character_walkable_layer_names.clear()
+	for record: Dictionary in document.surface_layers:
+		var source_layer: String = str(record.get("source_layer", ""))
+		if source_layer.is_empty():
+			continue
+		if bool(record.get("character_only", false)):
+			map_character_walkable_layer_names.append(source_layer)
+		else:
+			map_walkable_layer_names.append(source_layer)
+	has_committed_map = true
+
+
+func has_runtime_map() -> bool:
+	return has_committed_map
+
+
+func get_map_document_hash() -> String:
+	return map_document_hash
 
 
 func get_terrain_topology_root() -> Node:

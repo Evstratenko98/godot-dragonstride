@@ -122,7 +122,11 @@ func prepare_multiplayer_players() -> String:
 
 
 func report_world_ready_and_wait_for_commit() -> String:
-	NetworkManager.players.report_player_world_ready(GameSession.get_match_id())
+	NetworkManager.players.report_player_world_ready(
+		GameSession.get_match_id(),
+		level.get_map_document_hash(),
+		runtime.get_topology_hash()
+	)
 	var deadline_msec: int = Time.get_ticks_msec() + PLAYER_COMMIT_TIMEOUT_MSEC
 	while is_inside_tree() and not are_players_committed and Time.get_ticks_msec() < deadline_msec:
 		await get_tree().process_frame

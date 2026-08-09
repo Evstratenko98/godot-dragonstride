@@ -1,0 +1,13 @@
+[gd_resource type="TileSet" format=3 uid="uid://cqo2e2yhfcqf3"]
+
+[ext_resource type="Texture2D" uid="uid://b0sr73cw4wvfi" path="res://art/Tiny Swords (Free Pack)/Terrain/Decorations/Clouds/Clouds_01.png" id="4_i73x7"]
+
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_14r8b"]
+texture = ExtResource("4_i73x7")
+texture_region_size = Vector2i(256, 256)
+0:0/0 = 0
+1:0/0 = 0
+
+[resource]
+tile_size = Vector2i(256, 256)
+sources/0 = SubResource("TileSetAtlasSource_14r8b")

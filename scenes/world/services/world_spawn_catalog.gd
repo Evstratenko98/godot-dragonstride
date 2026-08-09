@@ -37,3 +37,17 @@ const DEFINITIONS := {
 
 static func normalize_type_key(type_key: String) -> String:
 	return type_key.strip_edges().to_lower()
+
+
+static func has_type(type_key: String) -> bool:
+	return DEFINITIONS.has(normalize_type_key(type_key))
+
+
+static func get_kind(type_key: String) -> String:
+	var definition: Dictionary = DEFINITIONS.get(normalize_type_key(type_key), {}) as Dictionary
+	return str(definition.get("kind", ""))
+
+
+static func get_scene(type_key: String) -> PackedScene:
+	var definition: Dictionary = DEFINITIONS.get(normalize_type_key(type_key), {}) as Dictionary
+	return definition.get("scene") as PackedScene

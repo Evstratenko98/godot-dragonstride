@@ -12,6 +12,7 @@ extends Node
 @onready var actions: NetworkActionChannel = get_node(^"Actions") as NetworkActionChannel
 @onready var match_channel: NetworkMatchChannel = get_node(^"Match") as NetworkMatchChannel
 @onready var players: NetworkPlayerChannel = get_node(^"Players") as NetworkPlayerChannel
+@onready var level_map: NetworkLevelMapChannel = get_node(^"LevelMap") as NetworkLevelMapChannel
 
 var peers: NetworkPeerRegistry = NetworkPeerRegistry.new()
 var store: NetworkReplicationStore = NetworkReplicationStore.new()
@@ -30,6 +31,7 @@ func _ready() -> void:
 	actions.configure_context(connection, peers, store)
 	match_channel.configure_context(connection, peers, store)
 	players.configure_context(connection, peers, store)
+	level_map.configure_context(connection, peers, store)
 	if not GameSession.session_cleared.is_connected(_on_session_cleared):
 		GameSession.session_cleared.connect(_on_session_cleared)
 

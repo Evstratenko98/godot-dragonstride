@@ -1,8 +1,9 @@
 class_name NetworkProtocol
 extends RefCounted
 
-const PROTOCOL_VERSION := 10
+const PROTOCOL_VERSION := 11
 const SNAPSHOT_SCHEMA_VERSION := 3
+const MAP_SCHEMA_VERSION := 1
 const MAX_ROSTER_SIZE := 4
 const MAX_SQUAD_SIZE := 4
 const MAX_PLAYER_CHARACTERS := MAX_ROSTER_SIZE * MAX_SQUAD_SIZE
@@ -19,6 +20,12 @@ const MAX_BUFFERED_MESSAGES := 256
 const MAX_GAMEPLAY_VALUE := 1_000_000
 const MAX_ABSOLUTE_GRID_COORDINATE := 1_000_000
 const MAX_MOVE_PATH_SURFACES := 512
+const MAX_LEVEL_MAP_BYTES := 4 * 1024 * 1024
+const LEVEL_MAP_CHUNK_BYTES := 48 * 1024
+const MAX_LEVEL_MAP_CHUNKS := 86
+const MAX_LEVEL_MAP_LAYERS := 16
+const MAX_LEVEL_MAP_TILE_RECORDS := 131_072
+const MAX_LEVEL_MAP_PLACEMENTS := 512
 
 
 static func make_squad_member_entity_id(player_id: String, squad_slot: int) -> String:
@@ -38,6 +45,10 @@ const SAFE_REASON_CODES: PackedStringArray = [
 	"invalid_slot",
 	"invalid_target",
 	"invalid_turn",
+	"map_build_failed",
+	"map_invalid",
+	"map_sync_timeout",
+	"map_too_large",
 	"network_unavailable",
 	"not_active_player",
 	"payload_too_large",
@@ -137,3 +148,18 @@ static func get_snapshot_size_rejection_reason(payload: PackedByteArray) -> Stri
 
 static func is_safe_snapshot_sync_failure_reason(reason_code: String) -> bool:
 	return reason_code in ["state_sync_timeout", "state_sync_invalid", "snapshot_too_large"]
+
+
+static func is_safe_world_start_failure_reason(reason_code: String) -> bool:
+	return reason_code in [
+		"invalid_spawn_snapshot",
+		"map_build_failed",
+		"map_invalid",
+		"map_sync_timeout",
+		"map_too_large",
+		"snapshot_too_large",
+		"spawn_snapshot_timeout",
+		"state_sync_invalid",
+		"state_sync_timeout",
+		"world_timeout",
+	]
