@@ -3,6 +3,7 @@ extends Control
 const NOTICE_MESSAGES := {
 	"host_disconnected": "Связь с хозяином потеряна. Матч завершён.",
 	"state_sync_failed": "Не удалось синхронизировать мир. Соединение с матчем закрыто.",
+	"snapshot_too_large": "Состояние мира слишком велико для сетевой синхронизации.",
 }
 
 @onready var status_label: Label = %StatusLabel

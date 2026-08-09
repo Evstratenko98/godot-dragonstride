@@ -171,7 +171,12 @@ func _refresh_hover_state(force_change: bool = false) -> void:
 func _update_surface_label() -> void:
 	if surface_label == null:
 		return
-	surface_label.visible = has_hover_surface
+	surface_label.visible = (
+		has_hover_surface
+		and bound_character != null
+		and bound_character.action_mode == PlayerCharacter.ActionMode.MOVE
+		and not is_spell_targeting
+	)
 	if not surface_label.visible:
 		return
 	var cell_size: int = runtime.get_cell_size()

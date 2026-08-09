@@ -120,10 +120,14 @@ func cancel_runtime_start(reason_code: String) -> void:
 		_cancel_start(reason_code, GameSession.is_host())
 
 
-func handle_runtime_sync_failure(_reason_code: String) -> void:
+func handle_runtime_sync_failure(reason_code: String) -> void:
 	if not GameSession.is_multiplayer() or GameSession.is_host():
 		return
-	last_notice_code = "state_sync_failed"
+	last_notice_code = (
+		reason_code
+		if reason_code == WorldActionSnapshotCodec.REJECTION_SNAPSHOT_TOO_LARGE
+		else "state_sync_failed"
+	)
 	SteamManager.leave_lobby()
 	GameSession.clear()
 	_set_state(State.IDLE)

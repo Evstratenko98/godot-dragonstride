@@ -32,7 +32,8 @@ func configure_context(owner: WorldRuntime) -> void:
 		runtime.network,
 		runtime.players_service,
 		runtime.action_stream,
-		runtime.spawner
+		runtime.spawner,
+		snapshot
 	)
 
 

@@ -45,7 +45,7 @@ func report_player_world_failed(match_id: String, reason_code: String) -> void:
 		not _can_send()
 		or connection.is_host
 		or not _is_valid_match_message(match_id)
-		or reason_code not in ["state_sync_timeout", "state_sync_invalid"]
+		or not NetworkProtocol.is_safe_snapshot_sync_failure_reason(reason_code)
 	):
 		return
 	rpc_id(1, "_submit_player_world_failed", match_id, reason_code)
@@ -100,7 +100,7 @@ func _submit_player_world_failed(match_id: String, reason_code: String) -> void:
 	if (
 		requester_peer_id == 0
 		or not _is_valid_match_message(match_id)
-		or reason_code not in ["state_sync_timeout", "state_sync_invalid"]
+		or not NetworkProtocol.is_safe_snapshot_sync_failure_reason(reason_code)
 	):
 		return
 	var steam_id: int = peers.get_steam_id_for_peer_id(requester_peer_id)

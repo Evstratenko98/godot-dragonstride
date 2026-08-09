@@ -41,6 +41,19 @@ func create_action_stream_snapshot(next_stream_sequence_id: int) -> Dictionary:
 	}
 
 
+func get_current_record_capacity_rejection_reason() -> String:
+	if (
+		runtime.get_registered_entities().size() > NetworkProtocol.MAX_WORLD_RECORDS
+		or runtime.get_registered_objects().size() > NetworkProtocol.MAX_WORLD_RECORDS
+		or runtime.players_service.get_all_characters().size() > NetworkProtocol.MAX_PLAYER_CHARACTERS
+		or replication_store.get_world_spawn_records().size() > NetworkProtocol.MAX_WORLD_RECORDS
+		or replication_store.get_removed_world_items().size() > NetworkProtocol.MAX_WORLD_RECORDS
+		or replication_store.get_entity_ai_states().size() > NetworkProtocol.MAX_WORLD_RECORDS
+	):
+		return WorldActionSnapshotCodec.REJECTION_SNAPSHOT_TOO_LARGE
+	return ""
+
+
 func apply_action_stream_snapshot(snapshot: Dictionary) -> bool:
 	if (
 		int(snapshot.get("snapshot_schema_version", 0)) != NetworkProtocol.SNAPSHOT_SCHEMA_VERSION

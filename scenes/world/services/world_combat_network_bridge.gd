@@ -209,5 +209,6 @@ func send_vitality_states_to_peer(peer_id: int) -> void:
 func send_vitality_states_to_mapped_peers() -> void:
 	if not GameSession.is_host():
 		return
-	for steam_id: int in NetworkManager.peers.get_registered_steam_ids():
-		send_vitality_states_to_peer(NetworkManager.peers.get_peer_id_for_steam_id(steam_id))
+	var peer_map: Dictionary = NetworkManager.peers.get_peer_map()
+	for peer_id_value: Variant in peer_map.keys():
+		send_vitality_states_to_peer(int(peer_id_value))

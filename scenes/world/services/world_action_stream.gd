@@ -48,7 +48,6 @@ var is_processing_authority: bool = false
 var is_processing_remote: bool = false
 var has_pending_remote_process_request: bool = false
 var is_remote_snapshot_ready: bool = true
-var pending_snapshot_peer_ids: Dictionary[int, Dictionary] = {}
 var current_subsequence_id: int = 0
 var active_sync_id: String = ""
 var sync_deadline_msec: int = 0
@@ -60,6 +59,7 @@ var has_sync_failed: bool = false
 var last_sync_failure_reason: String = ""
 var diagnostics: WorldActionStreamDiagnostics = WorldActionStreamDiagnostics.new()
 var intent_gate: WorldActionIntentGate = WorldActionIntentGate.new()
+var snapshot_responder: WorldActionSnapshotResponder = WorldActionSnapshotResponder.new()
 
 
 func _ready() -> void:
@@ -69,6 +69,7 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
+	snapshot_responder.disconnect_signals()
 	_disconnect_network_signals()
 	if GameSession.session_cleared.is_connected(_on_session_cleared):
 		GameSession.session_cleared.disconnect(_on_session_cleared)
@@ -77,6 +78,7 @@ func _exit_tree() -> void:
 func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void:
 	runtime = new_runtime
 	level = new_level
+	snapshot_responder.configure_context(runtime, self)
 	is_remote_snapshot_ready = not GameSession.is_multiplayer() or GameSession.is_host()
 
 
@@ -158,6 +160,12 @@ func get_expected_remote_sequence_id() -> int:
 	return next_remote_sequence_id
 
 
+func get_snapshot_boundary_sequence_id() -> int:
+	if not queued_actions.is_empty():
+		return queued_actions[0].sequence_id
+	return next_sequence_id
+
+
 func claim_current_subsequence_id() -> int:
 	if current_action == null:
 		return 0
@@ -166,25 +174,15 @@ func claim_current_subsequence_id() -> int:
 
 
 func request_peer_snapshot(peer_id: int) -> void:
-	if not _is_authority() or peer_id <= 0:
-		return
-	pending_snapshot_peer_ids[peer_id] = {
-		"match_id": GameSession.get_match_id(),
-		"sync_id": "%s-sync-%d" % [GameSession.get_match_id(), Time.get_ticks_usec()],
-		"expected_sequence_id": next_sequence_id,
-	}
-	if current_action == null:
-		_send_pending_snapshots()
+	snapshot_responder.request_peer_snapshot(peer_id)
 
 
 func cancel_peer_snapshot(peer_id: int) -> void:
-	pending_snapshot_peer_ids.erase(peer_id)
+	snapshot_responder.cancel_peer_snapshot(peer_id)
 
 
 func prune_disconnected_snapshot_peers() -> void:
-	for peer_id: int in pending_snapshot_peer_ids.keys():
-		if not NetworkManager.peers.has_steam_id_for_peer(peer_id):
-			pending_snapshot_peer_ids.erase(peer_id)
+	snapshot_responder.prune_disconnected_peers()
 
 
 func receive_profile_payload(sequence_id: int, payload: Dictionary) -> void:
@@ -373,7 +371,7 @@ func _process_authority_queue() -> void:
 			_broadcast_cancelled(current_action, rejection_reason)
 			action_cancelled.emit(current_action, rejection_reason)
 			current_action = null
-			_send_pending_snapshots()
+			snapshot_responder.try_send_pending()
 			continue
 
 		_broadcast_started(current_action)
@@ -395,7 +393,7 @@ func _process_authority_queue() -> void:
 			_broadcast_cancelled(current_action, failure_reason)
 			action_cancelled.emit(current_action, failure_reason)
 		current_action = null
-		_send_pending_snapshots()
+		snapshot_responder.try_send_pending()
 
 	is_processing_authority = false
 	stream_idle_changed.emit(true)
@@ -515,7 +513,6 @@ func _get_queued_internal_action_count() -> int:
 func _on_session_cleared() -> void:
 	intent_gate.clear()
 	_clear_remote_state()
-	pending_snapshot_peer_ids.clear()
 	diagnostics.reset()
 
 
@@ -552,31 +549,6 @@ func _broadcast_cancelled(action: WorldActionRecord, reason_code: String) -> voi
 		safe_reason_code = REJECTION_INVALID_ACTION
 	if GameSession.is_multiplayer() and GameSession.is_host():
 		NetworkManager.actions.broadcast_action_cancelled(action.to_lifecycle_dictionary(), safe_reason_code)
-
-
-func _send_pending_snapshots() -> void:
-	if pending_snapshot_peer_ids.is_empty() or current_action != null:
-		return
-	var boundary_sequence_id: int = next_sequence_id
-	if not queued_actions.is_empty():
-		boundary_sequence_id = queued_actions[0].sequence_id
-	var base_snapshot: Dictionary = runtime.create_action_stream_snapshot(boundary_sequence_id)
-	for peer_id: int in pending_snapshot_peer_ids.keys():
-		var request: Dictionary = pending_snapshot_peer_ids[peer_id]
-		var snapshot: Dictionary = base_snapshot.duplicate(true)
-		snapshot["protocol_version"] = NetworkProtocol.PROTOCOL_VERSION
-		snapshot["snapshot_schema_version"] = NetworkProtocol.SNAPSHOT_SCHEMA_VERSION
-		snapshot["match_id"] = str(request.get("match_id", ""))
-		snapshot["sync_id"] = str(request.get("sync_id", ""))
-		snapshot["boundary_sequence_id"] = boundary_sequence_id
-		snapshot["roster_hash"] = GameSession.get_roster_hash()
-		NetworkManager.actions.send_stream_snapshot(
-			peer_id,
-			str(request.get("match_id", "")),
-			str(request.get("sync_id", "")),
-			snapshot
-		)
-	pending_snapshot_peer_ids.clear()
 
 
 func _on_action_started(record: Dictionary) -> void:
@@ -687,28 +659,9 @@ func _on_stream_snapshot_invalid(sync_id: String) -> void:
 		_fail_sync("state_sync_invalid")
 
 
-func _on_stream_snapshot_requested(
-	requester_peer_id: int,
-	match_id: String,
-	sync_id: String,
-	expected_sequence_id: int
-) -> void:
-	if not _is_authority() or match_id != GameSession.get_match_id():
-		return
-	pending_snapshot_peer_ids[requester_peer_id] = {
-		"match_id": match_id,
-		"sync_id": sync_id,
-		"expected_sequence_id": expected_sequence_id,
-	}
-	if current_action == null:
-		_send_pending_snapshots()
-	else:
-		NetworkManager.actions.send_stream_snapshot_pending(
-			requester_peer_id,
-			match_id,
-			sync_id,
-			current_action.sequence_id
-		)
+func _on_stream_snapshot_rejected(sync_id: String, reason_code: String) -> void:
+	if sync_id == active_sync_id:
+		_fail_sync(reason_code)
 
 
 func _has_required_auxiliary_profiles(action: WorldActionRecord) -> bool:
@@ -893,8 +846,8 @@ func _connect_network_signals() -> void:
 		NetworkManager.actions.stream_snapshot_pending.connect(_on_stream_snapshot_pending)
 	if not NetworkManager.actions.stream_snapshot_invalid.is_connected(_on_stream_snapshot_invalid):
 		NetworkManager.actions.stream_snapshot_invalid.connect(_on_stream_snapshot_invalid)
-	if not NetworkManager.actions.stream_snapshot_requested.is_connected(_on_stream_snapshot_requested):
-		NetworkManager.actions.stream_snapshot_requested.connect(_on_stream_snapshot_requested)
+	if not NetworkManager.actions.stream_snapshot_rejected.is_connected(_on_stream_snapshot_rejected):
+		NetworkManager.actions.stream_snapshot_rejected.connect(_on_stream_snapshot_rejected)
 
 
 func _disconnect_network_signals() -> void:
@@ -910,8 +863,8 @@ func _disconnect_network_signals() -> void:
 		NetworkManager.actions.stream_snapshot_pending.disconnect(_on_stream_snapshot_pending)
 	if NetworkManager.actions.stream_snapshot_invalid.is_connected(_on_stream_snapshot_invalid):
 		NetworkManager.actions.stream_snapshot_invalid.disconnect(_on_stream_snapshot_invalid)
-	if NetworkManager.actions.stream_snapshot_requested.is_connected(_on_stream_snapshot_requested):
-		NetworkManager.actions.stream_snapshot_requested.disconnect(_on_stream_snapshot_requested)
+	if NetworkManager.actions.stream_snapshot_rejected.is_connected(_on_stream_snapshot_rejected):
+		NetworkManager.actions.stream_snapshot_rejected.disconnect(_on_stream_snapshot_rejected)
 
 
 func _is_authority() -> bool:

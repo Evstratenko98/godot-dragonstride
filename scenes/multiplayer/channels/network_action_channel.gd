@@ -9,6 +9,7 @@ signal action_rejected(request_id: int, reason_code: String)
 signal stream_snapshot_received(sync_id: String, snapshot: Dictionary)
 signal stream_snapshot_pending(sync_id: String, active_sequence_id: int)
 signal stream_snapshot_invalid(sync_id: String)
+signal stream_snapshot_rejected(sync_id: String, reason_code: String)
 signal stream_snapshot_requested(
 	requester_peer_id: int,
 	match_id: String,
@@ -76,25 +77,26 @@ func send_action_rejected(peer_id: int, request_id: int, reason_code: String) ->
 	rpc_id(peer_id, "_receive_action_rejected", GameSession.get_match_id(), request_id, reason_code)
 
 
-func send_stream_snapshot(peer_id: int, match_id: String, sync_id: String, snapshot: Dictionary) -> void:
+func send_stream_snapshot(peer_id: int, match_id: String, sync_id: String, snapshot: Dictionary) -> String:
 	if (
 		not _can_host_send()
 		or peer_id <= 0
 		or not _is_valid_match_message(match_id)
 		or not NetworkProtocol.is_valid_identifier(sync_id)
 	):
-		return
+		return "state_sync_invalid"
 	var serialized_snapshot: PackedByteArray = var_to_bytes(snapshot)
-	if not NetworkProtocol.is_valid_snapshot_size(serialized_snapshot):
-		return
+	var size_rejection: String = NetworkProtocol.get_snapshot_size_rejection_reason(serialized_snapshot)
+	if not size_rejection.is_empty():
+		return size_rejection
 	var chunk_count: int = ceili(
 		float(serialized_snapshot.size()) / float(NetworkProtocol.SNAPSHOT_CHUNK_BYTES)
 	)
 	if chunk_count <= 0 or chunk_count > NetworkProtocol.MAX_SNAPSHOT_CHUNKS:
-		return
+		return "snapshot_too_large"
 	var checksum: String = _get_sha256(serialized_snapshot)
 	if checksum.length() != 64:
-		return
+		return "state_sync_invalid"
 	for chunk_index: int in range(chunk_count):
 		var start_offset: int = chunk_index * NetworkProtocol.SNAPSHOT_CHUNK_BYTES
 		var end_offset: int = mini(
@@ -113,6 +115,31 @@ func send_stream_snapshot(peer_id: int, match_id: String, sync_id: String, snaps
 			checksum,
 			chunk
 		)
+	return ""
+
+
+func send_stream_snapshot_rejected(
+	peer_id: int,
+	match_id: String,
+	sync_id: String,
+	reason_code: String
+) -> void:
+	if (
+		not _can_host_send()
+		or peer_id <= 0
+		or not _is_valid_match_message(match_id)
+		or not NetworkProtocol.is_valid_identifier(sync_id)
+		or not NetworkProtocol.is_safe_snapshot_sync_failure_reason(reason_code)
+	):
+		return
+	rpc_id(
+		peer_id,
+		"_receive_stream_snapshot_rejected",
+		NetworkProtocol.PROTOCOL_VERSION,
+		match_id,
+		sync_id,
+		reason_code
+	)
 
 
 func send_stream_snapshot_pending(
@@ -192,6 +219,21 @@ func _receive_stream_snapshot_pending(
 ) -> void:
 	if _is_valid_match_message(match_id, protocol_version) and NetworkProtocol.is_valid_identifier(sync_id):
 		stream_snapshot_pending.emit(sync_id, active_sequence_id)
+
+
+@rpc("authority", "call_remote", "reliable", 1)
+func _receive_stream_snapshot_rejected(
+	protocol_version: int,
+	match_id: String,
+	sync_id: String,
+	reason_code: String
+) -> void:
+	if (
+		_is_valid_match_message(match_id, protocol_version)
+		and NetworkProtocol.is_valid_identifier(sync_id)
+		and NetworkProtocol.is_safe_snapshot_sync_failure_reason(reason_code)
+	):
+		stream_snapshot_rejected.emit(sync_id, reason_code)
 
 
 @rpc("authority", "call_remote", "reliable", 1)

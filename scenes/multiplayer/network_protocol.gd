@@ -1,7 +1,7 @@
 class_name NetworkProtocol
 extends RefCounted
 
-const PROTOCOL_VERSION := 8
+const PROTOCOL_VERSION := 9
 const SNAPSHOT_SCHEMA_VERSION := 2
 const MAX_ROSTER_SIZE := 4
 const MAX_SQUAD_SIZE := 4
@@ -47,6 +47,7 @@ const SAFE_REASON_CODES: PackedStringArray = [
 	"rate_limited",
 	"registration_failed",
 	"sequence_gap",
+	"snapshot_too_large",
 	"stale_inventory",
 	"stale_turn",
 	"state_sync_failed",
@@ -122,4 +123,17 @@ static func is_valid_intent_payload(payload: Variant) -> bool:
 
 
 static func is_valid_snapshot_size(payload: PackedByteArray) -> bool:
-	return not payload.is_empty() and payload.size() <= MAX_SNAPSHOT_BYTES
+	return not payload.is_empty() and get_snapshot_size_rejection_reason(payload).is_empty()
+
+
+static func get_snapshot_size_rejection_reason(payload: PackedByteArray) -> String:
+	if payload.size() > MAX_SNAPSHOT_BYTES:
+		return "snapshot_too_large"
+	var chunk_count: int = ceili(float(payload.size()) / float(SNAPSHOT_CHUNK_BYTES))
+	if chunk_count > MAX_SNAPSHOT_CHUNKS:
+		return "snapshot_too_large"
+	return ""
+
+
+static func is_safe_snapshot_sync_failure_reason(reason_code: String) -> bool:
+	return reason_code in ["state_sync_timeout", "state_sync_invalid", "snapshot_too_large"]

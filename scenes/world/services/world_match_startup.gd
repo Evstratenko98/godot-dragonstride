@@ -7,6 +7,7 @@ var network: WorldNetwork = null
 var players: WorldPlayers = null
 var action_stream: WorldActionStream = null
 var spawner: WorldSpawner = null
+var snapshot: WorldStateSnapshot = null
 
 
 func configure_context(
@@ -15,7 +16,8 @@ func configure_context(
 	new_network: WorldNetwork,
 	new_players: WorldPlayers,
 	new_action_stream: WorldActionStream,
-	new_spawner: WorldSpawner
+	new_spawner: WorldSpawner,
+	new_snapshot: WorldStateSnapshot
 ) -> void:
 	runtime = new_runtime
 	registry = new_registry
@@ -23,6 +25,7 @@ func configure_context(
 	players = new_players
 	action_stream = new_action_stream
 	spawner = new_spawner
+	snapshot = new_snapshot
 
 
 func start_match_runtime() -> String:
@@ -64,11 +67,29 @@ func _prepare_players_and_synchronize() -> String:
 	var player_prepare_error: String = await players.prepare_multiplayer_players()
 	if not player_prepare_error.is_empty():
 		return player_prepare_error
+	var snapshot_preflight_error: String = _get_host_snapshot_preflight_error()
+	if not snapshot_preflight_error.is_empty():
+		return snapshot_preflight_error
 	var sync_error: String = await action_stream.synchronize_initial_state()
 	if not sync_error.is_empty():
 		NetworkManager.players.report_player_world_failed(GameSession.get_match_id(), sync_error)
 		return sync_error
 	return await players.report_world_ready_and_wait_for_commit()
+
+
+func _get_host_snapshot_preflight_error() -> String:
+	if not GameSession.is_host():
+		return ""
+	var record_rejection: String = snapshot.get_current_record_capacity_rejection_reason()
+	if not record_rejection.is_empty():
+		return record_rejection
+	var boundary_sequence_id: int = action_stream.get_snapshot_boundary_sequence_id()
+	var base_snapshot: Dictionary = snapshot.create_action_stream_snapshot(boundary_sequence_id)
+	var preflight_snapshot: Dictionary = WorldActionSnapshotCodec.create_preflight_envelope(
+		base_snapshot,
+		boundary_sequence_id
+	)
+	return WorldActionSnapshotCodec.get_capacity_rejection_reason(preflight_snapshot)
 
 
 func _has_required_services() -> bool:
@@ -79,4 +100,5 @@ func _has_required_services() -> bool:
 		and players != null
 		and action_stream != null
 		and spawner != null
+		and snapshot != null
 	)
