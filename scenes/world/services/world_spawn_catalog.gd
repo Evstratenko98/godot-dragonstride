@@ -21,6 +21,8 @@ const PRECISION_STONE_SCENE := preload("res://scenes/objects/precision_stone/pre
 const METEOR_SCROLL_SCENE := preload("res://scenes/objects/meteor_scroll/meteor_scroll.tscn")
 const CHEST_SCENE := preload("res://scenes/objects/chest/chest.tscn")
 const VISION_TOWER_SCENE := preload("res://scenes/objects/vision_tower/vision_tower.tscn")
+const HEALING_WELL_SCENE := preload("res://scenes/objects/healing_well/healing_well.tscn")
+const LINKED_PORTAL_SCENE := preload("res://scenes/objects/linked_portal/linked_portal.tscn")
 
 const DEFINITIONS := {
 	"sheep": {"kind": KIND_ENTITY, "scene": SHEEP_SCENE, "display_name": "Sheep"},
@@ -32,6 +34,8 @@ const DEFINITIONS := {
 	"meteor_scroll": {"kind": KIND_OBJECT, "scene": METEOR_SCROLL_SCENE, "display_name": "Meteor Scroll"},
 	"chest": {"kind": KIND_OBJECT, "scene": CHEST_SCENE, "display_name": "Chest"},
 	"vision_tower": {"kind": KIND_OBJECT, "scene": VISION_TOWER_SCENE, "display_name": "Vision Tower"},
+	"healing_well": {"kind": KIND_OBJECT, "scene": HEALING_WELL_SCENE, "display_name": "Healing Well"},
+	"linked_portal": {"kind": KIND_OBJECT, "scene": LINKED_PORTAL_SCENE, "display_name": "Linked Portal"},
 }
 
 

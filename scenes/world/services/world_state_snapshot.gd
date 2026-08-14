@@ -96,7 +96,7 @@ func apply_action_stream_snapshot(snapshot: Dictionary) -> bool:
 		return false
 	if abilities != null and not abilities.is_valid_snapshot(
 		ability_state_value as Dictionary,
-		_get_non_player_entity_ids(world_state_value as Dictionary)
+		_get_entity_ids(world_state_value as Dictionary)
 	):
 		return false
 	if not _apply_world_state_snapshot(world_state_value as Dictionary):
@@ -307,14 +307,13 @@ func _validate_world_state_snapshot(world_state: Dictionary) -> bool:
 	return true
 
 
-func _get_non_player_entity_ids(world_state: Dictionary) -> Array[String]:
+func _get_entity_ids(world_state: Dictionary) -> Array[String]:
 	var result: Array[String] = []
 	for record_value: Variant in world_state.get("entities", []):
 		if not (record_value is Dictionary):
 			continue
 		var record: Dictionary = record_value as Dictionary
-		if int(record.get("entity_type", -1)) != int(Entity.EntityType.CHARACTER):
-			result.append(str(record.get("entity_id", "")))
+		result.append(str(record.get("entity_id", "")))
 	return result
 
 

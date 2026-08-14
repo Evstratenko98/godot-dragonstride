@@ -87,6 +87,14 @@ func get_acceptance_rejection_reason(action: WorldActionRecord) -> String:
 	if turns != null and turns.is_world_turn_active():
 		return WorldActionStream.REJECTION_WORLD_TURN
 	if (
+		action.request_id > 0
+		and action.action_type != WorldActionRecord.ActionType.END_PLAYER_TURN
+		and WorldActionCatalog.is_turn_bound(action.action_type)
+		and abilities != null
+		and abilities.is_player_control_blocked(player)
+	):
+		return WorldActionStream.REJECTION_ACTOR_BUSY
+	if (
 		WorldActionCatalog.requires_active_player(action.action_type)
 		and (turns == null or not turns.is_entity_active_in_turn(player))
 	):
@@ -147,6 +155,12 @@ func get_rejection_reason(action: WorldActionRecord) -> String:
 				or not runtime.interaction.can_interact_with_surface(player, interaction_cell)
 			):
 				return WorldActionStream.REJECTION_INVALID_ACTION
+			var interaction_rejection: String = runtime.interaction.prepare_authoritative_action(
+				action,
+				player
+			)
+			if not interaction_rejection.is_empty():
+				return interaction_rejection
 			if loot != null:
 				return loot.get_action_rejection_reason(action)
 		WorldActionRecord.ActionType.SPELL_CAST:
@@ -223,7 +237,7 @@ func execute_authoritative(action: WorldActionRecord) -> bool:
 				if was_opened:
 					runtime.notify_entity_interacted_in_turn(player)
 				return was_opened
-			return runtime.try_character_interaction(player, action.payload.get("target_surface", Vector3i.ZERO))
+			return runtime.interaction.execute_authoritative_action(action, player)
 		WorldActionRecord.ActionType.SPELL_CAST:
 			if spells == null:
 				return false
@@ -331,6 +345,8 @@ func play_remote(action: WorldActionRecord) -> void:
 		WorldActionRecord.ActionType.INTERACTION:
 			if loot != null and loot.is_chest_interaction_action(action):
 				await loot.play_remote_open_action(action)
+			elif runtime.interaction.play_remote_action(action, player):
+				return
 			elif visibility != null:
 				var interaction_surface: Vector3i = action.payload.get("target_surface", Vector3i.ZERO)
 				var tower: VisionTower = runtime.get_object_at_surface(interaction_surface) as VisionTower

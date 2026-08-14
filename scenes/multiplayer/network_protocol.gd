@@ -1,8 +1,8 @@
 class_name NetworkProtocol
 extends RefCounted
 
-const PROTOCOL_VERSION := 12
-const SNAPSHOT_SCHEMA_VERSION := 4
+const PROTOCOL_VERSION := 14
+const SNAPSHOT_SCHEMA_VERSION := 5
 const MAP_SCHEMA_VERSION := 1
 const MAX_ROSTER_SIZE := 4
 const MAX_SQUAD_SIZE := 4

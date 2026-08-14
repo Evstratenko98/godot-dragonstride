@@ -154,6 +154,7 @@ func _can_present_movement_input() -> bool:
 		or not character.is_selected_local_character
 		or not character.can_receive_input
 		or character.is_local_input_blocked
+		or character.is_provocation_control_blocked
 		or character.is_attacking
 		or character.health <= 0
 		or _is_console_open()

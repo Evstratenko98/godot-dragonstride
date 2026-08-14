@@ -1,6 +1,13 @@
 class_name CharacterView
 extends Node
 
+var provoked_indicator_presenter: EntityProvokedIndicatorPresenter = EntityProvokedIndicatorPresenter.new()
+
+
+func set_provoked_indicator_visible(is_visible: bool) -> void:
+	provoked_indicator_presenter.configure(get_parent() as Entity)
+	provoked_indicator_presenter.set_visible(is_visible)
+
 
 func set_display_name(_display_name: String) -> void:
 	pass

@@ -1,6 +1,12 @@
 class_name WorldTurnSnapshotCodec
 extends RefCounted
 
+const PLAYER_TURN_TRANSITION_EVENTS: Array[String] = [
+	WorldTurns.EVENT_ROUND_STARTED,
+	WorldTurns.EVENT_PLAYER_TURN_ENDED,
+	WorldTurns.EVENT_PLAYER_TURN_SKIPPED,
+]
+
 
 static func create_snapshot(turns: WorldTurns, event: String = WorldTurns.EVENT_NONE, event_payload: Dictionary = {}) -> Dictionary:
 	var snapshot: Dictionary = {
@@ -65,10 +71,14 @@ static func is_valid_snapshot(turns: WorldTurns, snapshot: Dictionary) -> bool:
 		seen_player_ids[player_id] = true
 	var valid_entity_ids: Array[String] = []
 	if snapshot_state == WorldTurns.STATE_PLAYER_TURN:
-		if snapshot_active_player_id.is_empty() or not seen_player_ids.has(snapshot_active_player_id):
+		if snapshot_active_player_id.is_empty():
+			if str(snapshot.get("event", "")) not in PLAYER_TURN_TRANSITION_EVENTS:
+				return false
+		elif not seen_player_ids.has(snapshot_active_player_id):
 			return false
-		for player: PlayerCharacter in turns.runtime.get_squad_members(snapshot_active_player_id):
-			valid_entity_ids.append(player.entity_id)
+		else:
+			for player: PlayerCharacter in turns.runtime.get_squad_members(snapshot_active_player_id):
+				valid_entity_ids.append(player.entity_id)
 	elif not snapshot_active_player_id.is_empty():
 		return false
 	if not turns.budget.is_valid_snapshot(snapshot, valid_entity_ids):

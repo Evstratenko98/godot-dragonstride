@@ -1,0 +1,26 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scenes/objects/linked_portal/linked_portal.gd" id="1_portal"]
+[ext_resource type="Texture2D" path="res://art/world_objects/linked_portal.png" id="2_texture"]
+[ext_resource type="Script" path="res://scenes/inspection/world_inspectable.gd" id="3_inspectable"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_portal"]
+size = Vector2(42, 30)
+
+[node name="LinkedPortal" type="StaticBody2D" groups=["game_blocker"]]
+script = ExtResource("1_portal")
+normal_texture = ExtResource("2_texture")
+
+[node name="Inspectable" type="Node" parent="."]
+script = ExtResource("3_inspectable")
+display_name = "Связанный портал"
+description = "Один из пары неразрушимых порталов. Взаимодействие переносит бойца на свободную соседнюю клетку у парного портала. Если выход заблокирован, перенос не происходит, но действие взаимодействия расходуется."
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+position = Vector2(0, -31)
+scale = Vector2(0.75, 0.75)
+texture = ExtResource("2_texture")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+position = Vector2(0, 5)
+shape = SubResource("RectangleShape2D_portal")

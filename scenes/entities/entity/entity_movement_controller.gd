@@ -36,6 +36,17 @@ func cancel_to_surface(surface: Vector3i) -> void:
 	entity._on_move_stopped()
 
 
+func relocate_to_surface(surface: Vector3i) -> bool:
+	if entity == null or runtime == null or is_moving:
+		return false
+	var registration_result: int = runtime.sync_entity_surface(entity, surface)
+	if registration_result != WorldRegistry.RegistrationError.NONE:
+		return false
+	reset_at_surface(surface)
+	entity._on_move_stopped()
+	return true
+
+
 func move_to_surface(
 	target_surface: Vector3i,
 	should_broadcast: bool,

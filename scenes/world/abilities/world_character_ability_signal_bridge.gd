@@ -26,6 +26,8 @@ func connect_signals() -> void:
 			turns.round_started.connect(_on_round_started)
 		if not turns.turn_mode_changed.is_connected(_on_turn_mode_changed):
 			turns.turn_mode_changed.connect(_on_turn_mode_changed)
+		if not turns.turn_state_changed.is_connected(_on_turn_state_changed):
+			turns.turn_state_changed.connect(_on_turn_state_changed)
 	if abilities.runtime != null and abilities.runtime.action_stream != null:
 		var stream: WorldActionStream = abilities.runtime.action_stream
 		if not stream.action_completed.is_connected(_on_stream_action_completed):
@@ -57,6 +59,8 @@ func disconnect_signals() -> void:
 			turns.round_started.disconnect(_on_round_started)
 		if turns.turn_mode_changed.is_connected(_on_turn_mode_changed):
 			turns.turn_mode_changed.disconnect(_on_turn_mode_changed)
+		if turns.turn_state_changed.is_connected(_on_turn_state_changed):
+			turns.turn_state_changed.disconnect(_on_turn_state_changed)
 	if abilities.runtime != null and abilities.runtime.action_stream != null:
 		var stream: WorldActionStream = abilities.runtime.action_stream
 		if stream.action_completed.is_connected(_on_stream_action_completed):
@@ -123,19 +127,25 @@ func _on_player_turn_started(player_id: String) -> void:
 
 
 func _on_round_started(_round_number: int) -> void:
-	abilities.clear_provocations()
+	abilities.clear_non_player_provocations()
 
 
 func _on_turn_mode_changed(_is_enabled: bool) -> void:
 	abilities.reset_state()
 
 
+func _on_turn_state_changed() -> void:
+	abilities.sync_player_provocation_turn_state()
+
+
 func _on_stream_action_completed(action: WorldActionRecord) -> void:
+	abilities.handle_player_provocation_action_completed(action)
 	if action != null and action.action_type == WorldActionRecord.ActionType.CHARACTER_ABILITY:
 		pending_local_request_ids.erase(action.request_id)
 
 
 func _on_stream_action_cancelled(action: WorldActionRecord, reason_code: String) -> void:
+	abilities.handle_player_provocation_action_cancelled(action)
 	if action != null and pending_local_request_ids.has(action.request_id):
 		pending_local_request_ids.erase(action.request_id)
 		abilities.notify_rejected(reason_code)
@@ -157,6 +167,7 @@ func _on_remote_snapshot_committed(boundary_sequence_id: int) -> void:
 		var sequence_id: int = pending_local_request_ids[request_id]
 		if sequence_id > 0 and sequence_id < boundary_sequence_id:
 			pending_local_request_ids.erase(request_id)
+	abilities.sync_player_provocation_turn_state()
 
 
 func _on_session_cleared() -> void:

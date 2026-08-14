@@ -227,6 +227,7 @@ func _has_available_character() -> bool:
 		and bound_player.is_selected_local_character
 		and bound_player.can_receive_input
 		and not bound_player.is_local_input_blocked
+		and not bound_player.is_provocation_control_blocked
 		and bound_player.health > 0
 	)
 

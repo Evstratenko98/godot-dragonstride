@@ -24,6 +24,7 @@ var is_locally_owned: bool = true
 var is_selected_local_character: bool = false
 var can_receive_input: bool = true
 var is_local_input_blocked: bool = false
+var is_provocation_control_blocked: bool = false
 var is_executing_move_path: bool = false
 var is_movement_input_held: bool = false
 var action_mode: ActionMode = ActionMode.MOVE
@@ -55,6 +56,7 @@ func start(
 	can_receive_input = receive_input
 	is_executing_move_path = false
 	is_movement_input_held = false
+	is_provocation_control_blocked = false
 	action_mode = ActionMode.MOVE
 	start_entity(start_position, new_entity_id, new_entity_name, EntityType.CHARACTER)
 	character_inventory.configure_owner(entity_id)
@@ -95,6 +97,21 @@ func set_local_input_blocked(should_block: bool) -> void:
 		set_local_movement_input_state(false)
 
 
+func set_provocation_control_blocked(should_block: bool) -> void:
+	if is_provocation_control_blocked == should_block:
+		return
+	is_provocation_control_blocked = should_block
+	if should_block:
+		set_local_movement_input_state(false)
+		set_action_mode(ActionMode.NONE)
+
+
+func set_provoked_indicator_visible(is_visible: bool) -> void:
+	var character_view: CharacterView = _get_view()
+	if character_view != null:
+		character_view.set_provoked_indicator_visible(is_visible)
+
+
 func set_selected_local_character(should_be_selected: bool) -> void:
 	is_selected_local_character = should_be_selected
 	if not should_be_selected:
@@ -124,6 +141,7 @@ func can_process_local_input() -> bool:
 		and is_selected_local_character
 		and can_receive_input
 		and not is_local_input_blocked
+		and not is_provocation_control_blocked
 		and not is_executing_move_path
 	)
 
@@ -161,6 +179,10 @@ func execute_authoritative_move_path(path: Array[Vector3i]) -> bool:
 
 func play_remote_move_path(path: Array[Vector3i]) -> bool:
 	return await _play_move_path(path, false)
+
+
+func relocate_to_surface(target_surface: Vector3i) -> bool:
+	return movement_controller.relocate_to_surface(target_surface)
 
 
 func play_remote_attack(target_surface: Vector3i, should_apply: bool = true) -> void:

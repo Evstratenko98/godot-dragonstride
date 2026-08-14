@@ -22,6 +22,20 @@ func has_provocation(target_entity_id: String) -> bool:
 
 func remove_entity(entity_id: String) -> void:
 	provoker_by_target_entity_id.erase(entity_id)
+	for target_entity_id: String in provoker_by_target_entity_id.keys():
+		if provoker_by_target_entity_id[target_entity_id] == entity_id:
+			provoker_by_target_entity_id.erase(target_entity_id)
+
+
+func remove_target(target_entity_id: String) -> void:
+	provoker_by_target_entity_id.erase(target_entity_id)
+
+
+func get_target_entity_ids() -> Array[String]:
+	var target_entity_ids: Array[String] = []
+	for target_entity_id: String in provoker_by_target_entity_id.keys():
+		target_entity_ids.append(target_entity_id)
+	return target_entity_ids
 
 
 func create_snapshot() -> Dictionary:
@@ -37,7 +51,8 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 
 func is_valid_snapshot(
 	snapshot: Dictionary,
-	valid_target_entity_ids: Array[String]
+	valid_target_entity_ids: Array[String],
+	valid_provoker_entity_ids: Array[String]
 ) -> bool:
 	var values_variant: Variant = snapshot.get("provoker_by_target_entity_id", {})
 	if not (values_variant is Dictionary):
@@ -52,6 +67,7 @@ func is_valid_snapshot(
 			not NetworkProtocol.is_valid_identifier(target_entity_id)
 			or not NetworkProtocol.is_valid_identifier(provoker_entity_id)
 			or target_entity_id not in valid_target_entity_ids
+			or provoker_entity_id not in valid_provoker_entity_ids
 		):
 			return false
 	return true
