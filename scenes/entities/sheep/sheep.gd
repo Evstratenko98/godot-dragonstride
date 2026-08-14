@@ -32,6 +32,8 @@ func spawn_death_drop(death_surface: Vector3i) -> bool:
 
 
 func behavior() -> void:
+	if await run_provoked_behavior_if_active():
+		return
 	if not can_act():
 		_finish_behavior()
 		return

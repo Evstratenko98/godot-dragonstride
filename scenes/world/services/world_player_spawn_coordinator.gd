@@ -1,9 +1,8 @@
 class_name WorldPlayerSpawnCoordinator
 extends RefCounted
 
-const CHARACTER_SCENE := preload("res://scenes/entities/character/character.tscn")
 const INVALID_SPAWN_SURFACE: Vector3i = Vector3i(-1, -1, -1)
-const SINGLEPLAYER_WARRIOR_COLOR := "Purple"
+const SINGLEPLAYER_APPEARANCE := "Purple"
 
 var runtime: WorldRuntime = null
 var visual_entities_root: Node2D = null
@@ -29,7 +28,13 @@ func spawn_singleplayer() -> String:
 	for squad_slot: int in range(GameSession.get_squad_size()):
 		var spawn_index: int = squad_slot
 		var spawn_surface: Vector3i = WorldPlayerSpawnPlanner.get_default_spawn_surface(runtime, spawn_surfaces, spawn_index)
-		var member: PlayerCharacter = _spawn_member(player_info, squad_slot, spawn_surface, SINGLEPLAYER_WARRIOR_COLOR)
+		var member: PlayerCharacter = _spawn_member(
+			player_info,
+			squad_slot,
+			spawn_surface,
+			PlayerCharacterCatalog.get_type_for_squad_slot(squad_slot),
+			SINGLEPLAYER_APPEARANCE
+		)
 		if member == null:
 			return "spawn_registration_failed"
 	return ""
@@ -41,7 +46,7 @@ func spawn_authoritative(session_players: Array[Dictionary]) -> String:
 	var squad_size: int = GameSession.get_squad_size()
 	for player_index: int in range(session_players.size()):
 		var player_info: Dictionary = session_players[player_index]
-		var warrior_color: String = WorldPlayerSpawnPlanner.get_warrior_color(int(player_info.get("color_index", player_index)))
+		var appearance_variant: String = WorldPlayerSpawnPlanner.get_character_appearance(int(player_info.get("color_index", player_index)))
 		for squad_slot: int in range(squad_size):
 			var spawn_index: int = player_index * squad_size + squad_slot
 			var preferred_surface: Vector3i = INVALID_SPAWN_SURFACE
@@ -56,7 +61,13 @@ func spawn_authoritative(session_players: Array[Dictionary]) -> String:
 			)
 			if spawn_surface == INVALID_SPAWN_SURFACE:
 				return "spawn_unavailable"
-			var member: PlayerCharacter = _spawn_member(player_info, squad_slot, spawn_surface, warrior_color)
+			var member: PlayerCharacter = _spawn_member(
+				player_info,
+				squad_slot,
+				spawn_surface,
+				PlayerCharacterCatalog.get_type_for_squad_slot(squad_slot),
+				appearance_variant
+			)
 			if member == null:
 				return "spawn_registration_failed"
 			assigned_surfaces[spawn_surface] = true
@@ -104,7 +115,8 @@ func spawn_from_snapshot(session_players: Array[Dictionary], snapshot: Dictionar
 				player_info,
 				squad_slot,
 				record.get("spawn_surface", INVALID_SPAWN_SURFACE),
-				str(record.get("warrior_color", "Blue"))
+				str(record.get("character_type", PlayerCharacterCatalog.DEFAULT_TYPE)),
+				str(record.get("appearance_variant", PlayerCharacterCatalog.DEFAULT_APPEARANCE))
 			)
 			if member == null:
 				return false
@@ -119,11 +131,12 @@ func _spawn_member(
 	player_info: Dictionary,
 	squad_slot: int,
 	spawn_surface: Vector3i,
-	warrior_color: String
+	character_type: String,
+	appearance_variant: String
 ) -> PlayerCharacter:
 	var member_info: Dictionary = player_info.duplicate(true)
 	member_info["squad_slot"] = squad_slot
-	var member: PlayerCharacter = CHARACTER_SCENE.instantiate() as PlayerCharacter
+	var member: PlayerCharacter = PlayerCharacterCatalog.instantiate(character_type)
 	if member == null:
 		return null
 	member.name = WorldPlayerSpawnPlanner.get_player_node_name(member_info)
@@ -137,7 +150,7 @@ func _spawn_member(
 	member.z_index = spawn_surface.z * 20 + 10
 	if GameSession.is_multiplayer() and not GameSession.has_committed_match():
 		member.can_receive_input = false
-	member.configure_warrior_profile(warrior_color, "Последователь %d" % [squad_slot + 1])
+	member.configure_character_profile(appearance_variant, "Последователь %d" % [squad_slot + 1])
 	var registration_result: int = runtime.register_entity(member)
 	if registration_result != WorldRegistry.RegistrationError.NONE:
 		member.queue_free()
@@ -156,5 +169,6 @@ func _create_spawn_record(member: PlayerCharacter, spawn_surface: Vector3i) -> D
 		"squad_slot": member.squad_slot,
 		"entity_id": member.entity_id,
 		"spawn_surface": spawn_surface,
-		"warrior_color": member.warrior_color,
+		"character_type": member.get_character_type_key(),
+		"appearance_variant": member.appearance_variant,
 	}

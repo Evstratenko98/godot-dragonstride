@@ -45,7 +45,7 @@ func _refresh_displayed_cells(should_force_redraw: bool = false) -> void:
 	var selected_character: PlayerCharacter = null if runtime == null else runtime.get_selected_local_character()
 	if _can_show_for(selected_character):
 		next_mode = selected_character.action_mode
-		if next_mode == PlayerCharacter.ActionMode.ATTACK:
+		if next_mode in [PlayerCharacter.ActionMode.ATTACK, PlayerCharacter.ActionMode.SPECIAL_ABILITY]:
 			next_surfaces = runtime.get_available_attack_surfaces(selected_character)
 		elif next_mode == PlayerCharacter.ActionMode.INTERACT:
 			next_surfaces = runtime.get_available_interaction_surfaces(selected_character)
@@ -70,5 +70,6 @@ func _can_show_for(character: PlayerCharacter) -> bool:
 		and character.action_mode in [
 			PlayerCharacter.ActionMode.ATTACK,
 			PlayerCharacter.ActionMode.INTERACT,
+			PlayerCharacter.ActionMode.SPECIAL_ABILITY,
 		]
 	)

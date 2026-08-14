@@ -1,8 +1,8 @@
 class_name NetworkProtocol
 extends RefCounted
 
-const PROTOCOL_VERSION := 11
-const SNAPSHOT_SCHEMA_VERSION := 3
+const PROTOCOL_VERSION := 12
+const SNAPSHOT_SCHEMA_VERSION := 4
 const MAP_SCHEMA_VERSION := 1
 const MAX_ROSTER_SIZE := 4
 const MAX_SQUAD_SIZE := 4
@@ -35,6 +35,7 @@ const SAFE_REASON_CODES: PackedStringArray = [
 	"actor_busy",
 	"actor_disconnected",
 	"actor_unavailable",
+	"ability_unavailable",
 	"duplicate_request",
 	"effect_failed",
 	"invalid_action",

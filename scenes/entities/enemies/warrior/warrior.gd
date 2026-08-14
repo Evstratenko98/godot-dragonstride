@@ -15,10 +15,8 @@ const MAX_STEPS_PER_TURN := 3
 const MAX_ATTACKS_PER_TURN := 1
 var ai_state: String = STATE_PASSIVE
 var target_entity_id: String = ""
-var attacks_used_this_turn: int = 0
-var is_running_behavior_turn: bool = false
 var ignored_defeated_character_ids: Dictionary[String, bool] = {}
-var pending_behavior_attack_target_id: String = ""
+var behavior_controller: WarriorBehaviorController = WarriorBehaviorController.new()
 var remote_presentation: WarriorRemotePresentation = WarriorRemotePresentation.new()
 var ai_logger: WarriorAiLogger = WarriorAiLogger.new()
 
@@ -28,6 +26,7 @@ func _ready() -> void:
 	super._ready()
 	remote_presentation.configure(self)
 	ai_logger.configure(self)
+	behavior_controller.configure(self)
 	entity_type = EntityType.ENEMY
 	if entity_name.is_empty():
 		entity_name = "Warrior"
@@ -54,101 +53,9 @@ func get_max_movement_steps_per_turn() -> int:
 
 
 func behavior() -> void:
-	var behavior_generation: int = get_behavior_generation()
-	if not _is_turn_mode_enabled() or not _is_ai_authority():
-		_finish_behavior()
+	if await run_provoked_behavior_if_active():
 		return
-
-	if not can_act():
-		_finish_behavior()
-		return
-
-	_sync_current_surface()
-	attacks_used_this_turn = 0
-	is_running_behavior_turn = true
-
-	if ai_state == STATE_PASSIVE:
-		consider_character_triggers(_get_registered_characters())
-
-	if ai_state != STATE_ACTIVE:
-		_end_behavior_turn()
-		return
-
-	var target: Node = _get_current_target()
-	if not _is_valid_hunt_target(target):
-		_set_ai_state(STATE_PASSIVE, "", _get_invalid_target_reason(target))
-		_end_behavior_turn()
-		return
-
-	if _can_attack_target(target):
-		is_running_behavior_turn = false
-		var did_initial_attack: bool = await _perform_behavior_attack(target)
-		if behavior_generation != get_behavior_generation():
-			return
-		if did_initial_attack:
-			return
-		_finish_behavior()
-		return
-
-	var attack_surfaces: Array[Vector3i] = _get_attack_goal_surfaces(target)
-	if not _has_terrain_path_to_any(attack_surfaces):
-		_set_ai_state(STATE_PASSIVE, "", REASON_TARGET_UNREACHABLE)
-		_end_behavior_turn()
-		return
-
-	var path: Array[Vector3i] = _find_path_to_any(attack_surfaces, true)
-	if path.is_empty():
-		_end_behavior_turn()
-		return
-
-	var steps_to_take: int = mini(MAX_STEPS_PER_TURN, path.size())
-	for i in range(steps_to_take):
-		target = _get_current_target()
-		if not _is_valid_hunt_target(target):
-			_set_ai_state(STATE_PASSIVE, "", _get_invalid_target_reason(target))
-			_end_behavior_turn()
-			return
-
-		if _can_attack_target(target):
-			is_running_behavior_turn = false
-			var did_pre_move_attack: bool = await _perform_behavior_attack(target)
-			if behavior_generation != get_behavior_generation():
-				return
-			if did_pre_move_attack:
-				return
-			_finish_behavior()
-			return
-
-		var next_surface: Vector3i = path[i]
-		var direction: Vector2i = runtime.get_traversal_input_direction(current_surface, next_surface)
-		if not request_move(direction):
-			_end_behavior_turn()
-			return
-
-		await _wait_until_ready_for_next_action()
-		if behavior_generation != get_behavior_generation():
-			return
-		if not is_running_behavior_turn:
-			return
-		_sync_current_surface()
-
-		target = _get_current_target()
-		if not _is_valid_hunt_target(target):
-			_set_ai_state(STATE_PASSIVE, "", _get_invalid_target_reason(target))
-			_end_behavior_turn()
-			return
-
-		if _can_attack_target(target):
-			is_running_behavior_turn = false
-			var did_post_move_attack: bool = await _perform_behavior_attack(target)
-			if behavior_generation != get_behavior_generation():
-				return
-			if did_post_move_attack:
-				return
-			_finish_behavior()
-			return
-
-	_end_behavior_turn()
+	await behavior_controller.run_turn()
 
 
 func consider_character_triggers(characters: Array[Node]) -> void:
@@ -259,16 +166,16 @@ func _attack(
 		return
 
 	var can_apply_attack: bool = should_apply
-	if not pending_behavior_attack_target_id.is_empty():
+	if not behavior_controller.pending_attack_target_id.is_empty():
 		can_apply_attack = (
-			ai_state == STATE_ACTIVE
-			and target_entity_id == pending_behavior_attack_target_id
+			(runtime != null and runtime.abilities != null and runtime.abilities.get_provoker(self) != null)
+			or (ai_state == STATE_ACTIVE and target_entity_id == behavior_controller.pending_attack_target_id)
 		)
 
 	if can_apply_attack:
 		_apply_attack_to_world(should_broadcast, not was_action_broadcast)
 
-	pending_behavior_attack_target_id = ""
+	behavior_controller.pending_attack_target_id = ""
 	is_attacking = false
 	if runtime != null:
 		runtime.notify_entity_action_finished_in_turn(self, get_behavior_generation())
@@ -278,14 +185,14 @@ func _attack(
 
 
 func _perform_behavior_attack(target: Node) -> bool:
-	if attacks_used_this_turn >= MAX_ATTACKS_PER_TURN:
+	if behavior_controller.attacks_used_this_turn >= MAX_ATTACKS_PER_TURN:
 		return false
 
 	if not _can_attack_target(target):
 		return false
 
-	attacks_used_this_turn += 1
-	pending_behavior_attack_target_id = _get_entity_id(target)
+	behavior_controller.attacks_used_this_turn += 1
+	behavior_controller.pending_attack_target_id = _get_entity_id(target)
 
 	var target_surface: Vector3i = target.get("current_surface")
 	var direction: Vector2i = _get_attack_direction_to_surface(target_surface)
@@ -301,8 +208,7 @@ func _perform_behavior_attack(target: Node) -> bool:
 
 
 func cancel_behavior() -> void:
-	is_running_behavior_turn = false
-	pending_behavior_attack_target_id = ""
+	behavior_controller.cancel()
 	super.cancel_behavior()
 
 
@@ -315,15 +221,14 @@ func _on_move_stopped() -> void:
 	if view != null:
 		view.play_idle()
 
-	if is_running_behavior_turn or remote_presentation.is_replaying_action:
+	if provoked_turn_controller.is_running_turn or behavior_controller.is_running_turn or remote_presentation.is_replaying_action:
 		return
 
 	_finish_behavior()
 
 
 func _end_behavior_turn() -> void:
-	is_running_behavior_turn = false
-	_finish_behavior()
+	behavior_controller.end_turn()
 
 
 func _wait_until_ready_for_next_action() -> void:

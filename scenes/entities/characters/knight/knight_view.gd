@@ -1,15 +1,15 @@
-class_name CharacterView
-extends Node
+class_name KnightView
+extends "res://scenes/entities/characters/character_view.gd"
 
-const WARRIOR_COLOR_BLUE := "Blue"
-const WARRIOR_COLOR_PURPLE := "Purple"
-const WARRIOR_COLOR_RED := "Red"
-const WARRIOR_COLOR_YELLOW := "Yellow"
-const WARRIOR_TEXTURES := {
-	WARRIOR_COLOR_BLUE: preload("res://art/Tiny Swords (Update 010)/Factions/Knights/Troops/Warrior/Blue/Warrior_Blue.png"),
-	WARRIOR_COLOR_PURPLE: preload("res://art/Tiny Swords (Update 010)/Factions/Knights/Troops/Warrior/Purple/Warrior_Purple.png"),
-	WARRIOR_COLOR_RED: preload("res://art/Tiny Swords (Update 010)/Factions/Knights/Troops/Warrior/Red/Warrior_Red.png"),
-	WARRIOR_COLOR_YELLOW: preload("res://art/Tiny Swords (Update 010)/Factions/Knights/Troops/Warrior/Yellow/Warrior_Yellow.png"),
+const APPEARANCE_BLUE := "Blue"
+const APPEARANCE_PURPLE := "Purple"
+const APPEARANCE_RED := "Red"
+const APPEARANCE_YELLOW := "Yellow"
+const APPEARANCE_TEXTURES := {
+	APPEARANCE_BLUE: preload("res://art/Tiny Swords (Update 010)/Factions/Knights/Troops/Warrior/Blue/Warrior_Blue.png"),
+	APPEARANCE_PURPLE: preload("res://art/Tiny Swords (Update 010)/Factions/Knights/Troops/Warrior/Purple/Warrior_Purple.png"),
+	APPEARANCE_RED: preload("res://art/Tiny Swords (Update 010)/Factions/Knights/Troops/Warrior/Red/Warrior_Red.png"),
+	APPEARANCE_YELLOW: preload("res://art/Tiny Swords (Update 010)/Factions/Knights/Troops/Warrior/Yellow/Warrior_Yellow.png"),
 }
 
 @export var sprite_path: NodePath = ^"../Sprite2D"
@@ -23,8 +23,8 @@ const WARRIOR_TEXTURES := {
 var facing_left: bool = false
 
 
-func set_warrior_color(color_name: String) -> void:
-	var texture: Texture2D = WARRIOR_TEXTURES.get(color_name, WARRIOR_TEXTURES[WARRIOR_COLOR_BLUE]) as Texture2D
+func configure_appearance(color_name: String) -> void:
+	var texture: Texture2D = APPEARANCE_TEXTURES.get(color_name, APPEARANCE_TEXTURES[APPEARANCE_BLUE]) as Texture2D
 	var target_sprite: Sprite2D = _get_sprite()
 	if target_sprite != null:
 		target_sprite.texture = texture

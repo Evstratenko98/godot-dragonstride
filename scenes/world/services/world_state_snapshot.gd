@@ -8,6 +8,7 @@ var turns: WorldTurns = null
 var spells: WorldSpells = null
 var loot: WorldLoot = null
 var visibility: WorldVisibility = null
+var abilities: WorldCharacterAbilities = null
 var replication_store: NetworkReplicationStore = null
 
 
@@ -19,6 +20,7 @@ func configure_context(
 	new_spells: WorldSpells,
 	new_loot: WorldLoot,
 	new_visibility: WorldVisibility,
+	new_abilities: WorldCharacterAbilities,
 	new_replication_store: NetworkReplicationStore
 ) -> void:
 	runtime = new_runtime
@@ -28,6 +30,7 @@ func configure_context(
 	spells = new_spells
 	loot = new_loot
 	visibility = new_visibility
+	abilities = new_abilities
 	replication_store = new_replication_store
 
 
@@ -41,6 +44,7 @@ func create_action_stream_snapshot(next_stream_sequence_id: int) -> Dictionary:
 		"spell_state": spells.create_action_stream_snapshot() if spells != null else {},
 		"loot_state": loot.create_snapshot() if loot != null else {},
 		"visibility_state": visibility.create_snapshot() if visibility != null else {},
+		"ability_state": abilities.create_snapshot() if abilities != null else {},
 		"world_state": _create_world_state_snapshot(),
 	}
 
@@ -68,12 +72,14 @@ func apply_action_stream_snapshot(snapshot: Dictionary) -> bool:
 	var spell_state_value: Variant = snapshot.get("spell_state", {})
 	var loot_state_value: Variant = snapshot.get("loot_state", {})
 	var visibility_state_value: Variant = snapshot.get("visibility_state", {})
+	var ability_state_value: Variant = snapshot.get("ability_state", {})
 	var world_state_value: Variant = snapshot.get("world_state", {})
 	if (
 		not (turn_state_value is Dictionary)
 		or not (spell_state_value is Dictionary)
 		or not (loot_state_value is Dictionary)
 		or not (visibility_state_value is Dictionary)
+		or not (ability_state_value is Dictionary)
 		or not (world_state_value is Dictionary)
 	):
 		return false
@@ -88,6 +94,11 @@ func apply_action_stream_snapshot(snapshot: Dictionary) -> bool:
 		return false
 	if not _validate_world_state_snapshot(world_state_value as Dictionary):
 		return false
+	if abilities != null and not abilities.is_valid_snapshot(
+		ability_state_value as Dictionary,
+		_get_non_player_entity_ids(world_state_value as Dictionary)
+	):
+		return false
 	if not _apply_world_state_snapshot(world_state_value as Dictionary):
 		return false
 	if turns != null:
@@ -97,6 +108,8 @@ func apply_action_stream_snapshot(snapshot: Dictionary) -> bool:
 	if loot != null and not loot.apply_snapshot(loot_state_value as Dictionary):
 		return false
 	if visibility != null and not visibility.apply_snapshot(visibility_state_value as Dictionary):
+		return false
+	if abilities != null and not abilities.apply_snapshot(ability_state_value as Dictionary):
 		return false
 	return true
 
@@ -123,6 +136,7 @@ func _create_world_state_snapshot() -> Dictionary:
 			continue
 		entity_records.append({
 			"entity_id": entity.entity_id,
+			"entity_type": int(entity.entity_type),
 			"surface": entity.current_surface,
 			"health": entity.health,
 			"max_health": entity.max_health,
@@ -196,6 +210,8 @@ func _validate_world_state_snapshot(world_state: Dictionary) -> bool:
 			or not runtime.is_surface_inside(surface_value as Vector3i)
 			or not runtime.has_surface(surface_value as Vector3i)
 			or seen_surfaces.has(surface_value as Vector3i)
+			or int(record.get("entity_type", -1)) < int(Entity.EntityType.CHARACTER)
+			or int(record.get("entity_type", -1)) > int(Entity.EntityType.NEUTRAL)
 			or int(record.get("max_health", 0)) <= 0
 			or int(record.get("max_health", 0)) > NetworkProtocol.MAX_GAMEPLAY_VALUE
 			or int(record.get("health", -1)) < 0
@@ -289,6 +305,17 @@ func _validate_world_state_snapshot(world_state: Dictionary) -> bool:
 		):
 			return false
 	return true
+
+
+func _get_non_player_entity_ids(world_state: Dictionary) -> Array[String]:
+	var result: Array[String] = []
+	for record_value: Variant in world_state.get("entities", []):
+		if not (record_value is Dictionary):
+			continue
+		var record: Dictionary = record_value as Dictionary
+		if int(record.get("entity_type", -1)) != int(Entity.EntityType.CHARACTER):
+			result.append(str(record.get("entity_id", "")))
+	return result
 
 
 func _apply_world_state_snapshot(world_state: Dictionary) -> bool:

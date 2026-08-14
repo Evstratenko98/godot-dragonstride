@@ -21,6 +21,7 @@ signal selected_local_character_changed(character: PlayerCharacter)
 @export var loot_path: NodePath = ^"../Loot"
 @export var action_stream_path: NodePath = ^"../ActionStream"
 @export var visibility_path: NodePath = ^"../Visibility"
+@export var abilities_path: NodePath = ^"../CharacterAbilities"
 
 var level: WorldLevel = null
 var grid: WorldGrid = null
@@ -37,6 +38,7 @@ var spells: WorldSpells = null
 var loot: WorldLoot = null
 var action_stream: WorldActionStream = null
 var visibility: WorldVisibility = null
+var abilities: WorldCharacterAbilities = null
 var action_coordinator: WorldActionRuntimeCoordinator = WorldActionRuntimeCoordinator.new()
 var composition: WorldRuntimeComposition = WorldRuntimeComposition.new()
 var event_coordinator: WorldRuntimeEventCoordinator = WorldRuntimeEventCoordinator.new()
@@ -50,10 +52,7 @@ func configure_for_level(new_level: WorldLevel) -> void:
 		level.configure_runtime(self)
 	_bind_services()
 	_configure_services()
-	if players_service != null and not players_service.player_connection_changed.is_connected(event_coordinator.on_player_connection_changed):
-		players_service.player_connection_changed.connect(event_coordinator.on_player_connection_changed)
-	if players_service != null and not players_service.selected_local_character_changed.is_connected(event_coordinator.on_selected_local_character_changed):
-		players_service.selected_local_character_changed.connect(event_coordinator.on_selected_local_character_changed)
+	event_coordinator.connect_service_signals()
 
 
 func is_configured_for(target_level: WorldLevel) -> bool:
@@ -73,6 +72,7 @@ func is_configured_for(target_level: WorldLevel) -> bool:
 		and loot != null
 		and action_stream != null
 		and visibility != null
+		and abilities != null
 	)
 
 
@@ -82,21 +82,11 @@ func start_match_runtime() -> String:
 
 
 func connect_signals() -> void:
-	if network != null:
-		network.connect_signals()
-	if action_stream != null and not action_stream.runtime_sync_failed.is_connected(event_coordinator.on_action_stream_sync_failed):
-		action_stream.runtime_sync_failed.connect(event_coordinator.on_action_stream_sync_failed)
-	if action_stream != null and not action_stream.sync_state_changed.is_connected(event_coordinator.on_action_stream_sync_state_changed):
-		action_stream.sync_state_changed.connect(event_coordinator.on_action_stream_sync_state_changed)
+	event_coordinator.connect_runtime_signals()
 
 
 func disconnect_signals() -> void:
-	if network != null:
-		network.disconnect_signals()
-	if action_stream != null and action_stream.runtime_sync_failed.is_connected(event_coordinator.on_action_stream_sync_failed):
-		action_stream.runtime_sync_failed.disconnect(event_coordinator.on_action_stream_sync_failed)
-	if action_stream != null and action_stream.sync_state_changed.is_connected(event_coordinator.on_action_stream_sync_state_changed):
-		action_stream.sync_state_changed.disconnect(event_coordinator.on_action_stream_sync_state_changed)
+	event_coordinator.disconnect_runtime_signals()
 
 
 func notify_local_action_rejected(reason_code: String) -> void:
@@ -145,6 +135,18 @@ func request_character_interaction(interactor: PlayerCharacter, target_surface: 
 	if visibility != null and not visibility.is_surface_visible_for_character(interactor, target_surface):
 		return
 	network.request_character_interaction(interactor, target_surface)
+
+
+func request_character_ability(character: PlayerCharacter, target_surface: Vector3i) -> bool:
+	return abilities != null and abilities.request_character_ability(character, target_surface)
+
+
+func can_character_use_ability(character: PlayerCharacter) -> bool:
+	return abilities != null and abilities.can_character_use_ability(character)
+
+
+func get_character_ability_cooldown(character: PlayerCharacter) -> int:
+	return 0 if abilities == null else abilities.get_remaining_cooldown_turns(character)
 
 
 func try_character_interaction(interactor: PlayerCharacter, target_surface: Vector3i) -> bool:
@@ -241,6 +243,8 @@ func register_entity(entity: Node) -> int:
 func unregister_entity(entity: Node) -> void:
 	if turn_manager != null:
 		turn_manager.notify_entity_removed(entity)
+	if abilities != null:
+		abilities.handle_entity_removed(entity)
 	registry.unregister_entity(entity)
 
 
@@ -753,10 +757,7 @@ func print_console(text: String) -> void:
 func _bind_services() -> void:
 	composition.bind_services(self, level)
 	spatial.configure(grid, registry)
-	if registry != null and not registry.occupancy_changed.is_connected(event_coordinator.on_registry_occupancy_changed):
-		registry.occupancy_changed.connect(event_coordinator.on_registry_occupancy_changed)
-	if network != null and not network.match_end_requested.is_connected(event_coordinator.on_network_match_end_requested):
-		network.match_end_requested.connect(event_coordinator.on_network_match_end_requested)
+	event_coordinator.connect_service_signals()
 
 
 func _configure_services() -> void:

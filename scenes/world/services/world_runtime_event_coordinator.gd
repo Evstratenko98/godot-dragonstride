@@ -8,6 +8,41 @@ func configure(owner: WorldRuntime) -> void:
 	runtime = owner
 
 
+func connect_service_signals() -> void:
+	if runtime == null:
+		return
+	if runtime.registry != null and not runtime.registry.occupancy_changed.is_connected(on_registry_occupancy_changed):
+		runtime.registry.occupancy_changed.connect(on_registry_occupancy_changed)
+	if runtime.network != null and not runtime.network.match_end_requested.is_connected(on_network_match_end_requested):
+		runtime.network.match_end_requested.connect(on_network_match_end_requested)
+	if runtime.players_service != null and not runtime.players_service.player_connection_changed.is_connected(on_player_connection_changed):
+		runtime.players_service.player_connection_changed.connect(on_player_connection_changed)
+	if runtime.players_service != null and not runtime.players_service.selected_local_character_changed.is_connected(on_selected_local_character_changed):
+		runtime.players_service.selected_local_character_changed.connect(on_selected_local_character_changed)
+
+
+func connect_runtime_signals() -> void:
+	if runtime == null:
+		return
+	if runtime.network != null:
+		runtime.network.connect_signals()
+	if runtime.action_stream != null and not runtime.action_stream.runtime_sync_failed.is_connected(on_action_stream_sync_failed):
+		runtime.action_stream.runtime_sync_failed.connect(on_action_stream_sync_failed)
+	if runtime.action_stream != null and not runtime.action_stream.sync_state_changed.is_connected(on_action_stream_sync_state_changed):
+		runtime.action_stream.sync_state_changed.connect(on_action_stream_sync_state_changed)
+
+
+func disconnect_runtime_signals() -> void:
+	if runtime == null:
+		return
+	if runtime.network != null:
+		runtime.network.disconnect_signals()
+	if runtime.action_stream != null and runtime.action_stream.runtime_sync_failed.is_connected(on_action_stream_sync_failed):
+		runtime.action_stream.runtime_sync_failed.disconnect(on_action_stream_sync_failed)
+	if runtime.action_stream != null and runtime.action_stream.sync_state_changed.is_connected(on_action_stream_sync_state_changed):
+		runtime.action_stream.sync_state_changed.disconnect(on_action_stream_sync_state_changed)
+
+
 func register_level_entities() -> void:
 	if runtime.level == null:
 		return

@@ -21,6 +21,12 @@ static func get_rejection_reason(action: WorldActionRecord) -> String:
 		WorldActionRecord.ActionType.ATTACK, WorldActionRecord.ActionType.INTERACTION:
 			if not (action.payload.get("target_surface") is Vector3i):
 				return WorldActionStream.REJECTION_INVALID_ACTION
+		WorldActionRecord.ActionType.CHARACTER_ABILITY:
+			if (
+				str(action.payload.get("ability_id", "")) != CharacterAbilityCatalog.KNIGHT_TAUNT
+				or not (action.payload.get("target_surface") is Vector3i)
+			):
+				return WorldActionStream.REJECTION_INVALID_ACTION
 		WorldActionRecord.ActionType.SPELL_CAST:
 			var target_kind: String = str(action.payload.get("target_kind", "surface"))
 			if target_kind == "surface" and not (action.payload.get("target_surface") is Vector3i):

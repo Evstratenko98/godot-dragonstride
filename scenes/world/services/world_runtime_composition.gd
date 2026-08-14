@@ -19,6 +19,7 @@ func bind_services(runtime: WorldRuntime, level: WorldLevel) -> void:
 	runtime.loot = runtime.get_node_or_null(runtime.loot_path) as WorldLoot
 	runtime.action_stream = runtime.get_node_or_null(runtime.action_stream_path) as WorldActionStream
 	runtime.visibility = runtime.get_node_or_null(runtime.visibility_path) as WorldVisibility
+	runtime.abilities = runtime.get_node_or_null(runtime.abilities_path) as WorldCharacterAbilities
 
 	if runtime.grid != null:
 		runtime.grid.configure_context(runtime, level)
@@ -46,6 +47,8 @@ func bind_services(runtime: WorldRuntime, level: WorldLevel) -> void:
 		runtime.loot.configure_context(runtime, level)
 	if runtime.action_stream != null:
 		runtime.action_stream.configure_context(runtime, level)
+	if runtime.abilities != null:
+		runtime.abilities.configure_context(runtime, level)
 	runtime.action_coordinator.configure_context(runtime)
 
 

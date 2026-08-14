@@ -8,6 +8,7 @@
 [ext_resource type="Script" path="res://scenes/entities/enemies/warrior/warrior.gd" id="6"]
 [ext_resource type="Script" path="res://scenes/entities/enemies/warrior/warrior_view.gd" id="7"]
 [ext_resource type="Script" path="res://scenes/inspection/world_inspectable.gd" id="8_inspectable"]
+[ext_resource type="Texture2D" path="res://art/pointers/tool_sword_a.svg" id="9_sword"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_1"]
 radius = 14.0
@@ -250,6 +251,14 @@ stat_flags = 15
 position = Vector2(0, -8)
 texture = ExtResource("1")
 hframes = 8
+
+[node name="ProvokedIndicator" type="Sprite2D" parent="."]
+visible = false
+position = Vector2(0, -56.4)
+scale = Vector2(0.65, 0.65)
+texture = ExtResource("9_sword")
+modulate = Color(1, 0.08, 0.08, 1)
+z_index = 101
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 position = Vector2(0, 15)

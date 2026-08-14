@@ -4,10 +4,12 @@ extends "res://scenes/entities/entity/entity.gd"
 @onready var view: NonPlayerView = get_node_or_null("View") as NonPlayerView
 
 var active_behavior_generation: int = 0
+var provoked_turn_controller: NonPlayerProvokedTurnController = NonPlayerProvokedTurnController.new()
 
 
 func _ready() -> void:
 	super._ready()
+	provoked_turn_controller.configure(self)
 	if view != null:
 		view.play_idle()
 
@@ -49,6 +51,10 @@ func spawn_death_drop(_death_surface: Vector3i) -> bool:
 
 func behavior() -> void:
 	_finish_behavior()
+
+
+func run_provoked_behavior_if_active() -> bool:
+	return await provoked_turn_controller.run_if_active()
 
 
 func begin_behavior_generation(generation: int) -> void:
@@ -98,11 +104,17 @@ func play_remote_attack(target_surface: Vector3i, should_apply: bool = true) -> 
 	request_attack_surface(target_surface, should_apply, false)
 
 
+func set_provoked_indicator_visible(is_visible: bool) -> void:
+	if view != null:
+		view.set_provoked_indicator_visible(is_visible)
+
+
 func request_behavior_move(direction: Vector2i) -> bool:
 	return request_move(direction)
 
 
 func cancel_behavior() -> void:
+	provoked_turn_controller.cancel()
 	if is_moving:
 		force_cancel_movement(current_surface)
 	if is_attacking:
@@ -134,12 +146,16 @@ func _on_move_started(_target_surface: Vector3i) -> void:
 func _on_move_stopped() -> void:
 	if view != null:
 		view.play_idle()
+	if provoked_turn_controller.is_running_turn:
+		return
 	_finish_behavior()
 
 
 func _on_attack_presentation_forced() -> void:
 	if view != null:
 		view.play_idle()
+	if provoked_turn_controller.is_running_turn:
+		return
 	_finish_behavior()
 
 

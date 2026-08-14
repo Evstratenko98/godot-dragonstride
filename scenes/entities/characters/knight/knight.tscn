@@ -1,9 +1,9 @@
 [gd_scene format=3 uid="uid://b745r6q85lhic"]
 
 [ext_resource type="Texture2D" uid="uid://b4xd1jhq01urt" path="res://art/Tiny Swords (Update 010)/Factions/Knights/Troops/Warrior/Blue/Warrior_Blue.png" id="1"]
-[ext_resource type="Script" uid="uid://dtnqqg6ojrxle" path="res://scenes/entities/character/character.gd" id="2"]
-[ext_resource type="Script" uid="uid://cviewm4n2q8pa" path="res://scenes/entities/character/character_view.gd" id="3"]
-[ext_resource type="Script" uid="uid://cmodel9r7x2kb" path="res://scenes/entities/character/character_model.gd" id="4"]
+[ext_resource type="Script" uid="uid://dtnqqg6ojrxle" path="res://scenes/entities/characters/knight/knight.gd" id="2"]
+[ext_resource type="Script" uid="uid://cviewm4n2q8pa" path="res://scenes/entities/characters/knight/knight_view.gd" id="3"]
+[ext_resource type="Script" uid="uid://cmodel9r7x2kb" path="res://scenes/entities/characters/knight/knight_model.gd" id="4"]
 [ext_resource type="Script" path="res://scenes/inventory/character_inventory.gd" id="5_inventory"]
 [ext_resource type="Script" path="res://addons/gloot/core/inventory.gd" id="6_gloot_inventory"]
 [ext_resource type="Script" path="res://addons/gloot/core/constraints/grid_constraint.gd" id="7_grid_constraint"]
@@ -109,7 +109,7 @@ _data = {
 &"walk": SubResource("Animation_walk")
 }
 
-[node name="Character" type="CharacterBody2D" unique_id=1043723613]
+[node name="Knight" type="CharacterBody2D" unique_id=1043723613]
 script = ExtResource("2")
 
 [node name="View" type="Node" parent="." unique_id=1369573356]

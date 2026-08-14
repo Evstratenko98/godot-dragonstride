@@ -9,14 +9,7 @@ enum ActionMode {
 	MOVE,
 	ATTACK,
 	INTERACT,
-}
-
-const DEFAULT_WARRIOR_COLOR := "Blue"
-const WARRIOR_NAMES_BY_COLOR: Dictionary[String, String] = {
-	"Purple": "Patrick",
-	"Blue": "Arnoldo",
-	"Yellow": "Huan",
-	"Red": "Dick",
+	SPECIAL_ABILITY,
 }
 
 @onready var view: CharacterView = get_node("View") as CharacterView
@@ -34,7 +27,7 @@ var is_local_input_blocked: bool = false
 var is_executing_move_path: bool = false
 var is_movement_input_held: bool = false
 var action_mode: ActionMode = ActionMode.MOVE
-var warrior_color: String = DEFAULT_WARRIOR_COLOR
+var appearance_variant: String = ""
 
 
 func _ready() -> void:
@@ -70,12 +63,21 @@ func start(
 		character_view.set_display_name(get_display_name())
 
 
-func configure_warrior_profile(color_name: String, display_name: String = "") -> void:
-	warrior_color = color_name if WARRIOR_NAMES_BY_COLOR.has(color_name) else DEFAULT_WARRIOR_COLOR
-	entity_name = display_name if not display_name.is_empty() else str(WARRIOR_NAMES_BY_COLOR.get(warrior_color, WARRIOR_NAMES_BY_COLOR[DEFAULT_WARRIOR_COLOR]))
+func get_character_type_key() -> String:
+	return ""
+
+
+func get_special_ability_id() -> String:
+	return ""
+
+
+func configure_character_profile(new_appearance_variant: String, display_name: String = "") -> void:
+	appearance_variant = new_appearance_variant
+	if not display_name.is_empty():
+		entity_name = display_name
 	var character_view: CharacterView = _get_view()
 	if character_view != null:
-		character_view.set_warrior_color(warrior_color)
+		character_view.configure_appearance(appearance_variant)
 		character_view.set_display_name(entity_name)
 
 
@@ -133,12 +135,18 @@ func get_max_movement_steps_per_turn() -> int:
 func request_interaction_surface(target_surface: Vector3i) -> bool:
 	if runtime == null or health <= 0:
 		return false
-
 	if not can_attack_surface(target_surface):
 		return false
-
 	runtime.request_character_interaction(self, target_surface)
 	return true
+
+
+func request_special_ability_surface(target_surface: Vector3i) -> bool:
+	return (
+		runtime != null
+		and not get_special_ability_id().is_empty()
+		and runtime.request_character_ability(self, target_surface)
+	)
 
 
 func request_move_path(requested_path: Array[Vector3i]) -> bool:
@@ -158,10 +166,8 @@ func play_remote_move_path(path: Array[Vector3i]) -> bool:
 func play_remote_attack(target_surface: Vector3i, should_apply: bool = true) -> void:
 	if runtime == null:
 		runtime = _find_runtime()
-
 	if runtime == null or is_attacking or health <= 0:
 		return
-
 	var direction: Vector2i = _get_attack_direction_to_surface(target_surface)
 	if direction == Vector2i.ZERO:
 		return
@@ -186,7 +192,6 @@ func update_move_animation(should_walk: bool) -> void:
 	var character_view: CharacterView = _get_view()
 	if character_view == null:
 		return
-
 	if should_walk:
 		character_view.play_walk()
 	else:
@@ -284,7 +289,6 @@ func _try_continue_moving() -> bool:
 	var character_model: CharacterModel = _get_model()
 	if character_model == null:
 		return false
-
 	return character_model.try_continue_moving()
 
 
@@ -330,7 +334,6 @@ func _attack(
 	if should_apply:
 		_apply_attack_to_world(should_broadcast)
 	_play_target_incoming_attack_guard(target_surface, character_view.get_animation_length(animation_name))
-
 	await character_view.play_attack(animation_name, attack_facing_left, update_horizontal_facing)
 	if attack_generation != get_action_generation():
 		return
@@ -359,12 +362,10 @@ func _on_attack_presentation_forced() -> void:
 func _get_view() -> CharacterView:
 	if view == null:
 		view = get_node_or_null("View") as CharacterView
-
 	return view
 
 
 func _get_model() -> CharacterModel:
 	if model == null:
 		model = get_node_or_null("Model") as CharacterModel
-
 	return model

@@ -10,6 +10,7 @@ var turns: WorldTurns = null
 var spells: WorldSpells = null
 var loot: WorldLoot = null
 var visibility: WorldVisibility = null
+var abilities: WorldCharacterAbilities = null
 
 
 func configure_context(
@@ -19,7 +20,8 @@ func configure_context(
 	new_turns: WorldTurns,
 	new_spells: WorldSpells,
 	new_loot: WorldLoot,
-	new_visibility: WorldVisibility
+	new_visibility: WorldVisibility,
+	new_abilities: WorldCharacterAbilities
 ) -> void:
 	runtime = new_runtime
 	players = new_players
@@ -28,6 +30,7 @@ func configure_context(
 	spells = new_spells
 	loot = new_loot
 	visibility = new_visibility
+	abilities = new_abilities
 
 
 func broadcast_action_profile_payload(action: WorldActionRecord) -> void:
@@ -43,6 +46,9 @@ func broadcast_action_profile_payload(action: WorldActionRecord) -> void:
 				spells.broadcast_action_payload(action)
 		WorldActionCatalog.ProfileChannel.INVENTORY:
 			network.broadcast_inventory_action_payload(action)
+		WorldActionCatalog.ProfileChannel.ABILITY:
+			if abilities != null:
+				abilities.broadcast_action_payload(action)
 
 
 func get_schema_rejection_reason(action: WorldActionRecord) -> String:
@@ -91,6 +97,8 @@ func get_acceptance_rejection_reason(action: WorldActionRecord) -> String:
 
 
 func reserve_on_accept(action: WorldActionRecord) -> String:
+	if action != null and action.action_type == WorldActionRecord.ActionType.CHARACTER_ABILITY and abilities != null:
+		return abilities.reserve_action(action)
 	if action != null and action.action_type == WorldActionRecord.ActionType.SPELL_CAST and spells != null:
 		return spells.reserve_action(action)
 	if loot != null:
@@ -99,6 +107,8 @@ func reserve_on_accept(action: WorldActionRecord) -> String:
 
 
 func release_reservation(action: WorldActionRecord) -> void:
+	if action != null and action.action_type == WorldActionRecord.ActionType.CHARACTER_ABILITY and abilities != null:
+		abilities.release_action_reservation(action)
 	if action != null and action.action_type == WorldActionRecord.ActionType.SPELL_CAST and spells != null:
 		spells.release_action_reservation(action)
 	if loot != null:
@@ -147,6 +157,8 @@ func get_rejection_reason(action: WorldActionRecord) -> String:
 			if visibility != null and not visibility.is_surface_visible_for_character(player, spell_target_surface):
 				return WorldActionStream.REJECTION_INVALID_ACTION
 			return spells.get_action_rejection_reason(action) if spells != null else WorldActionStream.REJECTION_INVALID_ACTION
+		WorldActionRecord.ActionType.CHARACTER_ABILITY:
+			return abilities.get_action_rejection_reason(action) if abilities != null else WorldActionStream.REJECTION_INVALID_ACTION
 		WorldActionRecord.ActionType.SET_FOG_OF_WAR:
 			if action.request_id != 0 or not (action.payload.get("is_enabled") is bool):
 				return WorldActionStream.REJECTION_INVALID_ACTION
@@ -216,6 +228,8 @@ func execute_authoritative(action: WorldActionRecord) -> bool:
 			if spells == null:
 				return false
 			return await spells.execute_action_cast(action, true)
+		WorldActionRecord.ActionType.CHARACTER_ABILITY:
+			return abilities != null and abilities.execute_action(action)
 		WorldActionRecord.ActionType.INVENTORY_ADD:
 			if loot != null and loot.is_chest_claim_action(action):
 				var was_claimed: bool = loot.execute_claim_action(action, player)
@@ -325,6 +339,9 @@ func play_remote(action: WorldActionRecord) -> void:
 		WorldActionRecord.ActionType.SPELL_CAST:
 			if spells != null:
 				await spells.execute_action_cast(action, false)
+		WorldActionRecord.ActionType.CHARACTER_ABILITY:
+			if abilities != null:
+				abilities.execute_action(action)
 		WorldActionRecord.ActionType.BLOCKING_EVENT:
 			var duration_seconds: float = clampf(float(action.payload.get("duration_seconds", 0.0)), 0.0, MAX_BLOCKING_EVENT_SECONDS)
 			if duration_seconds > 0.0:

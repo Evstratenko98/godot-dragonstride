@@ -258,7 +258,7 @@ func _refresh_action_cursor_for_visibility(is_currently_visible: bool) -> void:
 		else:
 			InventoryBarCursor.apply(PlayerCharacter.ActionMode.ATTACK, false)
 		return
-	if bound_character.action_mode in [PlayerCharacter.ActionMode.ATTACK, PlayerCharacter.ActionMode.INTERACT]:
+	if bound_character.action_mode in [PlayerCharacter.ActionMode.ATTACK, PlayerCharacter.ActionMode.INTERACT, PlayerCharacter.ActionMode.SPECIAL_ABILITY]:
 		InventoryBarCursor.apply(bound_character.action_mode, is_currently_visible)
 
 

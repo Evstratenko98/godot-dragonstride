@@ -20,6 +20,7 @@ enum ActionType {
 	PLAYER_TURN_SKIPPED,
 	BLOCKING_EVENT,
 	SET_FOG_OF_WAR,
+	CHARACTER_ABILITY,
 }
 
 const KEY_REQUEST_ID := "request_id"
@@ -66,7 +67,7 @@ static func from_dictionary(record: Dictionary) -> WorldActionRecord:
 	if not NetworkProtocol.is_current_version(int(record.get(KEY_PROTOCOL_VERSION, 0))):
 		return null
 	var action_type_value: int = int(record.get(KEY_ACTION_TYPE, int(ActionType.NONE)))
-	if action_type_value <= int(ActionType.NONE) or action_type_value > int(ActionType.SET_FOG_OF_WAR):
+	if action_type_value <= int(ActionType.NONE) or action_type_value > int(ActionType.CHARACTER_ABILITY):
 		return null
 
 	var payload_value: Variant = record.get(KEY_PAYLOAD, {})

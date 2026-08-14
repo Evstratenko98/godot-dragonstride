@@ -9,6 +9,7 @@ extends Node
 @onready var loot: NetworkLootChannel = get_node(^"Loot") as NetworkLootChannel
 @onready var turns: NetworkTurnChannel = get_node(^"Turns") as NetworkTurnChannel
 @onready var spells: NetworkSpellChannel = get_node(^"Spells") as NetworkSpellChannel
+@onready var abilities: NetworkAbilityChannel = get_node(^"Abilities") as NetworkAbilityChannel
 @onready var actions: NetworkActionChannel = get_node(^"Actions") as NetworkActionChannel
 @onready var match_channel: NetworkMatchChannel = get_node(^"Match") as NetworkMatchChannel
 @onready var players: NetworkPlayerChannel = get_node(^"Players") as NetworkPlayerChannel
@@ -28,6 +29,7 @@ func _ready() -> void:
 	loot.configure_context(connection, peers, store)
 	turns.configure_context(connection, peers, store)
 	spells.configure_context(connection, peers, store)
+	abilities.configure_context(connection, peers, store)
 	actions.configure_context(connection, peers, store)
 	match_channel.configure_context(connection, peers, store)
 	players.configure_context(connection, peers, store)

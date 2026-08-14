@@ -7,6 +7,7 @@ enum ProfileChannel {
 	COMBAT,
 	SPELL,
 	INVENTORY,
+	ABILITY,
 }
 
 const KEY_IS_EXTERNAL := "is_external"
@@ -36,6 +37,7 @@ const DEFINITIONS := {
 	WorldActionRecord.ActionType.PLAYER_TURN_SKIPPED: {KEY_REQUIRES_TURN_PROFILE: true},
 	WorldActionRecord.ActionType.BLOCKING_EVENT: {},
 	WorldActionRecord.ActionType.SET_FOG_OF_WAR: {KEY_INLINE_LIFECYCLE_PAYLOAD: true},
+	WorldActionRecord.ActionType.CHARACTER_ABILITY: {KEY_IS_EXTERNAL: true, KEY_IS_TURN_BOUND: true, KEY_REQUIRES_PROFILE_PAYLOAD: true, KEY_REQUIRES_TURN_PROFILE_IN_TURN_MODE: true, KEY_PROFILE_CHANNEL: ProfileChannel.ABILITY},
 }
 
 

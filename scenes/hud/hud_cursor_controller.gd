@@ -20,7 +20,7 @@ func _configure_interactive_cursor(node: Node) -> void:
 	if node == null:
 		return
 	var control: Control = node as Control
-	var is_action_button: bool = control is BaseButton and control.get_parent() is ActionModeBar
+	var is_action_button: bool = control is ActionModeButton
 	if (control is BaseButton and not is_action_button) or control is InventorySlotControl:
 		control.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	for child: Node in node.get_children():

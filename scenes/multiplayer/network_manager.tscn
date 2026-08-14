@@ -1,4 +1,4 @@
-[gd_scene load_steps=15 format=3]
+[gd_scene load_steps=16 format=3]
 
 [ext_resource path="res://scenes/multiplayer/network_manager.gd" type="Script" id="1_manager"]
 [ext_resource path="res://scenes/multiplayer/channels/network_connection_channel.gd" type="Script" id="2_connection"]
@@ -14,6 +14,7 @@
 [ext_resource path="res://scenes/multiplayer/channels/network_player_channel.gd" type="Script" id="12_players"]
 [ext_resource path="res://scenes/multiplayer/channels/network_loot_channel.gd" type="Script" id="13_loot"]
 [ext_resource path="res://scenes/multiplayer/channels/network_level_map_channel.gd" type="Script" id="14_level_map"]
+[ext_resource path="res://scenes/multiplayer/channels/network_ability_channel.gd" type="Script" id="15_abilities"]
 
 [node name="NetworkManager" type="Node"]
 script = ExtResource("1_manager")
@@ -44,6 +45,9 @@ script = ExtResource("8_turns")
 
 [node name="Spells" type="Node" parent="."]
 script = ExtResource("10_spells")
+
+[node name="Abilities" type="Node" parent="."]
+script = ExtResource("15_abilities")
 
 [node name="Actions" type="Node" parent="."]
 script = ExtResource("11_actions")

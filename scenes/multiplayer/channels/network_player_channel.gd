@@ -9,9 +9,6 @@ signal player_respawn_pending_received(match_id: String, entity_id: String)
 signal player_world_failed_received(steam_id: int, match_id: String, reason_code: String)
 signal player_connection_state_received(match_id: String, steam_id: int, is_connected: bool)
 
-const ALLOWED_WARRIOR_COLORS: PackedStringArray = ["Blue", "Purple", "Red", "Yellow"]
-
-
 func request_player_spawn_snapshot() -> void:
 	if not _can_send() or connection.is_host:
 		return
@@ -149,7 +146,7 @@ func _is_valid_player_spawn_snapshot(snapshot: Dictionary) -> bool:
 	var seen_entity_ids: Dictionary[String, bool] = {}
 	var seen_surfaces: Dictionary[Vector3i, bool] = {}
 	var member_count_by_player_id: Dictionary[String, int] = {}
-	var warrior_color_by_player_id: Dictionary[String, String] = {}
+	var appearance_by_player_id: Dictionary[String, String] = {}
 	for record_value: Variant in members_value as Array:
 		if not (record_value is Dictionary):
 			return false
@@ -160,7 +157,8 @@ func _is_valid_player_spawn_snapshot(snapshot: Dictionary) -> bool:
 		var entity_id: String = str(record.get("entity_id", ""))
 		var cell_value: Variant = record.get("spawn_surface")
 		var surface: Vector3i = record.get("spawn_surface", Vector3i.ZERO)
-		var warrior_color: String = str(record.get("warrior_color", ""))
+		var character_type: String = str(record.get("character_type", ""))
+		var appearance_variant: String = str(record.get("appearance_variant", ""))
 		var roster_player: Dictionary = GameSession.get_player_record_by_steam_id(steam_id)
 		if (
 			steam_id <= 0
@@ -174,12 +172,15 @@ func _is_valid_player_spawn_snapshot(snapshot: Dictionary) -> bool:
 			or not (cell_value is Vector3i)
 			or not NetworkProtocol.is_valid_surface_value(surface)
 			or seen_surfaces.has(surface)
-			or warrior_color not in ALLOWED_WARRIOR_COLORS
+			or not PlayerCharacterCatalog.has_type(character_type)
+			or not PlayerCharacterCatalog.is_valid_appearance(character_type, appearance_variant)
 		):
 			return false
-		if warrior_color_by_player_id.has(player_id) and warrior_color_by_player_id[player_id] != warrior_color:
+		if appearance_by_player_id.has(player_id) and appearance_by_player_id[player_id] != appearance_variant:
 			return false
-		warrior_color_by_player_id[player_id] = warrior_color
+		if character_type != PlayerCharacterCatalog.get_type_for_squad_slot(squad_slot):
+			return false
+		appearance_by_player_id[player_id] = appearance_variant
 		seen_entity_ids[entity_id] = true
 		seen_surfaces[surface] = true
 		member_count_by_player_id[player_id] = int(member_count_by_player_id.get(player_id, 0)) + 1

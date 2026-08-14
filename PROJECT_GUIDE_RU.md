@@ -541,9 +541,11 @@ flowchart TB
 |---|---|---|
 | `Entity` | `scenes/entities/entity/entity.gd` | Общие характеристики сущности: ID, имя, тип, health/damage, клетку, движение, атаку и смерть. |
 | `EntityHealthPresenter` | `scenes/entities/entity/entity_health_presenter.gd` | Создание и обновление визуальной полоски здоровья без переноса UI-деталей в `Entity`. |
-| `PlayerCharacter` | `scenes/entities/character/character.gd` | Состояние игрока, Steam ID, remote state, цвет, анимацию атаки и особое возрождение вместо удаления. |
-| `CharacterModel` | `scenes/entities/character/character_model.gd` | Пользовательский ввод, продолжение движения, отправку сетевого состояния и запрос завершения хода. |
-| `CharacterView` | `scenes/entities/character/character_view.gd` | Цветной спрайт игрока, направление взгляда и анимации idle/walk/attack. |
+| `PlayerCharacter` | `scenes/entities/characters/player_character.gd` | Общий контракт состояния, действий и особого возрождения игровых персонажей. |
+| `CharacterModel` | `scenes/entities/characters/character_model.gd` | Общий пользовательский ввод, продолжение движения и выбор действия. |
+| `CharacterView` | `scenes/entities/characters/character_view.gd` | Общий визуальный контракт направления и анимаций игровых персонажей. |
+| `Knight` / `KnightView` | `scenes/entities/characters/knight/` | Профиль рыцаря, варианты внешности и способность `knight_taunt`. |
+| `PlayerCharacterCatalog` | `scenes/entities/characters/player_character_catalog.gd` | Типы членов отряда, их сцены и допустимые варианты внешности. |
 | `NonPlayerEntity` | `scenes/entities/non_player_entity/non_player_entity.gd` | Общий gameplay-контракт NPC, behavior, remote move/attack и уведомление о завершении действия. |
 | `NonPlayerView` | `scenes/entities/non_player_entity/non_player_view.gd` | Общий визуальный контракт NPC без игровых решений. |
 | `Sheep` | `scenes/entities/sheep/sheep.gd` | Нейтральную NPC с 25 HP и простым горизонтальным поведением. |
@@ -634,7 +636,7 @@ fonts/                         шрифты и лицензии
 | Создание нового уровня | Новый `WorldLevel`-совместимый `.tscn`, level-скрипт и `LevelDefinition.tres` | Каталог `GameSession`; Runtime/Controller/сервисы предоставляет общий `match_world.tscn`. |
 | Lobby и запуск матча | `LobbyMatchCoordinator` и `scenes/menu/lobby/` | `SteamManager` для lobby API, `GameSession` для frozen roster, connection/player channels для протокола. |
 | RPC или delivery mode | `NetworkManager` | Доменное применение события в `WorldNetwork`. |
-| Анимацию игрока | `CharacterView` и `character.tscn` | Не переносить туда combat/turn/network rules. |
+| Анимацию рыцаря | `KnightView` и `characters/knight/knight.tscn` | Не переносить туда combat/turn/network rules. |
 | Анимацию NPC | Конкретный view | Базовый контракт `NonPlayerView`. |
 | Завершение матча | `MatchController` | HUD-сигнал и сетевой end-game flow. |
 | Игровое сообщение | `ConsoleOutput` | Не отправлять текст локального лога по сети. |
@@ -750,9 +752,9 @@ View показывает спрайт, направление и анимаци
 
 Такой порядок движется от владельцев жизненного цикла и данных к деталям поведения и помогает не принять конкретную сцену уровня за архитектурный центр всего приложения.
 
-## 20. Сетевой протокол версии 2
+## 20. Сетевой протокол версии 12
 
-Текущая сборка использует `NetworkProtocol.PROTOCOL_VERSION = 2`. Версия записывается в данные lobby, проверяется в `prepare_match`, transport identity handshake и action snapshot. Lobby другой версии отфильтровывается при поиске, а прямое подключение завершается с безопасной причиной `protocol_mismatch` до загрузки уровня. Совместимость со сборками protocol v1 не поддерживается.
+Текущая сборка использует `NetworkProtocol.PROTOCOL_VERSION = 12` и snapshot schema `4`. Версия записывается в данные lobby, проверяется в `prepare_match`, transport identity handshake и action snapshot. Lobby другой версии отфильтровывается при поиске, а прямое подключение завершается с безопасной причиной `protocol_mismatch` до загрузки уровня. Смешанные версии сборок не поддерживаются.
 
 ### Ограниченная доставка и resync
 

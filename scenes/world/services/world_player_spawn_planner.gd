@@ -2,7 +2,7 @@ class_name WorldPlayerSpawnPlanner
 extends RefCounted
 
 const INVALID_SPAWN_SURFACE: Vector3i = Vector3i(-1, -1, -1)
-const MULTIPLAYER_WARRIOR_COLORS: Array[String] = ["Blue", "Purple", "Red", "Yellow"]
+const MULTIPLAYER_APPEARANCES: Array[String] = ["Blue", "Purple", "Red", "Yellow"]
 
 
 static func get_default_spawn_surface(
@@ -49,10 +49,10 @@ static func find_available_surface(
 	return best_surface
 
 
-static func get_warrior_color(player_index: int) -> String:
-	if player_index >= 0 and player_index < MULTIPLAYER_WARRIOR_COLORS.size():
-		return MULTIPLAYER_WARRIOR_COLORS[player_index]
-	return MULTIPLAYER_WARRIOR_COLORS[0]
+static func get_character_appearance(player_index: int) -> String:
+	if player_index >= 0 and player_index < MULTIPLAYER_APPEARANCES.size():
+		return MULTIPLAYER_APPEARANCES[player_index]
+	return MULTIPLAYER_APPEARANCES[0]
 
 
 static func get_player_node_name(player_info: Dictionary) -> String:
