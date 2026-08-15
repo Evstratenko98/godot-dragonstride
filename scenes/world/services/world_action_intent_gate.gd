@@ -7,6 +7,7 @@ const INTENT_RATE_BURST := 12.0
 
 var processed_request_keys: Dictionary[String, bool] = {}
 var processed_request_order_by_steam_id: Dictionary[int, Array] = {}
+var processed_request_head_by_steam_id: Dictionary[int, int] = {}
 var intent_tokens_by_steam_id: Dictionary[int, float] = {}
 var intent_refill_msec_by_steam_id: Dictionary[int, int] = {}
 
@@ -33,16 +34,23 @@ func record_processed(action: WorldActionRecord) -> void:
 	var request_key: String = _make_request_key(action)
 	processed_request_keys[request_key] = true
 	var request_order: Array = processed_request_order_by_steam_id.get(action.requester_steam_id, []) as Array
+	var request_head_index: int = int(processed_request_head_by_steam_id.get(action.requester_steam_id, 0))
 	request_order.append(request_key)
-	while request_order.size() > MAX_PROCESSED_REQUESTS_PER_PLAYER:
-		var expired_key: String = str(request_order.pop_front())
+	while request_order.size() - request_head_index > MAX_PROCESSED_REQUESTS_PER_PLAYER:
+		var expired_key: String = str(request_order[request_head_index])
+		request_head_index += 1
 		processed_request_keys.erase(expired_key)
+	if request_head_index >= MAX_PROCESSED_REQUESTS_PER_PLAYER and request_head_index * 2 >= request_order.size():
+		request_order = request_order.slice(request_head_index)
+		request_head_index = 0
 	processed_request_order_by_steam_id[action.requester_steam_id] = request_order
+	processed_request_head_by_steam_id[action.requester_steam_id] = request_head_index
 
 
 func clear() -> void:
 	processed_request_keys.clear()
 	processed_request_order_by_steam_id.clear()
+	processed_request_head_by_steam_id.clear()
 	intent_tokens_by_steam_id.clear()
 	intent_refill_msec_by_steam_id.clear()
 

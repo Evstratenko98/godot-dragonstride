@@ -107,18 +107,31 @@ func _on_loot_claim_requested(
 	if not GameSession.is_host():
 		return
 	var player: PlayerCharacter = _get_requesting_player(requester_peer_id, actor_entity_id)
-	if player != null:
-		loot.enqueue_claim_request(
-			player,
-			chest_id,
-			inventory_kind,
-			target_slot_index,
-			expected_inventory_revision,
-			request_id,
+	if player == null:
+		_reject_claim_request(requester_peer_id, request_id)
+		return
+	loot.enqueue_claim_request(
+		player,
+		chest_id,
+		inventory_kind,
+		target_slot_index,
+		expected_inventory_revision,
+		request_id,
+		requester_peer_id,
+		turn_revision,
+		match_id
+	)
+
+
+func _reject_claim_request(requester_peer_id: int, request_id: int) -> void:
+	if requester_peer_id > 0:
+		NetworkManager.actions.send_action_rejected(
 			requester_peer_id,
-			turn_revision,
-			match_id
+			request_id,
+			WorldActionStream.REJECTION_ACTOR_UNAVAILABLE
 		)
+		return
+	loot.handle_local_action_rejected(WorldActionStream.REJECTION_ACTOR_UNAVAILABLE)
 
 
 func _on_loot_discard_requested(

@@ -69,6 +69,13 @@ func clear() -> void:
 	npc_action_messages.clear()
 
 
+func discard_before(boundary_sequence_id: int) -> void:
+	_discard_dictionary_entries_before(inventory_snapshots, boundary_sequence_id)
+	_discard_dictionary_entries_before(combat_messages, boundary_sequence_id)
+	_discard_dictionary_entries_before(entity_messages, boundary_sequence_id)
+	_discard_dictionary_entries_before(npc_action_messages, boundary_sequence_id)
+
+
 func _buffer_message(target: Dictionary[int, Array], sequence_id: int, message: Dictionary) -> bool:
 	if sequence_id <= 0 or network.runtime.get_current_action_sequence_id() == sequence_id:
 		return false
@@ -104,6 +111,12 @@ func _get_message_count() -> int:
 func _request_resync() -> void:
 	if network.runtime.action_stream != null:
 		network.runtime.action_stream.request_runtime_resync(WorldActionStream.REJECTION_SEQUENCE_GAP)
+
+
+func _discard_dictionary_entries_before(target: Dictionary, boundary_sequence_id: int) -> void:
+	for sequence_id_value: Variant in target.keys():
+		if int(sequence_id_value) < boundary_sequence_id:
+			target.erase(sequence_id_value)
 
 
 func _apply_combat(message: Dictionary) -> void:

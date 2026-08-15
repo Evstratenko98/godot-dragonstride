@@ -9,7 +9,8 @@ signal character_move_path_requested(
 	requested_path: Array[Vector3i],
 	match_id: String,
 	turn_revision: int,
-	request_id: int
+	request_id: int,
+	requester_peer_id: int
 )
 signal entity_move_received(
 	parent_sequence_id: int,
@@ -60,7 +61,8 @@ func request_character_move_path(
 			requested_path,
 			match_id,
 			turn_revision,
-			request_id
+			request_id,
+			0
 		)
 		return
 	rpc_id(1, "_submit_character_move_path", actor_entity_id, requested_path, match_id, turn_revision, request_id)
@@ -141,9 +143,11 @@ func _submit_character_move_path(
 	turn_revision: int,
 	request_id: int
 ) -> void:
+	var requester_peer_id: int = _get_registered_sender_peer_id()
 	var requester_steam_id: int = _get_registered_sender_steam_id()
 	if (
-		requester_steam_id != 0
+		requester_peer_id != 0
+		and requester_steam_id != 0
 		and NetworkProtocol.is_valid_identifier(actor_entity_id)
 		and turn_revision >= 0
 		and NetworkProtocol.is_valid_move_path(requested_path)
@@ -159,7 +163,8 @@ func _submit_character_move_path(
 			requested_path,
 			match_id,
 			turn_revision,
-			request_id
+			request_id,
+			requester_peer_id
 		)
 
 

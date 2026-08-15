@@ -186,8 +186,17 @@ func create_snapshot() -> Dictionary:
 	return WorldVisibilitySnapshotCodec.create_snapshot(self)
 
 
-func is_valid_snapshot(snapshot: Dictionary, additional_tower_ids: Dictionary[String, bool] = {}) -> bool:
-	return WorldVisibilitySnapshotCodec.is_valid_snapshot(self, snapshot, additional_tower_ids)
+func is_valid_snapshot(
+	snapshot: Dictionary,
+	additional_tower_ids: Dictionary[String, bool] = {},
+	should_require_exact_tower_count: bool = true
+) -> bool:
+	return WorldVisibilitySnapshotCodec.is_valid_snapshot(
+		self,
+		snapshot,
+		additional_tower_ids,
+		should_require_exact_tower_count
+	)
 
 
 func apply_snapshot(snapshot: Dictionary) -> bool:

@@ -17,6 +17,9 @@ signal stream_snapshot_requested(
 	expected_sequence_id: int
 )
 
+const MAX_SNAPSHOT_ASSEMBLIES: int = 2
+const SNAPSHOT_ASSEMBLY_TIMEOUT_MSEC: int = 10_000
+
 var snapshot_assemblies: Dictionary[String, Dictionary] = {}
 
 
@@ -28,6 +31,10 @@ func _ready() -> void:
 func _exit_tree() -> void:
 	if GameSession.session_cleared.is_connected(_on_session_cleared):
 		GameSession.session_cleared.disconnect(_on_session_cleared)
+
+
+func _process(_delta: float) -> void:
+	_prune_expired_snapshot_assemblies(Time.get_ticks_msec())
 
 
 func broadcast_action_started(record: Dictionary) -> void:
@@ -261,14 +268,15 @@ func _receive_stream_snapshot_chunk(
 		return
 	var assembly: Dictionary = snapshot_assemblies.get(sync_id, {}) as Dictionary
 	if assembly.is_empty():
-		if snapshot_assemblies.size() >= 2:
-			return
+		if snapshot_assemblies.size() >= MAX_SNAPSHOT_ASSEMBLIES:
+			_evict_oldest_snapshot_assembly()
 		assembly = {
 			"match_id": match_id,
 			"chunk_count": chunk_count,
 			"checksum": checksum,
 			"chunks": {},
 			"total_size": 0,
+			"last_updated_msec": Time.get_ticks_msec(),
 		}
 	if (
 		str(assembly.get("match_id", "")) != match_id
@@ -285,6 +293,7 @@ func _receive_stream_snapshot_chunk(
 		_reject_snapshot_assembly(sync_id)
 		return
 	assembly["chunks"] = chunks
+	assembly["last_updated_msec"] = Time.get_ticks_msec()
 	snapshot_assemblies[sync_id] = assembly
 	if chunks.size() == chunk_count:
 		_complete_snapshot_assembly(sync_id)
@@ -355,6 +364,27 @@ func _get_sha256(data: PackedByteArray) -> String:
 func _reject_snapshot_assembly(sync_id: String) -> void:
 	snapshot_assemblies.erase(sync_id)
 	stream_snapshot_invalid.emit(sync_id)
+
+
+func _prune_expired_snapshot_assemblies(now_msec: int) -> void:
+	for sync_id: String in snapshot_assemblies.keys():
+		var assembly: Dictionary = snapshot_assemblies.get(sync_id, {}) as Dictionary
+		var last_updated_msec: int = int(assembly.get("last_updated_msec", 0))
+		if last_updated_msec <= 0 or now_msec - last_updated_msec >= SNAPSHOT_ASSEMBLY_TIMEOUT_MSEC:
+			_reject_snapshot_assembly(sync_id)
+
+
+func _evict_oldest_snapshot_assembly() -> void:
+	var oldest_sync_id: String = ""
+	var oldest_update_msec: int = Time.get_ticks_msec()
+	for sync_id: String in snapshot_assemblies.keys():
+		var assembly: Dictionary = snapshot_assemblies.get(sync_id, {}) as Dictionary
+		var updated_msec: int = int(assembly.get("last_updated_msec", 0))
+		if oldest_sync_id.is_empty() or updated_msec < oldest_update_msec:
+			oldest_sync_id = sync_id
+			oldest_update_msec = updated_msec
+	if not oldest_sync_id.is_empty():
+		_reject_snapshot_assembly(oldest_sync_id)
 
 
 func _on_session_cleared() -> void:

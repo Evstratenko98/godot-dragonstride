@@ -123,6 +123,7 @@ func _enqueue_forced_actions(character: PlayerCharacter) -> void:
 		return
 	var goal_surfaces: Array[Vector3i] = WorldGridPathfinder.get_adjacent_walkable_surfaces(
 		runtime,
+		character,
 		provoker.current_surface
 	)
 	var path: Array[Vector3i] = WorldGridPathfinder.find_path_to_any(

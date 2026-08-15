@@ -22,11 +22,20 @@ var loot_table: ChestLootTable = DEFAULT_LOOT_TABLE
 var random_number_generator: RandomNumberGenerator = RandomNumberGenerator.new()
 var pending_records: Dictionary[String, ChestLootRecord] = {}
 var open_reservation_action_ids: Dictionary[String, int] = {}
+var request_tracker: WorldLootRequestTracker = WorldLootRequestTracker.new()
 var network_bridge: WorldLootNetworkBridge = WorldLootNetworkBridge.new()
 
 
 func _ready() -> void:
 	random_number_generator.randomize()
+
+
+func _process(_delta: float) -> void:
+	for chest_id: String in request_tracker.take_expired(Time.get_ticks_msec()):
+		var record: ChestLootRecord = _get_record(chest_id)
+		if record != null and record.is_local_request_pending:
+			record.is_local_request_pending = false
+			loot_request_failed.emit(chest_id, "network_unavailable")
 
 
 func _exit_tree() -> void:
@@ -98,6 +107,9 @@ func execute_open_action(action: WorldActionRecord, player: PlayerCharacter) -> 
 	if chest == null or not chest.can_open():
 		return false
 	await chest.play_opening_animation()
+	if not is_instance_valid(chest):
+		action.payload["cancellation_reason"] = WorldActionStream.REJECTION_PRESENTATION_TIMEOUT
+		return false
 	chest.set_opened()
 	var record: ChestLootRecord = _record_from_action(action)
 	if record == null:
@@ -119,7 +131,8 @@ func play_remote_open_action(action: WorldActionRecord) -> void:
 	var chest: Chest = runtime.get_object_by_id(str(action.payload.get(PAYLOAD_CHEST_ID, ""))) as Chest
 	if chest != null and chest.can_open():
 		await chest.play_opening_animation()
-		chest.set_opened()
+		if is_instance_valid(chest):
+			chest.set_opened()
 	_reveal_if_local(record)
 
 
@@ -148,6 +161,7 @@ func request_claim(chest_id: String, inventory_kind: String, target_slot_index: 
 	if request_id <= 0:
 		return false
 	record.is_local_request_pending = true
+	request_tracker.begin(chest_id)
 	if GameSession.is_singleplayer():
 		enqueue_claim_request(
 			player,
@@ -163,6 +177,7 @@ func request_claim(chest_id: String, inventory_kind: String, target_slot_index: 
 		return true
 	if not NetworkManager.connection.is_ready():
 		record.is_local_request_pending = false
+		request_tracker.finish(chest_id)
 		return false
 	network_bridge.request_claim(
 		player,
@@ -186,10 +201,12 @@ func request_discard(chest_id: String) -> bool:
 	if request_id <= 0:
 		return false
 	record.is_local_request_pending = true
+	request_tracker.begin(chest_id)
 	if GameSession.is_singleplayer():
 		return discard_authoritative(chest_id, player)
 	if not NetworkManager.connection.is_ready():
 		record.is_local_request_pending = false
+		request_tracker.finish(chest_id)
 		return false
 	network_bridge.request_discard(player, chest_id, request_id)
 	return true
@@ -220,6 +237,7 @@ func is_valid_snapshot(snapshot: Dictionary) -> bool:
 func apply_snapshot(snapshot: Dictionary) -> bool:
 	if not is_valid_snapshot(snapshot):
 		return false
+	request_tracker.clear()
 	pending_records.clear()
 	for record_value: Variant in snapshot.get("pending_rewards", []):
 		var record: ChestLootRecord = ChestLootRecord.from_dictionary(record_value as Dictionary)
@@ -336,6 +354,7 @@ func discard_authoritative(chest_id: String, player: PlayerCharacter) -> bool:
 		loot_request_failed.emit(record.chest_id, WorldActionStream.REJECTION_ACTOR_BUSY)
 		return false
 	pending_records.erase(record.chest_id)
+	request_tracker.finish(record.chest_id)
 	if GameSession.is_multiplayer():
 		network_bridge.broadcast_discarded(record.chest_id, record.opener_entity_id)
 	else:
@@ -397,12 +416,14 @@ func _reveal_if_local(record: ChestLootRecord) -> void:
 
 func apply_discarded(chest_id: String, opener_entity_id: String) -> void:
 	pending_records.erase(chest_id)
+	request_tracker.finish(chest_id)
 	var player: PlayerCharacter = runtime.get_player_by_entity_id(opener_entity_id)
 	if player != null and player.is_locally_owned:
 		loot_resolved.emit(chest_id)
 
 
 func notify_request_failed(chest_id: String, reason_code: String) -> void:
+	request_tracker.finish(chest_id)
 	var record: ChestLootRecord = _get_record(chest_id)
 	if record != null:
 		record.is_local_request_pending = false
@@ -413,6 +434,7 @@ func handle_action_completed(action: WorldActionRecord) -> void:
 	if not is_chest_claim_action(action):
 		return
 	var chest_id: String = str(action.payload.get(PAYLOAD_SOURCE_CHEST_ID, ""))
+	request_tracker.finish(chest_id)
 	var record: ChestLootRecord = _get_record(chest_id)
 	pending_records.erase(chest_id)
 	if record != null:
@@ -424,6 +446,7 @@ func handle_action_cancelled(action: WorldActionRecord, reason_code: String) -> 
 		return
 	release_action_reservation(action)
 	var chest_id: String = str(action.payload.get(PAYLOAD_SOURCE_CHEST_ID, ""))
+	request_tracker.finish(chest_id)
 	var record: ChestLootRecord = _get_record(chest_id)
 	if record != null:
 		record.is_local_request_pending = false
@@ -433,6 +456,7 @@ func handle_action_cancelled(action: WorldActionRecord, reason_code: String) -> 
 func handle_local_action_rejected(reason_code: String) -> void:
 	for record: ChestLootRecord in pending_records.values():
 		if record.is_local_request_pending:
+			request_tracker.finish(record.chest_id)
 			record.is_local_request_pending = false
 			loot_request_failed.emit(record.chest_id, reason_code)
 			return
@@ -453,3 +477,4 @@ func _get_local_opener(record: ChestLootRecord) -> PlayerCharacter:
 func clear_state() -> void:
 	pending_records.clear()
 	open_reservation_action_ids.clear()
+	request_tracker.clear()

@@ -90,7 +90,11 @@ func apply_action_stream_snapshot(snapshot: Dictionary) -> bool:
 	if loot != null and not loot.is_valid_snapshot(loot_state_value as Dictionary):
 		return false
 	var pending_tower_ids: Dictionary[String, bool] = _get_pending_vision_tower_ids(world_state_value as Dictionary)
-	if visibility != null and not visibility.is_valid_snapshot(visibility_state_value as Dictionary, pending_tower_ids):
+	if visibility != null and not visibility.is_valid_snapshot(
+		visibility_state_value as Dictionary,
+		pending_tower_ids,
+		false
+	):
 		return false
 	if not _validate_world_state_snapshot(world_state_value as Dictionary):
 		return false
@@ -99,17 +103,43 @@ func apply_action_stream_snapshot(snapshot: Dictionary) -> bool:
 		_get_entity_ids(world_state_value as Dictionary)
 	):
 		return false
-	if not _apply_world_state_snapshot(world_state_value as Dictionary):
+	var rollback_snapshot: Dictionary = create_action_stream_snapshot(
+		maxi(int(snapshot.get("next_sequence_id", 1)), 1)
+	)
+	if _apply_validated_snapshot(snapshot):
+		if spawner != null:
+			spawner.commit_action_stream_snapshot_spawns()
+		return true
+	if spawner != null:
+		spawner.rollback_action_stream_snapshot_spawns()
+	if not _apply_validated_snapshot(rollback_snapshot):
+		if spawner != null:
+			spawner.rollback_action_stream_snapshot_spawns()
+		push_error("World snapshot rollback failed")
+	else:
+		if spawner != null:
+			spawner.commit_action_stream_snapshot_spawns()
+	return false
+
+
+func _apply_validated_snapshot(snapshot: Dictionary) -> bool:
+	var turn_state: Dictionary = snapshot.get("turn_state", {}) as Dictionary
+	var spell_state: Dictionary = snapshot.get("spell_state", {}) as Dictionary
+	var loot_state: Dictionary = snapshot.get("loot_state", {}) as Dictionary
+	var visibility_state: Dictionary = snapshot.get("visibility_state", {}) as Dictionary
+	var ability_state: Dictionary = snapshot.get("ability_state", {}) as Dictionary
+	var world_state: Dictionary = snapshot.get("world_state", {}) as Dictionary
+	if not _apply_world_state_snapshot(world_state):
 		return false
 	if turns != null:
-		turns.apply_remote_snapshot(turn_state_value as Dictionary)
+		turns.apply_remote_snapshot(turn_state)
 	if spells != null:
-		spells.apply_action_stream_snapshot(spell_state_value as Dictionary)
-	if loot != null and not loot.apply_snapshot(loot_state_value as Dictionary):
+		spells.apply_action_stream_snapshot(spell_state)
+	if loot != null and not loot.apply_snapshot(loot_state):
 		return false
-	if visibility != null and not visibility.apply_snapshot(visibility_state_value as Dictionary):
+	if visibility != null and not visibility.apply_snapshot(visibility_state):
 		return false
-	if abilities != null and not abilities.apply_snapshot(ability_state_value as Dictionary):
+	if abilities != null and not abilities.apply_snapshot(ability_state):
 		return false
 	return true
 
@@ -386,7 +416,5 @@ func _apply_world_state_snapshot(world_state: Dictionary) -> bool:
 					str(state.get("target_entity_id", "")),
 					str(state.get("reason", ""))
 				)
-	if spawner != null:
-		spawner.commit_action_stream_snapshot_spawns()
 	replication_store.replace_from_world_snapshot(world_state)
 	return true

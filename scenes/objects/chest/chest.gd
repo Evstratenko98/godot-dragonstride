@@ -2,6 +2,7 @@ class_name Chest
 extends GridObject
 
 const OPEN_ANIMATION_NAME := &"open"
+const OPEN_ANIMATION_TIMEOUT_MSEC: int = 3_000
 
 @onready var animation_player: AnimationPlayer = get_node("AnimationPlayer") as AnimationPlayer
 
@@ -14,12 +15,22 @@ func can_open() -> bool:
 	return object_state == ObjectState.NORMAL
 
 
-func play_opening_animation() -> void:
+func play_opening_animation() -> bool:
 	if animation_player == null:
-		return
+		return false
 
 	animation_player.play(OPEN_ANIMATION_NAME)
-	await animation_player.animation_finished
+	var deadline_msec: int = Time.get_ticks_msec() + OPEN_ANIMATION_TIMEOUT_MSEC
+	while (
+		is_instance_valid(animation_player)
+		and animation_player.is_playing()
+		and Time.get_ticks_msec() < deadline_msec
+	):
+		await get_tree().process_frame
+	var did_finish: bool = is_instance_valid(animation_player) and not animation_player.is_playing()
+	if not did_finish and is_instance_valid(animation_player):
+		animation_player.stop()
+	return did_finish
 
 
 func set_opened() -> void:

@@ -285,7 +285,7 @@ func _get_attack_goal_surfaces(target: Node) -> Array[Vector3i]:
 	if target == null or target.get("current_surface") == null:
 		return cells
 	var target_surface: Vector3i = target.get("current_surface")
-	return WorldGridPathfinder.get_adjacent_walkable_surfaces(runtime, target_surface)
+	return WorldGridPathfinder.get_adjacent_walkable_surfaces(runtime, self, target_surface)
 
 
 func _has_terrain_path_to_any(goal_surfaces: Array[Vector3i]) -> bool:

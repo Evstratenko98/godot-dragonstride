@@ -11,10 +11,11 @@ const ORTHOGONAL_DIRECTIONS: Array[Vector2i] = [
 
 static func get_adjacent_walkable_surfaces(
 	runtime: WorldRuntime,
+	entity: Entity,
 	target_surface: Vector3i
 ) -> Array[Vector3i]:
 	var surfaces: Array[Vector3i] = []
-	if runtime == null:
+	if runtime == null or entity == null:
 		return surfaces
 	for direction: Vector2i in ORTHOGONAL_DIRECTIONS:
 		var candidate: Vector3i = Vector3i(
@@ -22,7 +23,7 @@ static func get_adjacent_walkable_surfaces(
 			target_surface.y + direction.y,
 			target_surface.z
 		)
-		if runtime.is_surface_inside(candidate) and runtime.is_surface_walkable(candidate):
+		if runtime.is_surface_inside(candidate) and runtime.is_surface_walkable_for_entity(candidate, entity):
 			surfaces.append(candidate)
 	return surfaces
 

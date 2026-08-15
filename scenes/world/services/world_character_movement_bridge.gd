@@ -168,6 +168,10 @@ func handle_snapshot_committed(boundary_sequence_id: int) -> void:
 	move_request_tracker.handle_snapshot_committed(boundary_sequence_id)
 
 
+func process_pending_requests() -> void:
+	move_request_tracker.expire_if_needed(Time.get_ticks_msec())
+
+
 func clear() -> void:
 	move_request_tracker.clear()
 	held_state_by_entity_id.clear()
@@ -289,25 +293,38 @@ func _on_character_move_path_requested(
 	requested_path: Array[Vector3i],
 	match_id: String,
 	turn_revision: int,
-	request_id: int
+	request_id: int,
+	requester_peer_id: int
 ) -> void:
 	if network == null or not GameSession.is_host():
 		return
 	if not network.runtime.is_character_owned_by_steam_id(actor_entity_id, requester_steam_id):
+		_reject_move_path_request(requester_peer_id, request_id)
 		return
 	var player: PlayerCharacter = network.runtime.get_player_by_entity_id(actor_entity_id)
 	if player == null:
+		_reject_move_path_request(requester_peer_id, request_id)
 		return
-	var peer_id: int = NetworkManager.peers.get_peer_id_for_steam_id(requester_steam_id)
 	network.runtime.enqueue_player_action(
 		WorldActionRecord.ActionType.MOVE_PATH,
 		player,
 		{WorldMovePathPolicy.REQUESTED_PATH_KEY: requested_path},
 		request_id,
-		peer_id,
+		requester_peer_id,
 		turn_revision,
 		match_id
 	)
+
+
+func _reject_move_path_request(requester_peer_id: int, request_id: int) -> void:
+	if requester_peer_id > 0:
+		NetworkManager.actions.send_action_rejected(
+			requester_peer_id,
+			request_id,
+			WorldActionStream.REJECTION_ACTOR_UNAVAILABLE
+		)
+		return
+	move_request_tracker.handle_rejected(request_id)
 
 
 func _on_scene_tree_node_added(node: Node) -> void:

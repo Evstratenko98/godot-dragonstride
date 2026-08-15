@@ -13,6 +13,10 @@ var message_buffer: WorldNetworkMessageBuffer = WorldNetworkMessageBuffer.new()
 var inventory_bridge: WorldInventoryNetworkBridge = WorldInventoryNetworkBridge.new()
 
 
+func _process(_delta: float) -> void:
+	character_movement.process_pending_requests()
+
+
 func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void:
 	runtime = new_runtime
 	level = new_level
@@ -437,6 +441,7 @@ func _on_action_accepted(request_id: int, sequence_id: int) -> void:
 
 
 func _on_remote_snapshot_committed(boundary_sequence_id: int) -> void:
+	message_buffer.discard_before(boundary_sequence_id)
 	character_movement.handle_snapshot_committed(boundary_sequence_id)
 
 

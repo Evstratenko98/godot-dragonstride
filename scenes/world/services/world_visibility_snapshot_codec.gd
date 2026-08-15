@@ -37,7 +37,8 @@ static func create_snapshot(visibility: WorldVisibility) -> Dictionary:
 static func is_valid_snapshot(
 	visibility: WorldVisibility,
 	snapshot: Dictionary,
-	additional_tower_ids: Dictionary[String, bool] = {}
+	additional_tower_ids: Dictionary[String, bool] = {},
+	should_require_exact_tower_count: bool = true
 ) -> bool:
 	if (
 		not (snapshot.get(KEY_ENABLED) is bool)
@@ -70,7 +71,7 @@ static func is_valid_snapshot(
 	for object_value: Variant in visibility.runtime.get_registered_objects():
 		if object_value is VisionTower:
 			registered_tower_count += 1
-	if towers.size() != registered_tower_count + additional_tower_ids.size():
+	if should_require_exact_tower_count and towers.size() != registered_tower_count + additional_tower_ids.size():
 		return false
 	var seen_tower_ids: Dictionary[String, bool] = {}
 	for record_value: Variant in towers:

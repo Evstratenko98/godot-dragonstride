@@ -27,6 +27,7 @@ func run_if_active() -> bool:
 		return true
 	var goal_surfaces: Array[Vector3i] = WorldGridPathfinder.get_adjacent_walkable_surfaces(
 		entity.runtime,
+		entity,
 		provoker.current_surface
 	)
 	var path: Array[Vector3i] = WorldGridPathfinder.find_path_to_any(
