@@ -1,7 +1,11 @@
 class_name ChestLootTable
 extends Resource
 
-@export var reward_item_ids: PackedStringArray = []
+@export var reward_item_ids: PackedStringArray = PackedStringArray([
+	CharacterInventory.ITEM_ID_MEAT,
+	CharacterInventory.ITEM_ID_PRECISION_STONE,
+	CharacterInventory.ITEM_ID_METEOR_SCROLL,
+])
 
 
 func roll_reward_item_id(random_number_generator: RandomNumberGenerator) -> String:
