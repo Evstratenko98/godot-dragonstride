@@ -76,13 +76,27 @@ static func _is_valid_ramp(record: Dictionary) -> bool:
 
 
 static func _is_valid_placement(record: Dictionary) -> bool:
-	return (
+	if not (
 		record.get("type_key") is String
 		and record.get("id") is String
 		and record.get("node_name") is String
 		and _is_number_array(record.get("position"), 2)
 		and _is_number_array(record.get("scale"), 2)
 		and _is_integer(record.get("surface_height"))
+		and _is_dictionary_array(record.get("vision_regions"))
+	):
+		return false
+	for region: Dictionary in record.get("vision_regions") as Array:
+		if not _is_valid_vision_region(region):
+			return false
+	return true
+
+
+static func _is_valid_vision_region(record: Dictionary) -> bool:
+	return (
+		_is_integer_array(record.get("rect"), 4)
+		and _is_integer(record.get("min_elevation"))
+		and _is_integer(record.get("max_elevation"))
 	)
 
 

@@ -196,11 +196,11 @@ static func _validate_placements(document: WorldMapDocument) -> String:
 	var ids: Dictionary[String, bool] = {}
 	var node_names: Dictionary[String, bool] = {}
 	for record: Dictionary in document.static_entities:
-		var error: String = _validate_placement(record, WorldSpawnCatalog.KIND_ENTITY, ids, node_names)
+		var error: String = _validate_placement(record, WorldSpawnCatalog.KIND_ENTITY, document.grid_size, ids, node_names)
 		if not error.is_empty():
 			return error
 	for record: Dictionary in document.static_objects:
-		var error: String = _validate_placement(record, WorldSpawnCatalog.KIND_OBJECT, ids, node_names)
+		var error: String = _validate_placement(record, WorldSpawnCatalog.KIND_OBJECT, document.grid_size, ids, node_names)
 		if not error.is_empty():
 			return error
 	return ""
@@ -209,6 +209,7 @@ static func _validate_placements(document: WorldMapDocument) -> String:
 static func _validate_placement(
 	record: Dictionary,
 	expected_kind: String,
+	grid_size: Vector2i,
 	ids: Dictionary[String, bool],
 	node_names: Dictionary[String, bool]
 ) -> String:
@@ -240,6 +241,13 @@ static func _validate_placement(
 	var surface_height: int = int(record.get("surface_height", 0))
 	if surface_height < WorldGridTopology.MIN_ELEVATION or surface_height > WorldGridTopology.MAX_ELEVATION:
 		return "map_invalid"
+	var vision_error: String = WorldMapVisionRegionValidator.get_validation_error(
+		type_key,
+		record.get("vision_regions"),
+		grid_size
+	)
+	if not vision_error.is_empty():
+		return vision_error
 	ids[item_id] = true
 	node_names[node_name] = true
 	return ""

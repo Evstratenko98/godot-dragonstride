@@ -215,6 +215,14 @@ func _build_placements(root: Node2D, records: Array[Dictionary], should_be_entit
 				return "map_build_failed"
 			grid_object.object_id = str(record.get("id", ""))
 			grid_object.surface_height = int(record.get("surface_height", 0))
+			var tower: VisionTower = grid_object as VisionTower
+			if tower != null:
+				var vision_regions: Array[Dictionary] = []
+				for region_value: Variant in record.get("vision_regions", []) as Array:
+					vision_regions.append(region_value as Dictionary)
+				if not tower.apply_reveal_region_records(vision_regions):
+					instance.free()
+					return "map_build_failed"
 		root.add_child(instance)
 		completed_units += 1
 		batch_count += 1

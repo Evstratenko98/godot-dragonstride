@@ -138,12 +138,13 @@ func request_inventory_use(slot_index: int) -> void:
 	inventory_intents.request_use(slot_index)
 
 
-func broadcast_object_state(target_object: Node) -> void:
-	if not GameSession.is_multiplayer():
-		return
-
+func broadcast_object_state(target_object: Node, should_notify_visibility: bool = true) -> void:
 	var grid_object: GridObject = target_object as GridObject
 	if grid_object == null or grid_object.object_id.is_empty():
+		return
+	if should_notify_visibility and runtime.visibility != null:
+		runtime.visibility.notify_object_state_changed(grid_object)
+	if not GameSession.is_multiplayer():
 		return
 
 	NetworkManager.entity.broadcast_object_state(
@@ -158,7 +159,7 @@ func broadcast_all_object_states() -> void:
 		return
 
 	for target_object in runtime.get_registered_objects():
-		broadcast_object_state(target_object)
+		broadcast_object_state(target_object, false)
 
 
 func finalize_authoritative_action(action: WorldActionRecord) -> void:
@@ -475,7 +476,7 @@ func _apply_object_state_message(object_id: String, object_state: int) -> void:
 
 	target_object.apply_network_state(object_state)
 	if runtime.visibility != null:
-		runtime.visibility.request_recompute()
+		runtime.visibility.notify_object_state_changed(target_object)
 
 
 func _on_end_game_requested() -> void:

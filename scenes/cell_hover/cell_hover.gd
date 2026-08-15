@@ -281,5 +281,5 @@ func _on_action_mode_changed(_action_mode: int) -> void:
 	_refresh_hover_state(true)
 
 
-func _on_visibility_changed() -> void:
+func _on_visibility_changed(_changed_surfaces: Array[Vector3i], _full_refresh: bool) -> void:
 	_refresh_hover_state(true)

@@ -2,7 +2,7 @@ class_name SandboxMapGenerator
 extends RefCounted
 
 const FIXED_SEED: int = 1
-const GENERATOR_VERSION: int = 2
+const GENERATOR_VERSION: int = 3
 const PACKED_HEADER_BYTES: int = 2
 const PACKED_CELL_BYTES: int = 12
 const LAYER_RECIPES := [
@@ -49,7 +49,15 @@ static func generate(seed: int = FIXED_SEED) -> WorldMapDocument:
 		_create_placement("house", "house_1", "House", Vector2(92, 214), Vector2(1.2, 1.2), 0),
 		_create_placement("tree", "tree_2", "Tree2", Vector2(353, 225), Vector2.ONE, 0),
 		_create_placement("chest", "chest_1", "Chest", Vector2(608, 672), Vector2.ONE, 0),
-		_create_placement("vision_tower", "vision_tower_1", "VisionTower", Vector2(288, 608), Vector2.ONE, 1),
+		_create_placement(
+			"vision_tower",
+			"vision_tower_1",
+			"VisionTower",
+			Vector2(288, 608),
+			Vector2.ONE,
+			1,
+			[_create_vision_region(Rect2i(1, 6, 8, 8), 0, 1)]
+		),
 		_create_placement("healing_well", "healing_well_1", "HealingWell", Vector2(224, 480), Vector2.ONE, 0),
 		_create_placement("linked_portal", "linked_portal_1", "LinkedPortal1", Vector2(544, 480), Vector2.ONE, 0),
 		_create_placement("linked_portal", "linked_portal_2", "LinkedPortal2", Vector2(992, 864), Vector2.ONE, 0),
@@ -172,7 +180,8 @@ static func _create_placement(
 	node_name: String,
 	position: Vector2,
 	scale: Vector2,
-	surface_height: int
+	surface_height: int,
+	vision_regions: Array[Dictionary] = []
 ) -> Dictionary:
 	return {
 		"type_key": type_key,
@@ -181,5 +190,13 @@ static func _create_placement(
 		"position": [position.x, position.y],
 		"scale": [scale.x, scale.y],
 		"surface_height": surface_height,
+		"vision_regions": vision_regions.duplicate(true),
 	}
 
+
+static func _create_vision_region(bounds: Rect2i, minimum_elevation: int, maximum_elevation: int) -> Dictionary:
+	return {
+		"rect": [bounds.position.x, bounds.position.y, bounds.size.x, bounds.size.y],
+		"min_elevation": minimum_elevation,
+		"max_elevation": maximum_elevation,
+	}

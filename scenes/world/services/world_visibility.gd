@@ -1,7 +1,7 @@
 class_name WorldVisibility
 extends Node
 
-signal local_visibility_changed
+signal local_visibility_changed(changed_surfaces: Array[Vector3i], full_refresh: bool)
 signal fog_enabled_changed(is_enabled: bool)
 
 enum VisibilityMode {
@@ -10,19 +10,38 @@ enum VisibilityMode {
 	VISIBLE,
 }
 
+const CHARACTER_SOURCE_PREFIX: String = "character:"
+
 var runtime: WorldRuntime = null
 var level: WorldLevel = null
 var fog_enabled: bool = true
 var solver: WorldVisionSolver = WorldVisionSolver.new()
-var surface_order: Array[Vector3i] = []
-var display_surfaces: Array[Vector3i] = []
-var surface_index_by_surface: Dictionary[Vector3i, int] = {}
-var visible_by_player: Dictionary[String, Dictionary] = {}
+var source_ledger: WorldVisibilitySourceLedger = WorldVisibilitySourceLedger.new()
+var memory_store: WorldVisibilityObjectMemoryStore = WorldVisibilityObjectMemoryStore.new()
+var character_sources: WorldVisibilityCharacterSourceCoordinator = WorldVisibilityCharacterSourceCoordinator.new()
+var object_changes: WorldVisibilityObjectChangeCoordinator = WorldVisibilityObjectChangeCoordinator.new()
+var surface_catalog: WorldVisibilitySurfaceCatalog = WorldVisibilitySurfaceCatalog.new()
+var tower_sources: WorldVisibilityTowerSourceCoordinator = WorldVisibilityTowerSourceCoordinator.new()
 var explored_by_player: Dictionary[String, Dictionary] = {}
-var object_memories_by_player: Dictionary[String, Dictionary] = {}
 var blocker_cells: Dictionary[Vector2i, bool] = {}
 var recompute_pending: bool = false
-var bound_characters: Array[PlayerCharacter] = []
+var object_memories_by_player: Dictionary[String, Dictionary]:
+	get:
+		return memory_store.memories_by_player
+	set(value):
+		memory_store.replace_all(value)
+var surface_order: Array[Vector3i]:
+	get:
+		return surface_catalog.surface_order
+var display_surfaces: Array[Vector3i]:
+	get:
+		return surface_catalog.display_surfaces
+var display_surface_by_cell: Dictionary[Vector2i, Vector3i]:
+	get:
+		return surface_catalog.display_surface_by_cell
+var surface_index_by_surface: Dictionary[Vector3i, int]:
+	get:
+		return surface_catalog.surface_index_by_surface
 
 
 func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void:
@@ -30,53 +49,14 @@ func configure_context(new_runtime: WorldRuntime, new_level: WorldLevel) -> void
 	runtime = new_runtime
 	level = new_level
 	fog_enabled = bool(GameSession.get_match_setting(GameSession.MATCH_SETTING_FOG_OF_WAR, true))
-	surface_order = _build_visibility_surface_order()
-	surface_index_by_surface.clear()
-	display_surfaces.clear()
-	var display_surface_by_cell: Dictionary[Vector2i, Vector3i] = {}
-	for index: int in range(surface_order.size()):
-		var surface: Vector3i = surface_order[index]
-		surface_index_by_surface[surface] = index
-		var cell: Vector2i = Vector2i(surface.x, surface.y)
-		if not display_surface_by_cell.has(cell) or surface.z > (display_surface_by_cell[cell] as Vector3i).z:
-			display_surface_by_cell[cell] = surface
-	for surface: Vector3i in display_surface_by_cell.values():
-		display_surfaces.append(surface)
-	display_surfaces.sort_custom(func(first: Vector3i, second: Vector3i) -> bool:
-		return first.y < second.y if first.y != second.y else first.x < second.x
-	)
-	visible_by_player.clear()
+	surface_catalog.configure(runtime)
 	explored_by_player.clear()
-	object_memories_by_player.clear()
+	source_ledger.configure(surface_index_by_surface, surface_order.size())
+	tower_sources.configure(runtime, source_ledger)
+	memory_store.configure(runtime)
 	solver.configure(runtime.grid if runtime != null else null)
 	_connect_runtime_signals()
 	request_recompute()
-
-
-func _build_visibility_surface_order() -> Array[Vector3i]:
-	var result: Array[Vector3i] = [] if runtime == null else runtime.get_all_surfaces()
-	var known_surfaces: Dictionary[Vector3i, bool] = {}
-	for surface: Vector3i in result:
-		known_surfaces[surface] = true
-	if runtime != null:
-		var grid_size: Vector2i = runtime.get_grid_size()
-		for y: int in range(grid_size.y):
-			for x: int in range(grid_size.x):
-				var base_surface: Vector3i = Vector3i(x, y, WorldGridTopology.MIN_ELEVATION)
-				if not known_surfaces.has(base_surface):
-					known_surfaces[base_surface] = true
-					result.append(base_surface)
-	result.sort_custom(func(first: Vector3i, second: Vector3i) -> bool:
-		if first.y != second.y:
-			return first.y < second.y
-		if first.x != second.x:
-			return first.x < second.x
-		return first.z < second.z
-	)
-	if result.size() > WorldGridTopology.MAX_SURFACES:
-		push_error("Visibility surface limit exceeded: %d" % result.size())
-		result.clear()
-	return result
 
 
 func _exit_tree() -> void:
@@ -87,7 +67,7 @@ func request_recompute() -> void:
 	if recompute_pending or runtime == null:
 		return
 	recompute_pending = true
-	call_deferred("_recompute_visibility", true)
+	_recompute_visibility.call_deferred(true)
 
 
 func execute_set_fog_enabled(is_enabled: bool) -> bool:
@@ -95,8 +75,6 @@ func execute_set_fog_enabled(is_enabled: bool) -> bool:
 		return true
 	fog_enabled = is_enabled
 	GameSession.set_match_setting(GameSession.MATCH_SETTING_FOG_OF_WAR, fog_enabled)
-	if not fog_enabled:
-		_mark_everything_explored()
 	_recompute_visibility()
 	fog_enabled_changed.emit(fog_enabled)
 	return true
@@ -105,8 +83,7 @@ func execute_set_fog_enabled(is_enabled: bool) -> bool:
 func get_visibility_mode(player_id: String, surface: Vector3i) -> VisibilityMode:
 	if not fog_enabled:
 		return VisibilityMode.VISIBLE
-	var visible: Dictionary = visible_by_player.get(player_id, {}) as Dictionary
-	if visible.has(surface):
+	if source_ledger.get_visible_surfaces(player_id).has(surface):
 		return VisibilityMode.VISIBLE
 	var explored: Dictionary = explored_by_player.get(player_id, {}) as Dictionary
 	return VisibilityMode.EXPLORED if explored.has(surface) else VisibilityMode.HIDDEN
@@ -117,7 +94,7 @@ func get_local_visibility_mode(surface: Vector3i) -> VisibilityMode:
 
 
 func is_surface_visible_for_player(player_id: String, surface: Vector3i) -> bool:
-	return not fog_enabled or (visible_by_player.get(player_id, {}) as Dictionary).has(surface)
+	return not fog_enabled or source_ledger.get_visible_surfaces(player_id).has(surface)
 
 
 func is_surface_visible_for_character(character: PlayerCharacter, surface: Vector3i) -> bool:
@@ -156,29 +133,64 @@ func get_valid_player_ids() -> Dictionary[String, bool]:
 
 
 func get_object_memories(player_id: String) -> Dictionary:
-	return (object_memories_by_player.get(player_id, {}) as Dictionary).duplicate(true)
+	return memory_store.get_player_memories(player_id)
+
+
+func get_object_memories_for_surfaces(player_id: String, surfaces: Array[Vector3i]) -> Dictionary:
+	return memory_store.get_player_memories_for_surfaces(player_id, surfaces)
+
+
+func has_object_memory(player_id: String, object_id: String) -> bool:
+	return memory_store.has_player_memory(player_id, object_id)
+
+
+func notify_object_state_changed(grid_object: GridObject) -> void:
+	if grid_object == null or runtime == null:
+		return
+	var anchor: Vector3i = runtime.spatial.get_object_anchor_surface(grid_object)
+	notify_object_surfaces_changed(grid_object.get_occupied_surfaces(anchor))
+
+
+func notify_object_surfaces_changed(affected_surfaces: Array[Vector3i]) -> void:
+	if runtime == null or affected_surfaces.is_empty():
+		return
+	for player_id: String in get_valid_player_ids().keys():
+		var memory_visible_surfaces: Dictionary = (
+			source_ledger.get_visible_surfaces(player_id)
+			if fog_enabled
+			else explored_by_player.get(player_id, {}) as Dictionary
+		)
+		memory_store.update_player_for_surfaces(
+			player_id,
+			memory_visible_surfaces,
+			affected_surfaces
+		)
+	_emit_local_changes(affected_surfaces, false)
 
 
 func is_surface_blocked_on_known_map(player_id: String, surface: Vector3i) -> bool:
 	if is_surface_visible_for_player(player_id, surface):
 		return runtime.get_object_at_surface(surface) != null
-	var memories: Dictionary = object_memories_by_player.get(player_id, {}) as Dictionary
-	for memory_value: Variant in memories.values():
-		if not (memory_value is Dictionary):
-			continue
-		var memory: Dictionary = memory_value as Dictionary
-		if surface in (memory.get("occupied_surfaces", [memory.get("surface")]) as Array):
-			return true
-	return false
+	return memory_store.has_remembered_object_at_surface(player_id, surface)
 
 
 func capture_tower(tower: VisionTower, interactor: PlayerCharacter) -> bool:
-	if tower == null or interactor == null or interactor.owner_player_id.is_empty():
+	var transfer: Dictionary = tower_sources.transfer_source(tower, interactor)
+	if transfer.is_empty():
 		return false
-	if tower.owner_player_id == interactor.owner_player_id:
-		return false
-	tower.apply_owner_player_id(interactor.owner_player_id)
-	_recompute_visibility()
+	var local_player_id: String = get_local_player_id()
+	var local_dirty: Dictionary[Vector3i, bool] = {}
+	var previous_owner_player_id: String = str(transfer.get("previous_player_id", ""))
+	var removed_surfaces: Array[Vector3i] = transfer.get("previous_dirty_surfaces", []) as Array[Vector3i]
+	_commit_player_changes(previous_owner_player_id, removed_surfaces, false)
+	if previous_owner_player_id == local_player_id:
+		_merge_dirty_surfaces(local_dirty, removed_surfaces)
+	var next_owner_player_id: String = str(transfer.get("next_player_id", ""))
+	var added_surfaces: Array[Vector3i] = transfer.get("next_dirty_surfaces", []) as Array[Vector3i]
+	_commit_player_changes(next_owner_player_id, added_surfaces, false)
+	if next_owner_player_id == local_player_id:
+		_merge_dirty_surfaces(local_dirty, added_surfaces)
+	_emit_local_changes(_get_surface_keys(local_dirty), false)
 	return true
 
 
@@ -209,39 +221,88 @@ func _recompute_visibility(from_deferred: bool = false) -> void:
 	recompute_pending = false
 	if runtime == null or not is_instance_valid(runtime):
 		return
-	_rebind_character_signals()
+	character_sources.configure(runtime)
 	_rebuild_blocker_cache()
-	var next_visible: Dictionary[String, Dictionary] = {}
-	for player_id: String in get_valid_player_ids().keys():
-		var player_visible: Dictionary[Vector3i, bool] = {}
-		if not fog_enabled:
-			for surface: Vector3i in surface_order:
-				player_visible[surface] = true
-		else:
-			for character: PlayerCharacter in runtime.get_squad_members(player_id):
-				if character.health > 0:
-					_merge_surface_set(player_visible, solver.calculate_visible_surfaces(
-						character.current_surface,
-						character.vision_radius,
-						blocker_cells
-					))
-			for object_value: Variant in runtime.get_registered_objects():
-				var tower: VisionTower = object_value as VisionTower
-				if tower != null and tower.owner_player_id == player_id:
-					var tower_surface: Vector3i = runtime.spatial.get_object_anchor_surface(tower)
-					_merge_surface_set(player_visible, solver.calculate_visible_surfaces(
-						tower_surface,
-						tower.vision_radius,
-						blocker_cells,
-						true
-					))
-		next_visible[player_id] = player_visible
-		var explored: Dictionary = explored_by_player.get(player_id, {}) as Dictionary
-		_merge_surface_set(explored, player_visible)
-		explored_by_player[player_id] = explored
-		_update_object_memories(player_id, player_visible)
-	visible_by_player = next_visible
-	local_visibility_changed.emit()
+	source_ledger.configure(surface_index_by_surface, surface_order.size())
+	tower_sources.configure(runtime, source_ledger)
+	var player_ids: Dictionary[String, bool] = get_valid_player_ids()
+	for player_id: String in player_ids.keys():
+		source_ledger.ensure_player(player_id)
+	if fog_enabled:
+		for character: PlayerCharacter in character_sources.bound_characters:
+			_add_character_source_without_notifications(character)
+		tower_sources.add_registered_sources()
+		for player_id: String in player_ids.keys():
+			_merge_surface_set(
+				explored_by_player.get_or_add(player_id, {}) as Dictionary,
+				source_ledger.get_visible_surfaces(player_id)
+			)
+	else:
+		_mark_everything_explored()
+	for player_id: String in player_ids.keys():
+		var memory_visible_surfaces: Dictionary = (
+			source_ledger.get_visible_surfaces(player_id)
+			if fog_enabled
+			else explored_by_player.get(player_id, {}) as Dictionary
+		)
+		memory_store.rebuild_player(player_id, memory_visible_surfaces)
+	_emit_local_changes([], true)
+
+
+func _refresh_character_source(character: PlayerCharacter) -> void:
+	if character == null or not is_instance_valid(character) or not fog_enabled:
+		return
+	var source_id: String = _get_character_source_id(character)
+	var previous_player_id: String = source_ledger.get_source_player_id(source_id)
+	if not previous_player_id.is_empty() and previous_player_id != character.owner_player_id:
+		var previous_dirty_surfaces: Array[Vector3i] = source_ledger.remove_source(source_id)
+		_commit_player_changes(previous_player_id, previous_dirty_surfaces, true)
+	var dirty_surfaces: Array[Vector3i] = []
+	if character.health <= 0 or character.owner_player_id.is_empty():
+		dirty_surfaces = source_ledger.remove_source(source_id)
+	else:
+		dirty_surfaces = source_ledger.replace_source(
+			source_id,
+			character.owner_player_id,
+			solver.calculate_visible_surfaces(character.current_surface, character.vision_radius, blocker_cells)
+		)
+	_commit_player_changes(character.owner_player_id, dirty_surfaces, true)
+
+
+func _remove_character_source(character: PlayerCharacter) -> void:
+	if character == null:
+		return
+	var source_id: String = _get_character_source_id(character)
+	var player_id: String = source_ledger.get_source_player_id(source_id)
+	var dirty_surfaces: Array[Vector3i] = source_ledger.remove_source(source_id)
+	_commit_player_changes(player_id, dirty_surfaces, true)
+
+
+func _add_character_source_without_notifications(character: PlayerCharacter) -> void:
+	if character == null or character.health <= 0 or character.owner_player_id.is_empty():
+		return
+	source_ledger.replace_source(
+		_get_character_source_id(character),
+		character.owner_player_id,
+		solver.calculate_visible_surfaces(character.current_surface, character.vision_radius, blocker_cells)
+	)
+
+
+func _commit_player_changes(
+	player_id: String,
+	dirty_surfaces: Array[Vector3i],
+	should_emit: bool
+) -> void:
+	if player_id.is_empty() or dirty_surfaces.is_empty():
+		return
+	var visible_surfaces: Dictionary = source_ledger.get_visible_surfaces(player_id)
+	var explored: Dictionary = explored_by_player.get_or_add(player_id, {}) as Dictionary
+	for surface: Vector3i in dirty_surfaces:
+		if visible_surfaces.has(surface):
+			explored[surface] = true
+	memory_store.update_player_for_surfaces(player_id, visible_surfaces, dirty_surfaces)
+	if should_emit and player_id == get_local_player_id():
+		_emit_local_changes(dirty_surfaces, false)
 
 
 func _rebuild_blocker_cache() -> void:
@@ -253,49 +314,6 @@ func _rebuild_blocker_cache() -> void:
 		var anchor: Vector3i = runtime.spatial.get_object_anchor_surface(grid_object)
 		for surface: Vector3i in grid_object.get_occupied_surfaces(anchor):
 			blocker_cells[Vector2i(surface.x, surface.y)] = true
-
-
-func _update_object_memories(player_id: String, player_visible: Dictionary) -> void:
-	var memories: Dictionary = object_memories_by_player.get(player_id, {}) as Dictionary
-	var live_object_ids: Dictionary[String, bool] = {}
-	for object_value: Variant in runtime.get_registered_objects():
-		var grid_object: GridObject = object_value as GridObject
-		if grid_object == null or grid_object.object_id.is_empty():
-			continue
-		live_object_ids[grid_object.object_id] = true
-		var surface: Vector3i = runtime.spatial.get_object_anchor_surface(grid_object)
-		var is_any_surface_visible: bool = false
-		for occupied_surface: Vector3i in grid_object.get_occupied_surfaces(surface):
-			if player_visible.has(occupied_surface):
-				is_any_surface_visible = true
-				break
-		if not is_any_surface_visible:
-			continue
-		var owner_player_id: String = ""
-		if grid_object is VisionTower:
-			owner_player_id = (grid_object as VisionTower).owner_player_id
-		memories[grid_object.object_id] = {
-			"surface": surface,
-			"occupied_surfaces": grid_object.get_occupied_surfaces(surface),
-			"object_state": int(grid_object.object_state),
-			"owner_player_id": owner_player_id,
-			"texture_path": "" if grid_object.sprite == null or grid_object.sprite.texture == null else grid_object.sprite.texture.resource_path,
-			"sprite_position": Vector2.ZERO if grid_object.sprite == null else grid_object.sprite.position,
-			"sprite_scale": Vector2.ONE if grid_object.sprite == null else grid_object.sprite.scale,
-			"sprite_offset": Vector2.ZERO if grid_object.sprite == null else grid_object.sprite.offset,
-			"sprite_modulate": Color.WHITE if grid_object.sprite == null else grid_object.sprite.modulate,
-			"sprite_centered": true if grid_object.sprite == null else grid_object.sprite.centered,
-		}
-	for object_id_value: Variant in memories.keys():
-		var object_id: String = str(object_id_value)
-		if live_object_ids.has(object_id):
-			continue
-		var memory: Dictionary = memories[object_id_value] as Dictionary
-		for remembered_surface_value: Variant in memory.get("occupied_surfaces", [memory.get("surface")]) as Array:
-			if remembered_surface_value is Vector3i and player_visible.has(remembered_surface_value as Vector3i):
-				memories.erase(object_id_value)
-				break
-	object_memories_by_player[player_id] = memories
 
 
 func _mark_everything_explored() -> void:
@@ -312,60 +330,57 @@ func _merge_surface_set(target: Dictionary, source: Dictionary) -> void:
 			target[surface_value as Vector3i] = true
 
 
+func _merge_dirty_surfaces(target: Dictionary[Vector3i, bool], source: Array[Vector3i]) -> void:
+	for surface: Vector3i in source:
+		target[surface] = true
+
+
+func _get_surface_keys(surfaces: Dictionary[Vector3i, bool]) -> Array[Vector3i]:
+	var result: Array[Vector3i] = []
+	for surface: Vector3i in surfaces.keys():
+		result.append(surface)
+	return result
+
+
+func _emit_local_changes(changed_surfaces: Array[Vector3i], full_refresh: bool) -> void:
+	local_visibility_changed.emit(changed_surfaces, full_refresh)
+
+
+func _get_character_source_id(character: PlayerCharacter) -> String:
+	return CHARACTER_SOURCE_PREFIX + character.entity_id
+
+
 func _connect_runtime_signals() -> void:
-	if runtime != null and not runtime.world_occupancy_changed.is_connected(request_recompute):
-		runtime.world_occupancy_changed.connect(request_recompute)
+	if not character_sources.refresh_requested.is_connected(_refresh_character_source):
+		character_sources.refresh_requested.connect(_refresh_character_source)
+	if not character_sources.removal_requested.is_connected(_remove_character_source):
+		character_sources.removal_requested.connect(_remove_character_source)
+	if not object_changes.visibility_structure_changed.is_connected(request_recompute):
+		object_changes.visibility_structure_changed.connect(request_recompute)
+	if not object_changes.object_surfaces_changed.is_connected(notify_object_surfaces_changed):
+		object_changes.object_surfaces_changed.connect(notify_object_surfaces_changed)
+	character_sources.configure(runtime)
+	object_changes.configure(runtime)
 	if not GameSession.session_cleared.is_connected(_on_session_cleared):
 		GameSession.session_cleared.connect(_on_session_cleared)
 
 
 func _disconnect_runtime_signals() -> void:
-	if runtime != null and runtime.world_occupancy_changed.is_connected(request_recompute):
-		runtime.world_occupancy_changed.disconnect(request_recompute)
+	character_sources.disconnect_signals()
+	object_changes.disconnect_signals()
 	if GameSession.session_cleared.is_connected(_on_session_cleared):
 		GameSession.session_cleared.disconnect(_on_session_cleared)
-	for character: PlayerCharacter in bound_characters:
-		if is_instance_valid(character) and character.vision_radius_changed.is_connected(_on_vision_radius_changed):
-			character.vision_radius_changed.disconnect(_on_vision_radius_changed)
-		if is_instance_valid(character) and character.vitality_changed.is_connected(_on_vitality_changed):
-			character.vitality_changed.disconnect(_on_vitality_changed)
-	bound_characters.clear()
-
-
-func _rebind_character_signals() -> void:
-	for character: PlayerCharacter in bound_characters:
-		if is_instance_valid(character) and character.vision_radius_changed.is_connected(_on_vision_radius_changed):
-			character.vision_radius_changed.disconnect(_on_vision_radius_changed)
-		if is_instance_valid(character) and character.vitality_changed.is_connected(_on_vitality_changed):
-			character.vitality_changed.disconnect(_on_vitality_changed)
-	bound_characters.clear()
-	for player: Dictionary in GameSession.get_players():
-		for character: PlayerCharacter in runtime.get_squad_members(str(player.get("player_id", ""))):
-			bound_characters.append(character)
-			if not character.vision_radius_changed.is_connected(_on_vision_radius_changed):
-				character.vision_radius_changed.connect(_on_vision_radius_changed)
-			if not character.vitality_changed.is_connected(_on_vitality_changed):
-				character.vitality_changed.connect(_on_vitality_changed)
-
-
-func _on_vision_radius_changed(_current_radius: int) -> void:
-	request_recompute()
-
-
-func _on_vitality_changed(_current_health: int, _maximum_health: int) -> void:
-	request_recompute()
 
 
 func _on_session_cleared() -> void:
 	_disconnect_runtime_signals()
 	recompute_pending = false
-	visible_by_player.clear()
 	explored_by_player.clear()
-	object_memories_by_player.clear()
 	blocker_cells.clear()
-	surface_order.clear()
-	display_surfaces.clear()
-	surface_index_by_surface.clear()
+	tower_sources.clear()
+	surface_catalog.clear()
+	source_ledger.clear()
+	memory_store.clear()
 	solver.configure(null)
 	runtime = null
 	level = null

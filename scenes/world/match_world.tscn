@@ -23,7 +23,7 @@
 [ext_resource type="PackedScene" path="res://scenes/movement_range/movement_path_overlay.tscn" id="15_movement_path"]
 [ext_resource type="PackedScene" path="res://scenes/movement_range/action_target_range_overlay.tscn" id="16_action_target_range"]
 [ext_resource type="Script" path="res://scenes/world/presenters/fog_of_war_presenter.gd" id="17_fog_presenter"]
-[ext_resource type="Script" path="res://scenes/world/presenters/fog_explored_layer.gd" id="18_fog_explored"]
+[ext_resource type="Script" path="res://scenes/world/presenters/fog_world_content_presenter.gd" id="18_fog_content"]
 [ext_resource type="Script" path="res://scenes/world/map/world_map_builder.gd" id="19_map_builder"]
 [ext_resource type="Script" path="res://scenes/world/map/world_map_startup_coordinator.gd" id="20_map_startup"]
 [ext_resource type="Script" path="res://scenes/world/loading/world_loading_screen.gd" id="21_loading"]
@@ -113,8 +113,8 @@ z_index = 2000
 z_as_relative = false
 script = ExtResource("17_fog_presenter")
 
-[node name="ExploredLayer" type="Node2D" parent="FogOfWarPresenter"]
-script = ExtResource("18_fog_explored")
+[node name="WorldContentPresenter" type="Node2D" parent="FogOfWarPresenter"]
+script = ExtResource("18_fog_content")
 
 [node name="Music" type="AudioStreamPlayer" parent="."]
 

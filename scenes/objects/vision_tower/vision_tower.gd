@@ -1,6 +1,7 @@
 class_name VisionTower
 extends GridObject
 
+const MAX_REVEAL_REGIONS: int = 16
 const COLOR_ORDER: Array[String] = ["Blue", "Purple", "Red", "Yellow"]
 const COLOR_TEXTURES: Dictionary = {
 	"Blue": preload("res://art/Tiny Swords (Update 010)/Factions/Knights/Buildings/Tower/Tower_Blue.png"),
@@ -9,7 +10,7 @@ const COLOR_TEXTURES: Dictionary = {
 	"Yellow": preload("res://art/Tiny Swords (Update 010)/Factions/Knights/Buildings/Tower/Tower_Yellow.png"),
 }
 
-@export_range(0, WorldVisionSolver.MAX_VISION_RADIUS, 1) var vision_radius: int = 10
+@export var reveal_regions: Array[VisionRevealRegion] = []
 @export var owner_player_id: String = ""
 
 
@@ -42,6 +43,30 @@ func interact(interactor: PlayerCharacter, world_runtime: WorldRuntime) -> bool:
 func apply_owner_player_id(new_owner_player_id: String) -> void:
 	owner_player_id = new_owner_player_id
 	apply_state_visual()
+
+
+func apply_reveal_region_records(records: Array[Dictionary]) -> bool:
+	if records.is_empty() or records.size() > MAX_REVEAL_REGIONS:
+		return false
+	var next_regions: Array[VisionRevealRegion] = []
+	for record: Dictionary in records:
+		var rect_values: Array = record.get("rect", []) as Array
+		if rect_values.size() != 4:
+			return false
+		var region: VisionRevealRegion = VisionRevealRegion.new()
+		region.configure(
+			Rect2i(
+				int(rect_values[0]),
+				int(rect_values[1]),
+				int(rect_values[2]),
+				int(rect_values[3])
+			),
+			int(record.get("min_elevation", WorldGridTopology.MIN_ELEVATION)),
+			int(record.get("max_elevation", WorldGridTopology.MIN_ELEVATION))
+		)
+		next_regions.append(region)
+	reveal_regions = next_regions
+	return true
 
 
 func apply_state_visual() -> void:

@@ -689,8 +689,6 @@ func update_player_authorities() -> void:
 
 func broadcast_object_state(target_object: Node) -> void:
 	network.broadcast_object_state(target_object)
-	if visibility != null:
-		visibility.request_recompute()
 
 func broadcast_all_object_states() -> void:
 	network.broadcast_all_object_states()
